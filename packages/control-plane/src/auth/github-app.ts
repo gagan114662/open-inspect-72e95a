@@ -111,6 +111,65 @@ const installationTokenResponseSchema = z
 /** GitHub installation token response. */
 type InstallationTokenResponse = z.infer<typeof installationTokenResponseSchema>;
 
+/**
+ * Response schema for a *scoped* mint — additionally captures the
+ * `permissions`/`repositories` GitHub actually granted, so the caller can
+ * verify it never exceeds what was requested (see
+ * {@link assertGrantNotBroaderThanRequested}). GitHub is expected to echo
+ * these back whenever the request itself included them.
+ */
+const scopedInstallationTokenResponseSchema = z
+  .object({
+    token: z.string(),
+    expires_at: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+    permissions: z.record(z.string(), z.string()),
+    repositories: z.array(z.object({ name: z.string() })),
+  })
+  .transform(({ token, expires_at, permissions, repositories }) => ({
+    token,
+    expiresAtEpochMs: Date.parse(expires_at),
+    permissions,
+    repositoryNames: repositories.map((r) => r.name),
+  }));
+
+/**
+ * Defense in depth against a GitHub API bug or behavior change silently
+ * handing back a broader grant than was requested: a scoped mint's response
+ * must name exactly the requested permission keys/values and exactly the
+ * requested repositories — nothing extra, nothing missing. This never
+ * triggers under GitHub's documented, correct behavior; it exists to fail
+ * loudly rather than silently widen a sandbox-bound credential if that
+ * assumption is ever wrong.
+ */
+function assertGrantNotBroaderThanRequested(
+  granted: { permissions: Record<string, string>; repositoryNames: string[] },
+  requested: { permissions: Record<string, string>; repositories: string[] }
+): void {
+  const grantedPermEntries = Object.entries(granted.permissions);
+  const requestedPermEntries = Object.entries(requested.permissions);
+  const permissionsMatch =
+    grantedPermEntries.length === requestedPermEntries.length &&
+    grantedPermEntries.every(([key, value]) => requested.permissions[key] === value);
+  if (!permissionsMatch) {
+    throw new Error(
+      `Scoped installation token grant does not match the requested permissions: ` +
+        `requested ${JSON.stringify(requested.permissions)}, granted ${JSON.stringify(granted.permissions)}`
+    );
+  }
+
+  const grantedRepos = new Set(granted.repositoryNames);
+  const requestedRepos = new Set(requested.repositories);
+  const reposMatch =
+    grantedRepos.size === requestedRepos.size &&
+    [...requestedRepos].every((name) => grantedRepos.has(name));
+  if (!reposMatch) {
+    throw new Error(
+      `Scoped installation token grant does not match the requested repositories: ` +
+        `requested [${requested.repositories.join(", ")}], granted [${granted.repositoryNames.join(", ")}]`
+    );
+  }
+}
+
 const installationRepositorySchema = z.object({
   id: z.number(),
   name: z.string(),
@@ -333,11 +392,12 @@ async function getScopedInstallationTokenWithMetadata(
     throw new Error("Failed to get scoped installation token: invalid response");
   }
 
-  const parsed = installationTokenResponseSchema.safeParse(raw);
+  const parsed = scopedInstallationTokenResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error("Failed to get scoped installation token: invalid response");
   }
-  return parsed.data;
+  assertGrantNotBroaderThanRequested(parsed.data, { permissions, repositories });
+  return { token: parsed.data.token, expiresAtEpochMs: parsed.data.expiresAtEpochMs };
 }
 
 /** Default permission set for sandbox-reachable credentials: git push only. */

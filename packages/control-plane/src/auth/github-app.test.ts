@@ -5,8 +5,10 @@ import {
   getCachedInstallationToken,
   getCachedInstallationTokenWithExpiry,
   getInstallationRepository,
+  getScopedInstallationTokenWithExpiry,
   INSTALLATION_TOKEN_CACHE_MAX_AGE_MS,
   INSTALLATION_TOKEN_MIN_REMAINING_MS,
+  SANDBOX_SCOPED_PERMISSIONS,
   listInstallationRepositories,
   listRepositoryBranches,
 } from "./github-app";
@@ -401,6 +403,144 @@ describe("github-app utilities", () => {
           { forceRefresh: true }
         )
       ).rejects.toThrow("Failed to get installation token: invalid response");
+    });
+  });
+
+  describe("getScopedInstallationTokenWithExpiry", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("rejects an empty repository list before making any request", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      const { privateKeyPem } = await generateTestKeyPair();
+
+      await expect(
+        getScopedInstallationTokenWithExpiry(
+          { appId: "app-1", privateKey: privateKeyPem, installationId: "installation-1" },
+          []
+        )
+      ).rejects.toThrow("no repositories");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects an empty permissions object before making any request", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      const { privateKeyPem } = await generateTestKeyPair();
+
+      await expect(
+        getScopedInstallationTokenWithExpiry(
+          { appId: "app-1", privateKey: privateKeyPem, installationId: "installation-1" },
+          ["repo"],
+          undefined,
+          {}
+        )
+      ).rejects.toThrow("no permissions");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("returns the token when GitHub's grant matches the request exactly", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      const { privateKeyPem } = await generateTestKeyPair();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            token: "ghs-scoped",
+            expires_at: expiresAt,
+            permissions: SANDBOX_SCOPED_PERMISSIONS,
+            repositories: [{ name: "repo-a" }, { name: "repo-b" }],
+          }),
+          { status: 201 }
+        )
+      );
+
+      const result = await getScopedInstallationTokenWithExpiry(
+        { appId: "app-1", privateKey: privateKeyPem, installationId: "installation-1" },
+        ["repo-a", "repo-b"]
+      );
+
+      expect(result.token).toBe("ghs-scoped");
+      expect(fetchMock).toHaveBeenCalledOnce();
+      const [, init] = fetchMock.mock.calls[0];
+      expect(JSON.parse(init!.body as string)).toEqual({
+        repositories: ["repo-a", "repo-b"],
+        permissions: SANDBOX_SCOPED_PERMISSIONS,
+      });
+    });
+
+    it("rejects a grant that names an extra permission GitHub did not ask about", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      const { privateKeyPem } = await generateTestKeyPair();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            token: "ghs-broader",
+            expires_at: expiresAt,
+            // Broader than requested: includes pull_requests write.
+            permissions: { ...SANDBOX_SCOPED_PERMISSIONS, pull_requests: "write" },
+            repositories: [{ name: "repo-a" }],
+          }),
+          { status: 201 }
+        )
+      );
+
+      await expect(
+        getScopedInstallationTokenWithExpiry(
+          { appId: "app-1", privateKey: privateKeyPem, installationId: "installation-1" },
+          ["repo-a"]
+        )
+      ).rejects.toThrow("does not match the requested permissions");
+    });
+
+    it("rejects a grant that names an extra repository GitHub did not ask about", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      const { privateKeyPem } = await generateTestKeyPair();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            token: "ghs-broader-repo",
+            expires_at: expiresAt,
+            permissions: SANDBOX_SCOPED_PERMISSIONS,
+            // Broader than requested: includes a repo that wasn't asked for.
+            repositories: [{ name: "repo-a" }, { name: "sibling-nobody-asked-for" }],
+          }),
+          { status: 201 }
+        )
+      );
+
+      await expect(
+        getScopedInstallationTokenWithExpiry(
+          { appId: "app-1", privateKey: privateKeyPem, installationId: "installation-1" },
+          ["repo-a"]
+        )
+      ).rejects.toThrow("does not match the requested repositories");
+    });
+
+    it("rejects a grant missing a requested permission", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      const { privateKeyPem } = await generateTestKeyPair();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            token: "ghs-narrower",
+            expires_at: expiresAt,
+            permissions: { contents: "write" }, // missing metadata:read
+            repositories: [{ name: "repo-a" }],
+          }),
+          { status: 201 }
+        )
+      );
+
+      await expect(
+        getScopedInstallationTokenWithExpiry(
+          { appId: "app-1", privateKey: privateKeyPem, installationId: "installation-1" },
+          ["repo-a"]
+        )
+      ).rejects.toThrow("does not match the requested permissions");
     });
   });
 

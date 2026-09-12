@@ -97,7 +97,43 @@ def get_installation_token(
     with httpx.Client() as client:
         response = client.post(url, headers=headers, json=body or None)
         response.raise_for_status()
-        return response.json()["token"]
+        data = response.json()
+
+    if repository is not None:
+        _assert_grant_not_broader_than_requested(
+            data, repositories=[repository], permissions=permissions
+        )
+    return data["token"]
+
+
+def _assert_grant_not_broader_than_requested(
+    data: dict[str, object],
+    *,
+    repositories: list[str],
+    permissions: dict[str, str] | None,
+) -> None:
+    """Defense in depth: a scoped mint's response must grant exactly what was
+    requested, never more. This never triggers under GitHub's documented,
+    correct behavior; it exists to fail loudly rather than silently hand a
+    sandbox-bound credential a broader grant if that assumption is ever
+    wrong (an API bug or future behavior change).
+    """
+    granted_permissions = data.get("permissions")
+    if not isinstance(granted_permissions, dict) or granted_permissions != (permissions or {}):
+        raise ValueError(
+            "Scoped installation token grant does not match the requested permissions: "
+            f"requested {permissions!r}, granted {granted_permissions!r}"
+        )
+
+    granted_repos_raw = data.get("repositories")
+    if not isinstance(granted_repos_raw, list):
+        raise ValueError("Scoped installation token response is missing repositories")
+    granted_repo_names = {repo.get("name") for repo in granted_repos_raw if isinstance(repo, dict)}
+    if granted_repo_names != set(repositories):
+        raise ValueError(
+            "Scoped installation token grant does not match the requested repositories: "
+            f"requested {repositories!r}, granted {sorted(n for n in granted_repo_names if n)!r}"
+        )
 
 
 def generate_installation_token(
