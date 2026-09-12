@@ -13,6 +13,13 @@ vi.mock("../src/github-auth", () => ({
   generateInstallationToken: vi.fn().mockResolvedValue("test-installation-token"),
   postReaction: vi.fn().mockResolvedValue(true),
   checkSenderPermission: vi.fn().mockResolvedValue({ hasPermission: true }),
+  fetchPullRequestSummary: vi.fn().mockResolvedValue({
+    title: "feat: add subtract function",
+    body: "adds a subtract helper",
+    user: { login: "alice" },
+    base: { ref: "main" },
+    head: { ref: "feat/subtract", sha: "abc123headSha" },
+  }),
 }));
 
 vi.mock("../src/utils/integration-config", () => ({
@@ -43,7 +50,12 @@ import {
   handleIssueComment,
   handleReviewComment,
 } from "../src/handlers";
-import { generateInstallationToken, postReaction, checkSenderPermission } from "../src/github-auth";
+import {
+  generateInstallationToken,
+  postReaction,
+  checkSenderPermission,
+  fetchPullRequestSummary,
+} from "../src/github-auth";
 import { getGitHubConfig } from "../src/utils/integration-config";
 
 function createMockLogger(): Logger {
@@ -624,6 +636,79 @@ describe("handleIssueComment", () => {
     expect(result).toEqual({ outcome: "skipped", skip_reason: "not_a_pr" });
     expect(generateInstallationToken).not.toHaveBeenCalled();
     expect(log.debug).toHaveBeenCalledWith("handler.not_a_pr", expect.anything());
+  });
+
+  it("routes an explicit 're-review' request through the formal review prompt", async () => {
+    const env = createMockEnv();
+    const log = createMockLogger();
+    const payload: IssueCommentPayload = {
+      ...issueCommentPayload,
+      comment: {
+        ...issueCommentPayload.comment,
+        body: "@test-bot[bot] please re-review the current state of this PR now that the fix has been pushed.",
+      },
+    };
+
+    const result = await handleIssueComment(env, log, payload, "trace-re-review");
+
+    expect(result).toEqual({
+      outcome: "processed",
+      session_id: "session-123",
+      message_id: "msg-456",
+      handler_action: "re_review",
+    });
+    expect(fetchPullRequestSummary).toHaveBeenCalledWith(
+      "test-installation-token",
+      "acme",
+      "widgets",
+      42
+    );
+
+    const cpFetch = getControlPlaneFetch(env);
+    const promptBody = promptSendBody(cpFetch);
+    // Formal review instructions must be present - this is the whole point
+    // of the routing: a fresh commit-bound `gh api .../reviews` submission,
+    // not a plain issue comment.
+    expect(promptBody.content).toContain("pulls/42/reviews");
+    expect(promptBody.content).toContain("commit_id");
+    expect(promptBody.content).toContain("abc123headSha");
+    expect(promptBody.content).toContain("headRefOid");
+  });
+
+  it("does not route an ordinary bug-fix request through the review prompt", async () => {
+    const env = createMockEnv();
+    const log = createMockLogger();
+    // issueCommentPayload's default body is "please fix the error handling" -
+    // must NOT trigger formal review submission.
+    const result = await handleIssueComment(env, log, issueCommentPayload, "trace-plain-comment");
+
+    expect(result.outcome).toBe("processed");
+    if (result.outcome === "processed") {
+      expect(result.handler_action).toBe("comment");
+    }
+    expect(fetchPullRequestSummary).not.toHaveBeenCalled();
+
+    const cpFetch = getControlPlaneFetch(env);
+    const promptBody = promptSendBody(cpFetch);
+    expect(promptBody.content).not.toContain("pulls/42/reviews");
+  });
+
+  it("falls back to a plain comment if the PR summary fetch fails", async () => {
+    vi.mocked(fetchPullRequestSummary).mockResolvedValueOnce(null);
+    const env = createMockEnv();
+    const log = createMockLogger();
+    const payload: IssueCommentPayload = {
+      ...issueCommentPayload,
+      comment: { ...issueCommentPayload.comment, body: "@test-bot[bot] review again" },
+    };
+
+    const result = await handleIssueComment(env, log, payload, "trace-fetch-fail");
+
+    expect(result.outcome).toBe("processed");
+    if (result.outcome === "processed") {
+      expect(result.handler_action).toBe("comment");
+    }
+    expect(log.warn).toHaveBeenCalledWith("handler.re_review_pr_fetch_failed", expect.anything());
   });
 
   it("returns early if no @mention", async () => {

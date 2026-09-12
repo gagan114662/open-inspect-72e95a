@@ -7,6 +7,16 @@ const collaboratorPermissionResponseSchema = z.object({
   permission: z.string(),
 });
 
+const pullRequestSummaryResponseSchema = z.object({
+  title: z.string(),
+  body: z.string().nullable(),
+  user: z.object({ login: z.string() }),
+  base: z.object({ ref: z.string() }),
+  head: z.object({ ref: z.string(), sha: z.string() }),
+});
+
+export type PullRequestSummary = z.infer<typeof pullRequestSummaryResponseSchema>;
+
 const installationTokenResponseSchema = z.object({
   token: z.string(),
 });
@@ -153,6 +163,40 @@ export async function checkSenderPermission(
     return { hasPermission: WRITE_PERMISSIONS.has(data.permission) };
   } catch {
     return { hasPermission: false, error: true };
+  }
+}
+
+/**
+ * Current PR state, fetched fresh at request time — needed for formal
+ * re-review, which must bind to the head SHA it actually inspected
+ * (`commit_id` on the review) rather than whatever `issue_comment`'s payload
+ * happened to carry (it carries no PR head info at all).
+ */
+export async function fetchPullRequestSummary(
+  token: string,
+  owner: string,
+  repo: string,
+  number: number,
+  userAgent: string = DEFAULT_APP_NAME
+): Promise<PullRequestSummary | null> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": userAgent,
+        },
+        signal: AbortSignal.timeout(GITHUB_API_REQUEST_TIMEOUT_MS),
+      }
+    );
+    if (!response.ok) return null;
+    const parsed = pullRequestSummaryResponseSchema.safeParse(await response.json());
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
   }
 }
 

@@ -137,6 +137,138 @@ ${buildCustomInstructionsSection(codeReviewInstructions)}
 ${buildCommentGuidelines(isPublic)}`;
 }
 
+/**
+ * Formal re-review, triggered by an explicit comment command (see
+ * isReReviewRequest). Distinct from buildCommentActionPrompt, which only
+ * ever posts a plain issue comment and cannot produce a GitHub-counted
+ * review — that gap is what left PR #9 stuck needing an approval no
+ * automated path could supply. This mirrors buildCodeReviewPrompt's formal
+ * `gh api .../reviews` submission, but for a PR that's already open and may
+ * have new commits since the last (possibly stale) review, so it adds:
+ * capturing the head SHA being reviewed, binding the review to it via
+ * `commit_id`, and re-checking immediately before submitting in case a new
+ * commit landed mid-review.
+ */
+export function buildReReviewPrompt(params: {
+  owner: string;
+  repo: string;
+  number: number;
+  title: string;
+  body: string | null;
+  author: string;
+  base: string;
+  head: string;
+  headSha: string;
+  requesterComment: string;
+  requesterLogin: string;
+  isPublic: boolean;
+  codeReviewInstructions?: string | null;
+  isSelfReview?: boolean;
+}): string {
+  const {
+    owner,
+    repo,
+    number,
+    title,
+    body,
+    author,
+    base,
+    head,
+    headSha,
+    requesterComment,
+    requesterLogin,
+    isPublic,
+    codeReviewInstructions,
+    isSelfReview = false,
+  } = params;
+  const reviewEvent = isSelfReview ? "COMMENT" : "<APPROVE, REQUEST_CHANGES, or COMMENT>";
+  const reviewEventGuidance = isSelfReview
+    ? "Use COMMENT because GitHub does not allow pull request authors to approve their own PRs."
+    : "Use APPROVE only if you actually verified the code is correct — not merely because CI is\n   green. CI passing and a human review reaching the same conclusion are different signals; you\n   are providing the second one. Use REQUEST_CHANGES if you find a real problem, or COMMENT for\n   general feedback that isn't a pass/fail verdict.";
+  const repositoryPath = encodeRepositoryPathSegments({ repoOwner: owner, repoName: repo });
+
+  const prTitleBlock = buildUntrustedUserContentBlock({
+    source: "github_pr_title",
+    author: "github",
+    content: title,
+  });
+  const prAuthorBlock = buildUntrustedUserContentBlock({
+    source: "github_pr_author",
+    author: "github",
+    content: `@${author}`,
+  });
+  const prBranchesBlock = buildUntrustedUserContentBlock({
+    source: "github_pr_branches",
+    author: "github",
+    content: `base: ${base}\nhead: ${head} (${headSha})`,
+  });
+  const prDescriptionBlock = buildUntrustedUserContentBlock({
+    source: "github_pr_description",
+    author: "github",
+    content: body ?? "_No description provided._",
+  });
+  const requestBlock = buildUntrustedUserContentBlock({
+    source: "github_comment",
+    author: requesterLogin,
+    content: requesterComment,
+  });
+
+  return `You are formally re-reviewing Pull Request #${number} in ${owner}/${repo}, requested by a comment.
+The repository has been cloned and you are on the PR head branch.
+
+## PR Details
+- **Title**:
+${prTitleBlock}
+- **Author**:
+${prAuthorBlock}
+- **Branches**:
+${prBranchesBlock}
+- **Description**:
+${prDescriptionBlock}
+
+## Request that triggered this re-review
+${requestBlock}
+
+## Instructions
+1. Run \`gh pr diff ${number}\` to see the full current diff. Actually inspect the code changes —
+   do not decide your verdict from CI status alone; you are the independent check, not an echo of it.
+2. You may read individual files in the repo for additional context beyond the diff.
+3. Immediately before submitting, re-check the current head commit:
+
+   gh pr view ${number} --json headRefOid -q .headRefOid
+
+   If it no longer equals \`${headSha}\` (the commit you were asked to review), a new commit landed
+   while you were working. Do not submit a review for the SHA you saw at the start — re-run
+   \`gh pr diff ${number}\` against the new head and review that instead, using the new SHA as
+   \`commit_id\` below.
+4. Submit exactly one pull request review, bound to the exact commit you inspected via
+   \`commit_id\`. Include every inline comment in the review's \`comments\` array; do not create
+   standalone pull request comments. If there are no inline comments, use an empty array.
+
+   gh api repos/${repositoryPath}/pulls/${number}/reviews \\
+     --method POST \\
+     --input - <<'JSON'
+{
+  "commit_id": "<the exact head SHA you reviewed, from step 3>",
+  "body": "<your review summary>",
+  "event": "${reviewEvent}",
+  "comments": [
+    {
+      "path": "<file path>",
+      "line": <line number>,
+      "side": "RIGHT",
+      "body": "<inline comment>"
+    }
+  ]
+}
+JSON
+
+   ${reviewEventGuidance}
+
+${buildCustomInstructionsSection(codeReviewInstructions)}
+${buildCommentGuidelines(isPublic)}`;
+}
+
 export function buildCommentActionPrompt(params: {
   owner: string;
   repo: string;

@@ -14,12 +14,17 @@ import type {
   ReviewCommentPayload,
 } from "./types";
 import type { Logger } from "./logger";
-import { generateInstallationToken, postReaction, checkSenderPermission } from "./github-auth";
-import { buildCodeReviewPrompt, buildCommentActionPrompt } from "./prompts";
+import {
+  generateInstallationToken,
+  postReaction,
+  checkSenderPermission,
+  fetchPullRequestSummary,
+} from "./github-auth";
+import { buildCodeReviewPrompt, buildCommentActionPrompt, buildReReviewPrompt } from "./prompts";
 import { resolveSessionTarget, type SessionTargetFields } from "./session-target";
 import { getGitHubConfig, type ResolvedGitHubConfig } from "./utils/integration-config";
 import { requestedReviewerPayloadSchema } from "./payload-schemas";
-import { containsBotMention, stripBotMention } from "./github-mention";
+import { containsBotMention, stripBotMention, isReReviewRequest } from "./github-mention";
 
 export type HandlerResult =
   | { outcome: "processed"; session_id: string; message_id: string; handler_action: string }
@@ -461,27 +466,63 @@ export async function handleIssueComment(
         ghToken,
         traceId,
       });
+      // Explicit "(please) re-review" requests get a formal, GitHub-counted
+      // review submission instead of a plain comment — see buildReReviewPrompt.
+      // Falls back to the ordinary comment-action path if the PR's current
+      // state can't be fetched, rather than failing the whole request.
+      let prSummary: Awaited<ReturnType<typeof fetchPullRequestSummary>> = null;
+      if (isReReviewRequest(commentBody)) {
+        prSummary = await fetchPullRequestSummary(ghToken, owner, repoName, issue.number);
+        if (!prSummary) {
+          log.warn("handler.re_review_pr_fetch_failed", { ...meta, sender: sender.login });
+        }
+      }
+
       const sessionId = await createSession(env, traceId, {
         target,
-        title: `GitHub: PR #${issue.number} comment`,
+        title: prSummary
+          ? `GitHub: PR #${issue.number} re-review`
+          : `GitHub: PR #${issue.number} comment`,
         model: config.model,
         reasoningEffort: config.reasoningEffort,
         scmLogin: sender.login,
         scmUserId: String(sender.id),
         scmAvatarUrl: sender.avatar_url,
       });
-      log.info("session.created", { ...meta, session_id: sessionId, action: "comment" });
-
-      const prompt = buildCommentActionPrompt({
-        owner,
-        repo: repoName,
-        number: issue.number,
-        title: issue.title,
-        commentBody,
-        commenter: sender.login,
-        isPublic: !repo.private,
-        commentActionInstructions: config.commentActionInstructions,
+      log.info("session.created", {
+        ...meta,
+        session_id: sessionId,
+        action: prSummary ? "re_review" : "comment",
       });
+
+      const prompt = prSummary
+        ? buildReReviewPrompt({
+            owner,
+            repo: repoName,
+            number: issue.number,
+            title: prSummary.title,
+            body: prSummary.body,
+            author: prSummary.user.login,
+            base: prSummary.base.ref,
+            head: prSummary.head.ref,
+            headSha: prSummary.head.sha,
+            requesterComment: commentBody,
+            requesterLogin: sender.login,
+            isPublic: !repo.private,
+            codeReviewInstructions: config.codeReviewInstructions,
+            isSelfReview:
+              prSummary.user.login.toLowerCase() === env.GITHUB_BOT_USERNAME.toLowerCase(),
+          })
+        : buildCommentActionPrompt({
+            owner,
+            repo: repoName,
+            number: issue.number,
+            title: issue.title,
+            commentBody,
+            commenter: sender.login,
+            isPublic: !repo.private,
+            commentActionInstructions: config.commentActionInstructions,
+          });
 
       const messageId = await sendPrompt(env, traceId, sessionId, {
         content: prompt,
@@ -499,7 +540,7 @@ export async function handleIssueComment(
         outcome: "processed",
         session_id: sessionId,
         message_id: messageId,
-        handler_action: "comment",
+        handler_action: prSummary ? "re_review" : "comment",
       };
     }
   );
