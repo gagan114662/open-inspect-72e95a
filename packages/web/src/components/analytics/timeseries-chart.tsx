@@ -17,6 +17,7 @@ import {
   formatAnalyticsCount,
   formatAnalyticsLongDate,
 } from "@/lib/analytics";
+import { useHasMounted } from "@/hooks/use-has-mounted";
 
 interface TimeseriesChartProps {
   series?: AnalyticsTimeseriesResponse["series"];
@@ -38,8 +39,9 @@ const SERIES_COLORS = [
 
 export function AnalyticsTimeseriesChart({ series, loading }: TimeseriesChartProps) {
   const chartIdPrefix = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const hasMounted = useHasMounted();
 
-  if (loading && !series) {
+  if (!hasMounted || (loading && !series)) {
     return (
       <div className="rounded-md border border-border-muted bg-card p-5 animate-pulse">
         <div className="h-4 w-40 rounded bg-muted" />

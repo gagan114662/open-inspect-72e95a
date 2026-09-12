@@ -165,7 +165,7 @@ export function AnalyticsUserTable({
         <table className="min-w-full border-collapse text-sm">
           <thead className="bg-card">
             <tr className="border-b border-border-muted text-left text-secondary-foreground">
-              <th className="px-5 py-3" aria-sort={getAriaSort("user")}>
+              <th className="px-3 py-3 sm:px-5" aria-sort={getAriaSort("user")}>
                 <SortButton
                   label="User"
                   sortKey="user"
@@ -174,7 +174,7 @@ export function AnalyticsUserTable({
                   onClick={onSort}
                 />
               </th>
-              <th className="px-5 py-3" aria-sort={getAriaSort("sessions")}>
+              <th className="px-3 py-3 sm:px-5" aria-sort={getAriaSort("sessions")}>
                 <SortButton
                   label="Sessions"
                   sortKey="sessions"
@@ -183,7 +183,10 @@ export function AnalyticsUserTable({
                   onClick={onSort}
                 />
               </th>
-              <th className="px-5 py-3 text-right" aria-sort={getAriaSort("completionRate")}>
+              <th
+                className="hidden px-3 py-3 text-right sm:px-5 xl:table-cell"
+                aria-sort={getAriaSort("completionRate")}
+              >
                 <SortButton
                   label="Completion Rate"
                   sortKey="completionRate"
@@ -194,7 +197,7 @@ export function AnalyticsUserTable({
                 />
               </th>
               <th
-                className="hidden px-5 py-3 text-right xl:table-cell"
+                className="hidden px-3 py-3 text-right sm:px-5 xl:table-cell"
                 aria-sort={getAriaSort("prs")}
               >
                 <SortButton
@@ -207,7 +210,7 @@ export function AnalyticsUserTable({
                 />
               </th>
               <th
-                className="hidden px-5 py-3 text-right xl:table-cell"
+                className="hidden px-3 py-3 text-right sm:px-5 xl:table-cell"
                 aria-sort={getAriaSort("messageCount")}
               >
                 <SortButton
@@ -219,7 +222,7 @@ export function AnalyticsUserTable({
                   align="right"
                 />
               </th>
-              <th className="px-5 py-3 text-right" aria-sort={getAriaSort("cost")}>
+              <th className="px-3 py-3 text-right sm:px-5" aria-sort={getAriaSort("cost")}>
                 <SortButton
                   label="Total Cost"
                   sortKey="cost"
@@ -229,7 +232,7 @@ export function AnalyticsUserTable({
                   align="right"
                 />
               </th>
-              <th className="px-5 py-3 text-right" aria-sort={getAriaSort("avgDuration")}>
+              <th className="px-3 py-3 text-right sm:px-5" aria-sort={getAriaSort("avgDuration")}>
                 <SortButton
                   label="Avg Duration"
                   sortKey="avgDuration"
@@ -240,7 +243,7 @@ export function AnalyticsUserTable({
                 />
               </th>
               <th
-                className="hidden px-5 py-3 text-right lg:table-cell"
+                className="hidden px-3 py-3 text-right sm:px-5 xl:table-cell"
                 aria-sort={getAriaSort("lastActive")}
               >
                 <SortButton
@@ -260,28 +263,28 @@ export function AnalyticsUserTable({
                 key={entry.key}
                 className="border-b border-border-muted last:border-b-0 hover:bg-muted/50"
               >
-                <td className="px-5 py-4">
+                <td className="px-3 py-4 sm:px-5">
                   <UserCell entry={entry} />
                 </td>
-                <td className="px-5 py-4">
+                <td className="px-3 py-4 sm:px-5">
                   <SessionsCell entry={entry} />
                 </td>
-                <td className="px-5 py-4 text-right">
+                <td className="hidden px-3 py-4 text-right sm:px-5 xl:table-cell">
                   <CompletionRateCell entry={entry} />
                 </td>
-                <td className="hidden px-5 py-4 text-right text-foreground xl:table-cell">
+                <td className="hidden px-3 py-4 text-right text-foreground sm:px-5 xl:table-cell">
                   {formatAnalyticsCount(entry.prs)}
                 </td>
-                <td className="hidden px-5 py-4 text-right text-foreground xl:table-cell">
+                <td className="hidden px-3 py-4 text-right text-foreground sm:px-5 xl:table-cell">
                   {formatAnalyticsCount(entry.messageCount)}
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="px-3 py-4 text-right text-foreground sm:px-5">
                   {formatSessionCost(entry.cost)}
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="px-3 py-4 text-right text-foreground sm:px-5">
                   {entry.avgDuration > 0 ? formatAnalyticsDuration(entry.avgDuration) : "—"}
                 </td>
-                <td className="hidden px-5 py-4 text-right text-muted-foreground lg:table-cell">
+                <td className="hidden px-3 py-4 text-right text-muted-foreground sm:px-5 xl:table-cell">
                   {formatRelativeTime(entry.lastActive)}
                 </td>
               </tr>

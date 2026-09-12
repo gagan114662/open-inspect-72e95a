@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import type { AnalyticsBreakdownResponse } from "@open-inspect/shared/types/analytics";
 import { formatAnalyticsCount } from "@/lib/analytics";
 import { formatSessionCost } from "@/lib/session-cost";
+import { useHasMounted } from "@/hooks/use-has-mounted";
 
 const Y_AXIS_WIDTH = 140;
 // Rough average glyph width at fontSize 12 in the UI font; good enough to
@@ -50,8 +51,16 @@ function RepoChartTooltip({ active, payload }: TooltipContentProps) {
   }
 
   return (
-    <div className="min-w-[13rem] rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
-      <div className="font-medium text-foreground">{row.repo}</div>
+    // Fixed, deliberately narrow width rather than a viewport-relative calc:
+    // Recharts clamps tooltip position to the chart's own container box, not
+    // the browser viewport, so a tooltip sized off 100vw can still exceed a
+    // narrow chart card (e.g. a phone-width single-column layout) and
+    // overflow anyway. 11rem comfortably fits the four short stat rows and
+    // stays well inside even a small chart container.
+    <div className="w-[11rem] rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md">
+      <div className="truncate font-medium text-foreground" title={row.repo}>
+        {row.repo}
+      </div>
       <div className="mt-2 grid gap-1.5">
         <div className="flex items-center justify-between gap-4">
           <span className="text-muted-foreground">Sessions</span>
@@ -77,7 +86,9 @@ function RepoChartTooltip({ active, payload }: TooltipContentProps) {
 }
 
 export function AnalyticsRepoBarChart({ entries, loading }: RepoBarChartProps) {
-  if (loading && !entries) {
+  const hasMounted = useHasMounted();
+
+  if (!hasMounted || (loading && !entries)) {
     return (
       <div className="rounded-md border border-border-muted bg-card p-5 animate-pulse">
         <div className="h-4 w-44 rounded bg-muted" />

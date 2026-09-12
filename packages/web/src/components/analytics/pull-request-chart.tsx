@@ -17,6 +17,7 @@ import {
   formatAnalyticsDate,
   formatAnalyticsLongDate,
 } from "@/lib/analytics";
+import { useHasMounted } from "@/hooks/use-has-mounted";
 
 interface PullRequestChartProps {
   timeseries?: AnalyticsPullRequestTimeseriesPoint[];
@@ -30,8 +31,9 @@ const SERIES = [
 
 export function AnalyticsPullRequestChart({ timeseries, loading }: PullRequestChartProps) {
   const chartIdPrefix = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const hasMounted = useHasMounted();
 
-  if (loading && !timeseries) {
+  if (!hasMounted || (loading && !timeseries)) {
     return (
       <div className="rounded-md border border-border-muted bg-card p-5 animate-pulse">
         <div className="h-4 w-40 rounded bg-muted" />
