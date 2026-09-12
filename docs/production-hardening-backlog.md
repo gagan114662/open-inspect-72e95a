@@ -12,7 +12,7 @@ linked).
 
 ## 1. Establish an eligible non-author reviewer path
 
-**Status:** Open — next up.
+**Status:** Done — 2026-09-12. See Evidence below.
 
 ### Objective and non-goals
 
@@ -44,19 +44,22 @@ attempted further — that path stays deliberately untested, not proven-impossib
 
 ### Acceptance criteria
 
-- [ ] Reviews the current commit (not a stale one) and submits a **formal** GitHub approval —
+- [x] Reviews the current commit (not a stale one) and submits a **formal** GitHub approval —
       visible in `GET /pulls/{n}/reviews` with `state: APPROVED`, not just a PR comment.
-- [ ] GitHub's own mergeability check counts that approval toward branch protection
+- [x] GitHub's own mergeability check counts that approval toward branch protection
       (`mergeable_state` moves off `blocked`/`review_required` because of it, not because of an
       unrelated override).
-- [ ] Unresolved findings from that reviewer **block** approval — i.e. it can also submit
-      `CHANGES_REQUESTED`, and does so when there's a real issue (already demonstrated: the bot did
-      this correctly on PR #9's first commit — the gap is only the _repeat/fresh-commit_ case).
-- [ ] A subsequent code change after approval requires fresh review — either GitHub's native
-      `dismiss_stale_reviews` behavior, or the reviewer path re-submitting on new commits;the
-      approval must not silently carry over to unreviewed code.
-- [ ] A real PR merges through normal branch protection (required status check + required approval)
-      with **no** `--admin` flag and no protection changes made to force it through.
+- [x] Unresolved findings from that reviewer **block** approval — i.e. it can also submit
+      `CHANGES_REQUESTED`, and does so when there's a real issue (already demonstrated on PR #9's
+      first commit; re-confirmed on PR #10, where the reviewer caught a genuine, unplanned bug — a
+      missing import — and requested changes on it before approving the fix).
+- [x] A subsequent code change after approval requires fresh review — proved on PR #10 with an
+      isolated test: approved → pushed a new commit → review auto-`DISMISSED` by GitHub's
+      `dismiss_stale_reviews` → `mergeable_state` reverted to `blocked` → fresh `review again` → new
+      formal review bound to the new SHA.
+- [x] A real PR merges through normal branch protection (required status check + required approval)
+      with **no** `--admin` flag and no protection changes made to force it through. Both PR #9 and
+      PR #10 merged this way.
 
 ### Capabilities
 
@@ -88,9 +91,51 @@ itself (which stays as historical evidence of the gap, not the fix).
 
 ### Evidence
 
-_(fill in when closed)_ Linked PR, review ID showing `state: APPROVED` on the correct commit SHA,
-`mergeable_state` transition, and the merge commit — same rigor as the
-`docs/task-intake-template.md` worked example.
+**Audit findings** (read-only, done before any code change, per instruction not to create a new
+identity or expand permissions until the audit established what was actually needed):
+
+- The bot's identity and `pull_requests: write` permission were already sufficient — proven by PR
+  #8's real `APPROVED` review and PR #9's real `CHANGES_REQUESTED` review, both formal and
+  GitHub-counted, both submitted before this fix existed.
+- The sandbox's `gh` CLI authenticates via the GitHub App's installation token
+  (`packages/modal-infra/src/sandbox/vcs_env.py:29-38`), a genuinely separate identity from the
+  human PR author.
+- The actual gap was pure code: `buildCodeReviewPrompt` (`packages/github-bot/src/prompts.ts`, used
+  only by the one-time `pull_request.opened` auto-review) included formal
+  `gh api .../pulls/{n}/reviews` instructions; `buildCommentActionPrompt` (used by every `@mention`
+  comment trigger) never did — it only posted plain issue comments.
+- No new identity or permission expansion was used. Fix was entirely in `packages/github-bot`.
+
+**Implementation** (commit `719fb205`, deployed via targeted `terraform apply`):
+
+- `isReReviewRequest` (`github-mention.ts`) — deliberately tight trigger, must _lead_ with "(please)
+  re-review", not merely mention the word.
+- `buildReReviewPrompt` (`prompts.ts`) — formal review submission bound to the head SHA via
+  `commit_id`, with an explicit re-check of the head immediately before submitting in case a new
+  commit landed mid-review. Verdict must come from actually inspecting the diff, not CI status.
+- `fetchPullRequestSummary` (`github-auth.ts`) — `issue_comment` webhooks carry no PR head info;
+  fetches it fresh at request time.
+- `dismiss_stale_reviews: true` added to branch protection (all other settings unchanged).
+- 22 new/changed tests (`github-mention.test.ts` + `handlers.test.ts`), including a real bug the
+  test-writing process itself caught: the first regex (`re-?view\b`) matched "review"/"re-view" but
+  not "re-review" ("re" + "-" + "review", not "re" + "-" + "view") — found by the deliberately
+  literal test case, fixed before commit.
+
+**Live proof, PR #9** (https://github.com/gagan114662/open-inspect-sandbox/pull/9): real bug →
+independent CI failure → bot repair → CI passes → `@bot review again` → formal `APPROVED` review (id
+`5187416625`) bound via `commit_id` to the exact fixed commit
+(`9ae4e2d9eb1c74e7424057f98e272b07723cf747`) → `mergeable_state` cleared → merged via
+`gh pr merge --squash`, no `--admin`.
+
+**Live proof, PR #10** (https://github.com/gagan114662/open-inspect-sandbox/pull/10) — isolated test
+of criterion 4 plus an unplanned real bug catch:
+
+1. Formal `APPROVED` on the initial commit (`58fe982...`).
+2. Pushed a new commit → review auto-`DISMISSED`, `mergeable_state` → `blocked`.
+3. `review again` → bot found a genuine bug (missing `ratioOf` import in the test file, not a staged
+   scenario) → formal `CHANGES_REQUESTED`, with the exact fix in the inline comment.
+4. Fixed the import, pushed, `review again` → formal `APPROVED` bound to the final commit
+   (`3aa72daff1992dd22a0b29ee288d139c48fa20b0`) → `mergeable_state: clean` → merged, no `--admin`.
 
 ### Rollback
 
