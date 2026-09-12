@@ -628,8 +628,8 @@ export function createSessionRuntime(platform: SessionPlatform, env: Env): Sessi
     );
     return service.refresh(sessionRow);
   };
-  const getScmCredentials = (requestLog: Logger) =>
-    new ScmCredentialsService(sourceControlProvider(), requestLog).getCredentials();
+  const getScmCredentials = (repos: Array<{ owner: string; name: string }>, requestLog: Logger) =>
+    new ScmCredentialsService(sourceControlProvider(), requestLog).getCredentials(repos);
 
   const sandboxHandler = new SandboxHandler(
     messageRepository,

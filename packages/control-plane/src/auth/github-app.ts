@@ -287,6 +287,105 @@ async function getInstallationTokenWithMetadata(
   return parsed.data;
 }
 
+/**
+ * Exchange JWT for an installation access token narrowed to a set of
+ * repositories and a minimal permission set.
+ *
+ * Used exclusively for credentials that reach a sandbox (git credential
+ * helper, gh CLI wrapper, image-build clone) — never for the control
+ * plane's own server-side GitHub API calls (PR creation, labeling, review
+ * submission), which legitimately need the App's full grant and keep using
+ * {@link getCachedInstallationToken}.
+ */
+async function getScopedInstallationTokenWithMetadata(
+  jwt: string,
+  installationId: string,
+  userAgent: string,
+  repositories: string[],
+  permissions: Record<string, string>
+): Promise<InstallationTokenResponse> {
+  const url = `https://api.github.com/app/installations/${installationId}/access_tokens`;
+
+  const response = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": userAgent,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ repositories, permissions }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw Object.assign(
+      new Error(`Failed to get scoped installation token: ${response.status} ${error}`),
+      { status: response.status }
+    );
+  }
+
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new Error("Failed to get scoped installation token: invalid response");
+  }
+
+  const parsed = installationTokenResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error("Failed to get scoped installation token: invalid response");
+  }
+  return parsed.data;
+}
+
+/** Default permission set for sandbox-reachable credentials: git push only. */
+export const SANDBOX_SCOPED_PERMISSIONS: Record<string, string> = {
+  contents: "write",
+  metadata: "read",
+};
+
+/**
+ * Mint a fresh installation token scoped to a set of repositories and a
+ * minimal permission set (default: `contents:write` + `metadata:read` —
+ * enough for git clone/fetch/push, nothing else).
+ *
+ * Intentionally uncached and never falls back to the full-grant token on
+ * failure: a rejected narrowing request must propagate as an error so the
+ * caller denies the credential rather than silently widening its scope.
+ * Every mint hits GitHub fresh, trading a small amount of latency for the
+ * guarantee that a scoped-credential caller can never receive a broader
+ * grant than requested.
+ *
+ * Fails closed on malformed input rather than silently minting a broader
+ * grant: an empty `repoNames` array, or an empty `permissions` object,
+ * would each cause GitHub's API to omit the corresponding narrowing field
+ * and return the installation's full, unnarrowed permission set — so both
+ * are rejected here before any request is made.
+ */
+export async function getScopedInstallationTokenWithExpiry(
+  config: GitHubAppConfig,
+  repoNames: string[],
+  env?: InstallationTokenCacheBindings,
+  permissions: Record<string, string> = SANDBOX_SCOPED_PERMISSIONS
+): Promise<{ token: string; expiresAtEpochMs: number }> {
+  if (repoNames.length === 0) {
+    throw new Error("Cannot mint a scoped installation token with no repositories");
+  }
+  if (Object.keys(permissions).length === 0) {
+    throw new Error("Cannot mint a scoped installation token with no permissions");
+  }
+  const jwt = await generateAppJwt(config.appId, config.privateKey);
+  return getScopedInstallationTokenWithMetadata(
+    jwt,
+    config.installationId,
+    resolveUserAgent(env),
+    repoNames,
+    permissions
+  );
+}
+
 function getInstallationTokenCacheKey(config: GitHubAppConfig): string {
   return `${INSTALLATION_TOKEN_CACHE_KEY_PREFIX}:${config.appId}:${config.installationId}`;
 }

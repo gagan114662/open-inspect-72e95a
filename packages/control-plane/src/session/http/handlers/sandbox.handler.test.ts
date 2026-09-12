@@ -25,6 +25,7 @@ function createHandler() {
   const getSandbox = vi.fn<() => SandboxRow | null>();
   const isValidSandboxToken = vi.fn();
   const getSession = vi.fn<() => SessionRow | null>();
+  const getSessionRepositories = vi.fn(() => [] as Array<{ repoOwner: string; repoName: string }>);
   const refreshOpenAIToken = vi.fn();
   const refreshXaiToken = vi.fn();
   const getScmCredentials = vi.fn();
@@ -46,7 +47,7 @@ function createHandler() {
     repository as unknown as MessageRepository,
     repository as unknown as EventRepository,
     artifactRepository,
-    { getSession } as unknown as SessionCoreRepository,
+    { getSession, getSessionRepositories } as unknown as SessionCoreRepository,
     { getSandbox } as unknown as SandboxRepository,
     { processSandboxEvent } as unknown as SessionSandboxEventProcessor,
     messenger,
@@ -80,6 +81,7 @@ function createHandler() {
     getSandbox,
     isValidSandboxToken,
     getSession,
+    getSessionRepositories,
     refreshOpenAIToken,
     refreshXaiToken,
     getScmCredentials,
@@ -638,12 +640,13 @@ describe("SandboxHandler", () => {
   });
 
   it("returns mapped service error from scm credentials", async () => {
-    const { handler, getSession, getScmCredentials } = createHandler();
+    const { handler, getSession, getSessionRepositories, getScmCredentials } = createHandler();
     getSession.mockReturnValue({
       id: "session-1",
       repo_owner: "acme",
       repo_name: "web-app",
     } as SessionRow);
+    getSessionRepositories.mockReturnValue([{ repoOwner: "acme", repoName: "web-app" }]);
     getScmCredentials.mockResolvedValue({
       ok: false,
       status: 503,
@@ -674,12 +677,13 @@ describe("SandboxHandler", () => {
   });
 
   it("returns scm credentials payload on success", async () => {
-    const { handler, getSession, getScmCredentials } = createHandler();
+    const { handler, getSession, getSessionRepositories, getScmCredentials } = createHandler();
     getSession.mockReturnValue({
       id: "session-1",
       repo_owner: "acme",
       repo_name: "web-app",
     } as SessionRow);
+    getSessionRepositories.mockReturnValue([{ repoOwner: "acme", repoName: "web-app" }]);
     const expiresAt = Date.now() + 60 * 60 * 1000;
     getScmCredentials.mockResolvedValue({
       ok: true,
@@ -697,6 +701,35 @@ describe("SandboxHandler", () => {
       password: "ghs_secret",
       expires_at_epoch_ms: expiresAt,
     });
+  });
+
+  it("requests credentials for every member repository, not just the primary", async () => {
+    const { handler, getSession, getSessionRepositories, getScmCredentials } = createHandler();
+    getSession.mockReturnValue({
+      id: "session-1",
+      repo_owner: "acme",
+      repo_name: "web-app",
+    } as SessionRow);
+    getSessionRepositories.mockReturnValue([
+      { repoOwner: "acme", repoName: "web-app" },
+      { repoOwner: "acme", repoName: "shared-lib" },
+    ]);
+    getScmCredentials.mockResolvedValue({
+      ok: true,
+      username: "x-access-token",
+      password: "ghs_secret",
+      expiresAtEpochMs: Date.now() + 60 * 60 * 1000,
+    });
+
+    await handler.scmCredentials();
+
+    expect(getScmCredentials).toHaveBeenCalledWith(
+      [
+        { owner: "acme", name: "web-app" },
+        { owner: "acme", name: "shared-lib" },
+      ],
+      expect.anything()
+    );
   });
 
   it("returns 404 when tunnel URLs have no sandbox", async () => {

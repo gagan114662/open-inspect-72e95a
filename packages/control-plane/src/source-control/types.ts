@@ -488,9 +488,25 @@ export interface SourceControlProvider {
    * and `password` is a freshly minted token. `expiresAtEpochMs` lets the
    * client side cache the credentials until shortly before they expire.
    *
-   * @throws SourceControlProviderError on configuration or upstream errors
+   * This credential is directly reachable by the sandbox's own shell (via
+   * `git` and the `gh` CLI wrapper), so implementations that support
+   * per-request scope narrowing (GitHub) MUST mint a token restricted to
+   * `repos` (every repository the caller — a session or an image build —
+   * actually needs, not just a "primary" one; sessions can have multiple
+   * member repositories, and narrowing to only the first breaks the
+   * documented sibling-repository support) with the minimum permissions
+   * git operations need (never `pull_requests` or `issues` write) — not
+   * the same broad grant used for server-side operations like PR creation
+   * or review submission. A provider that cannot narrow (e.g. GitLab's
+   * static PAT) may ignore this param and return its existing grant as-is.
+   *
+   * @throws SourceControlProviderError on configuration or upstream errors,
+   *   or when narrowing is required but fails — callers must not retry
+   *   unscoped.
    */
-  generateCredentialHelperAuth(): Promise<CredentialHelperAuth>;
+  generateCredentialHelperAuth(
+    repos: Array<{ owner: string; name: string }>
+  ): Promise<CredentialHelperAuth>;
 
   /**
    * Build provider-specific URL for manual pull request creation.

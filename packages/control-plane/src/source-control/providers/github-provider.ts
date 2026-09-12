@@ -34,7 +34,7 @@ import {
 import { classifyGitTreeEntry } from "./git-tree";
 import {
   getCachedInstallationToken,
-  getCachedInstallationTokenWithExpiry,
+  getScopedInstallationTokenWithExpiry,
   getInstallationRepository,
   listInstallationRepositories,
   listRepositoryBranches,
@@ -970,17 +970,34 @@ export class GitHubSourceControlProvider implements SourceControlProvider {
     }
   }
 
-  async generateCredentialHelperAuth(): Promise<CredentialHelperAuth> {
+  async generateCredentialHelperAuth(
+    repos: Array<{ owner: string; name: string }>
+  ): Promise<CredentialHelperAuth> {
     if (!this.appConfig) {
       throw new SourceControlProviderError(
         "GitHub App not configured - cannot generate credential helper auth",
         "permanent"
       );
     }
+    const repoNames = [
+      ...new Set(repos.map((r) => r.name.trim()).filter((name): name is string => name.length > 0)),
+    ];
+    if (repoNames.length === 0) {
+      throw new SourceControlProviderError(
+        "Cannot generate a repo-scoped credential without a repository",
+        "permanent"
+      );
+    }
 
+    // Scoped to every repository the caller needs, with git-only
+    // permissions — this credential is directly reachable by the
+    // sandbox's own shell (git credential helper, gh CLI wrapper). No
+    // fallback to the full-grant token on failure: a rejected narrowing
+    // must deny the credential, not silently widen it.
     try {
-      const { token, expiresAtEpochMs } = await getCachedInstallationTokenWithExpiry(
+      const { token, expiresAtEpochMs } = await getScopedInstallationTokenWithExpiry(
         this.appConfig,
+        repoNames,
         {
           cacheStore: this.cacheStore,
           userAgent: this.userAgent,
@@ -993,7 +1010,7 @@ export class GitHubSourceControlProvider implements SourceControlProvider {
       };
     } catch (error) {
       throw SourceControlProviderError.fromFetchError(
-        `Failed to generate GitHub credential helper auth: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to generate scoped GitHub credential helper auth for ${repoNames.join(", ")}: ${error instanceof Error ? error.message : String(error)}`,
         error,
         extractHttpStatus(error)
       );

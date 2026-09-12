@@ -17,7 +17,7 @@ import {
   resolveScopeTarget,
   type ResolvedImageBuildTarget,
 } from "./scope";
-import type { ImageBuildCloneAuth, ImageBuildPlan } from "./types";
+import type { ImageBuildCloneAuth, ImageBuildPlan, ImageBuildRepository } from "./types";
 
 const logger = createLogger("image-builds:planner");
 const MS_PER_SECOND = 1000;
@@ -88,7 +88,7 @@ export class ImageBuildPlanner implements ImageBuildPlannerPort {
     const [sandboxSettings, userEnvVars, cloneAuth] = await Promise.all([
       resolveScopeSandboxSettings(this.db, params.scope, primary),
       loadScopeBuildSecrets(this.env, this.db, params.scope, params.target),
-      this.resolveCloneAuth(params.scope),
+      this.resolveCloneAuth(params.scope, repositories),
     ]);
 
     const basePlan = {
@@ -118,10 +118,15 @@ export class ImageBuildPlanner implements ImageBuildPlannerPort {
     };
   }
 
-  private async resolveCloneAuth(scope: ImageBuildScope): Promise<ImageBuildCloneAuth> {
+  private async resolveCloneAuth(
+    scope: ImageBuildScope,
+    repositories: ImageBuildRepository[]
+  ): Promise<ImageBuildCloneAuth> {
     try {
       const provider = createSourceControlProviderFromEnv(this.env);
-      const auth = await provider.generateCredentialHelperAuth();
+      const auth = await provider.generateCredentialHelperAuth(
+        repositories.map((r) => ({ owner: r.repoOwner, name: r.repoName }))
+      );
       return {
         type: "credential_helper",
         host: scmCloneIdentity(resolveScmProviderFromEnv(this.env.SCM_PROVIDER)).host,

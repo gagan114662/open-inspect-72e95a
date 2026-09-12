@@ -611,7 +611,11 @@ async def test_restore_sandbox_uses_normalized_repo_context(monkeypatch):
 
     _patch_auth(monkeypatch)
     _patch_restore_manager(monkeypatch, captured)
-    monkeypatch.setattr(web_api, "resolve_clone_token", lambda: calls.append(True) or "ghs_token")
+    monkeypatch.setattr(
+        web_api,
+        "resolve_clone_token",
+        lambda owner, name: calls.append((owner, name)) or "ghs_token",
+    )
 
     result = await _call_restore_sandbox(
         {
@@ -631,7 +635,7 @@ async def test_restore_sandbox_uses_normalized_repo_context(monkeypatch):
     session_config = captured["restore"]["session_config"]
 
     assert result["success"] is True
-    assert calls == [True]
+    assert calls == [("acme", "repo")]
     assert session_config["repo_owner"] == "acme"
     assert session_config["repo_name"] == "repo"
     assert captured["restore"]["clone_token"] == "ghs_token"

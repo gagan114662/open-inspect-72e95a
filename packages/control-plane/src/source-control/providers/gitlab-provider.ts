@@ -709,7 +709,15 @@ export class GitLabSourceControlProvider implements SourceControlProvider {
     };
   }
 
-  async generateCredentialHelperAuth(): Promise<CredentialHelperAuth> {
+  /**
+   * GitLab's static provider PAT has no equivalent to GitHub App
+   * installation-token narrowing (no per-request, per-repo, per-permission
+   * mint). `repos` is accepted for interface parity and intentionally
+   * unused — this remains the provider's full existing grant.
+   */
+  async generateCredentialHelperAuth(
+    _repos: Array<{ owner: string; name: string }>
+  ): Promise<CredentialHelperAuth> {
     return {
       username: "oauth2",
       password: this.accessToken,

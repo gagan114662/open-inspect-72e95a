@@ -633,7 +633,9 @@ async def api_restore_sandbox(
         repo_name = parsed_request.session_config.repo_name
 
         manager = SandboxManager()
-        clone_token = resolve_clone_token() if repo_owner and repo_name else None
+        clone_token = (
+            resolve_clone_token(repo_owner, repo_name) if repo_owner and repo_name else None
+        )
 
         # Restore sandbox from snapshot
         handle = await manager.restore_from_snapshot(

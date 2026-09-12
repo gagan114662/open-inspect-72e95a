@@ -51,7 +51,10 @@ export class SandboxHandler {
       session: SessionRow,
       log: Logger
     ) => Promise<XaiTokenRefreshResult>,
-    private readonly getScmCredentials: (log: Logger) => Promise<ScmCredentialsResult>,
+    private readonly getScmCredentials: (
+      repos: Array<{ owner: string; name: string }>,
+      log: Logger
+    ) => Promise<ScmCredentialsResult>,
     private readonly isValidSandboxToken: (
       token: string | null,
       sandbox: SandboxRow | null
@@ -343,7 +346,14 @@ export class SandboxHandler {
       );
     }
 
-    const result = await this.getScmCredentials(log);
+    // The full member repository set, not just the primary — a session's
+    // sandbox may need to clone/push/fetch sibling repositories, and a
+    // credential scoped to the primary alone would deny those operations.
+    const repos = this.sessionCoreRepository
+      .getSessionRepositories()
+      .map((r) => ({ owner: r.repoOwner, name: r.repoName }));
+
+    const result = await this.getScmCredentials(repos, log);
     if (!result.ok) {
       return Response.json({ error: result.error }, { status: result.status });
     }
