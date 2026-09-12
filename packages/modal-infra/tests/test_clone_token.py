@@ -1,5 +1,7 @@
 """Tests for VCS clone token resolution."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from src.clone_token import resolve_clone_token
@@ -31,19 +33,27 @@ def test_resolve_clone_token_returns_none_for_missing_gitlab_token(monkeypatch):
 
 
 def test_resolve_clone_token_returns_none_without_repo_context(monkeypatch):
-    """No repo context must fail closed — never mint an unnarrowed, installation-wide token."""
+    """No repo context must fail closed — never mint an unnarrowed, installation-wide token.
+
+    Uses a plain recording mock rather than a raising stub: resolve_clone_token
+    wraps the mint call in a broad `except Exception`, so a stub that raises
+    AssertionError to signal "should not be called" is indistinguishable from
+    a real narrowing failure — both paths return None either way, so the test
+    would pass even if the guard that skips the call entirely were deleted.
+    Asserting call counts on a mock that doesn't raise is what actually proves
+    the guard fired.
+    """
     monkeypatch.setenv("GITHUB_APP_ID", "123")
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "private-key")
     monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "456")
 
-    def fail_if_called(**_kwargs):
-        raise AssertionError("generate_installation_token should not be called")
-
-    monkeypatch.setattr("sandbox_runtime.auth.generate_installation_token", fail_if_called)
+    mint = MagicMock(return_value="ghs-should-not-be-returned")
+    monkeypatch.setattr("sandbox_runtime.auth.generate_installation_token", mint)
 
     assert resolve_clone_token() is None
     assert resolve_clone_token("acme", None) is None
     assert resolve_clone_token("acme", "") is None
+    mint.assert_not_called()
 
 
 def test_resolve_clone_token_narrows_to_repo_and_git_only_permissions(monkeypatch):
@@ -78,12 +88,11 @@ def test_resolve_clone_token_returns_none_when_github_credentials_incomplete(mon
     monkeypatch.setenv("GITHUB_APP_ID", "123")
     monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "456")
 
-    def fail_if_called(**_kwargs):
-        raise AssertionError("generate_installation_token should not be called")
-
-    monkeypatch.setattr("sandbox_runtime.auth.generate_installation_token", fail_if_called)
+    mint = MagicMock(return_value="ghs-should-not-be-returned")
+    monkeypatch.setattr("sandbox_runtime.auth.generate_installation_token", mint)
 
     assert resolve_clone_token("acme", "repo") is None
+    mint.assert_not_called()
 
 
 def test_resolve_clone_token_returns_none_when_github_generation_fails(monkeypatch):
