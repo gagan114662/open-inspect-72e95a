@@ -4,6 +4,7 @@ import {
   sendPromptResponseSchema,
 } from "@open-inspect/shared/types/session-api";
 import { resolveAppName } from "@open-inspect/shared/app-name";
+import { harnessSupportsModel } from "@open-inspect/shared/harnesses";
 import { signedControlPlaneFetch } from "./internal-auth";
 import type {
   Env,
@@ -43,10 +44,16 @@ async function createSession(
     scmAvatarUrl: string;
   }
 ): Promise<string> {
+  // Route Anthropic-model sessions through the Claude Agent harness so they can
+  // resolve to the deployment's connected Claude subscription (installation
+  // default provider account) instead of requiring ANTHROPIC_API_KEY. Every
+  // other model family keeps running on OpenCode, which only supports API keys.
+  const harness = harnessSupportsModel("claude", params.model) ? "claude" : "opencode";
   const body: Record<string, unknown> = {
     ...params.target,
     title: params.title,
     model: params.model,
+    harness,
     scmLogin: params.scmLogin,
     scmAvatarUrl: params.scmAvatarUrl,
   };

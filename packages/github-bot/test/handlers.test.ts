@@ -400,6 +400,36 @@ describe("handlePullRequestOpened", () => {
     expect(sessionBody.model).toBe("anthropic/claude-opus-4-6");
   });
 
+  it("routes Anthropic models through the Claude Agent harness", async () => {
+    vi.mocked(getGitHubConfig).mockResolvedValue({
+      ...defaultConfig,
+      model: "anthropic/claude-opus-4-6",
+    });
+    const env = createMockEnv();
+    const log = createMockLogger();
+
+    await handlePullRequestOpened(env, log, pullRequestOpenedPayload, "trace-0");
+
+    const cpFetch = getControlPlaneFetch(env);
+    const sessionBody = sessionCreateBody(cpFetch);
+    expect(sessionBody.harness).toBe("claude");
+  });
+
+  it("keeps non-Anthropic models on the OpenCode harness", async () => {
+    vi.mocked(getGitHubConfig).mockResolvedValue({
+      ...defaultConfig,
+      model: "openai/gpt-5",
+    });
+    const env = createMockEnv();
+    const log = createMockLogger();
+
+    await handlePullRequestOpened(env, log, pullRequestOpenedPayload, "trace-0");
+
+    const cpFetch = getControlPlaneFetch(env);
+    const sessionBody = sessionCreateBody(cpFetch);
+    expect(sessionBody.harness).toBe("opencode");
+  });
+
   it("passes reasoningEffort from config to session creation", async () => {
     vi.mocked(getGitHubConfig).mockResolvedValue({
       ...defaultConfig,
