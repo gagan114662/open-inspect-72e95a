@@ -312,18 +312,166 @@ N/A — audit only, nothing merged, nothing to roll back.
 
 ---
 
-## 3. Credential isolation audit (backlog, not started)
+## 3. Credential isolation audit
 
-**Status:** Open.
+**Status:** Done (audit) — 2026-09-12. One real gap found, fix not yet implemented; see Follow-up.
+
+### Objective and non-goals
+
+- **Objective:** determine whether the sandbox's own GitHub credential is scoped so that an agent
+  which can modify code cannot also use that same credential to approve code (its own or anyone
+  else's) — not just "does a separate bot identity exist," which item #1 already showed is
+  insufficient on its own.
+- **Non-goals:** not re-auditing the review-submission logic itself (covered by item #2); not moving
+  PR creation into the control plane (already true — see below); not implementing the fix in this
+  pass — audit first, per standing instruction.
 
 ### Context
 
 Raised during item #1's investigation: the GitHub App installation token is injected directly into
-the sandbox's own environment variables (`GH_TOKEN`/`GITHUB_TOKEN`/`GITHUB_APP_TOKEN`, via
-`packages/modal-infra/src/sandbox/vcs_env.py`) so the agent's own shell commands can read it
-directly. This does not establish the article's "secrets outside the sandbox" design for GitHub
-credentials specifically — contrast with the Anthropic credential handling in
-`docs/CLAUDE_AGENT.md`, which explicitly keeps the token out of the sandbox and brokers it through a
-clean-credential wrapper instead. Not audited or fixed yet: token scope, lifetime, and blast radius
-if a sandbox is prompt-injected, before deciding whether/how to move privileged GitHub operations
-into the control plane instead.
+the sandbox's own environment variables via `packages/modal-infra/src/sandbox/vcs_env.py`. Full
+read-only trace performed 2026-09-12 (creation → injection → lifetime → exposure → blast radius →
+dependencies):
+
+**Creation.** One GitHub App, three independent token-minting implementations, all from the same App
+ID/private key/installation ID (`packages/control-plane/src/auth/github-app.ts:212-288`,
+`packages/github-bot/src/github-auth.ts:72-125`,
+`packages/sandbox-runtime/src/sandbox_runtime/auth/github_app.py:18-62`). **None of the three
+request GitHub's optional `permissions`/`repositories` narrowing fields** on
+`POST /app/installations/{id}/access_tokens` — every minted token carries the App's full declared
+permission set (Contents RW, Pull requests RW, Metadata R, Issues RW) across every repo the
+installation covers, regardless of which code path asked for it or why.
+
+**Injection.** The common case (fresh session, `_RepositoryImageSource`) — **no token is injected
+into the interactive sandbox at all** (`packages/modal-infra/src/sandbox/manager.py:387-411`).
+`create_pull_request` (the agent-facing tool, `packages/sandbox-runtime/.../claude_tools.py:499`) is
+brokered through the control plane, which mints its own token server-side
+(`packages/control-plane/src/session/pull-request-service.ts`, "fresh push auth token" per push) —
+this part already matches the article's "secrets outside the sandbox" design. Review submission
+(`pulls/{n}/reviews`) is minted and executed entirely inside the github-bot Worker
+(`packages/github-bot/src/github-auth.ts` → `handlers.ts:161`) — never handed to any sandbox.
+
+**The actual gap: the snapshot-restore path.** Restoring a session (`api_restore_sandbox` →
+`resolve_clone_token()`, `packages/modal-infra/src/clone_token.py:22-32`) mints a token and injects
+it via `inject_vcs_env_vars` (`packages/modal-infra/src/sandbox/vcs_env.py:9-37`) as
+`VCS_CLONE_TOKEN`, plus gh-CLI-recognized aliases `GITHUB_TOKEN`/`GITHUB_APP_TOKEN` when
+`include_github_cli_aliases=True`. Because this token is unnarrowed (per Creation, above), it
+carries `pull_requests: write` — the same permission bucket the review-submission path uses. **A
+restored sandbox's own agent-readable credential is therefore directly capable of calling
+`gh api repos/{owner}/{repo}/pulls/{n}/reviews -f event=APPROVE` on any PR the installation covers —
+not just git operations, and not just its own PR.**
+
+**Why this isn't caught by the self-review guard.** `packages/github-bot/src/handlers.ts:375,514`
+compute `isSelfReview` (`pr.user.login == GITHUB_BOT_USERNAME`) and
+`packages/github-bot/src/prompts.ts:65-68,184-187` hardcode `reviewEvent = "COMMENT"` in that case —
+but this is a **prompt instruction to the reviewing LLM**, not a validation of the outgoing API
+call. Nothing in code checks the `event` field the reviewing agent's own `gh api` invocation sends
+before it reaches GitHub. The only thing that actually blocks self-approval is GitHub's own
+account-identity rule (a PR's author account cannot approve its own PR) — the same structural rule
+item #1 already relies on. That rule protects a PR against approval by the exact bot account that
+authored it. **It does nothing to stop a restored sandbox's credential from approving a _different_
+PR** — one it didn't author, opened by anyone, including another agent session under the same bot
+identity. Confirms the standing instruction's premise directly: separate bot identity does not
+establish separation of authority when the same unnarrowed credential backs both capabilities.
+
+**Lifetime/refresh/revocation.** JWTs: 10-minute expiry, all three implementations. Installation
+tokens: GitHub-issued ~1 hour. Control-plane caches up to 50 minutes
+(`INSTALLATION_TOKEN_CACHE_MAX_AGE_MS`, `github-app.ts:23,26`) in an in-memory `Map` plus optional
+KV, keyed only by `{appId}:{installationId}` — not per-session. github-bot and the Python
+sandbox-runtime path mint fresh on every call, no caching. **No explicit revocation**
+(`DELETE /installation/token`) found anywhere — all three paths let tokens expire naturally. A
+restored sandbox's injected token is not re-minted mid-session even if the sandbox outlives the
+token's ~1-hour life.
+
+**Exposure.** The sandbox's own shell can trivially read `VCS_CLONE_TOKEN`/`GITHUB_TOKEN` — intended
+behavior, not a bug, but it puts the credential fully inside the blast radius of a prompt-injected
+or otherwise compromised agent shell. No logging of raw token values found in any of the three
+minting/injection call paths (not an exhaustive sweep of every log statement in the repo — only the
+token code paths were checked). Not verified in this pass, flagged rather than assumed: whether env
+vars set at sandbox launch persist into a later snapshot image, and exactly how a brand-new
+(non-restored) session's very first `git push` gets credentialed (plausibly the same per-push broker
+as `create_pull_request`, but the exact call path wasn't traced).
+
+**Blast radius.** Given the App's permissions and no per-mint scoping, a live token can — across
+**every repository the installation covers** — clone/push/read any repo content, open/edit/comment/
+label any PR or issue, and submit formal reviews (APPROVE/CHANGES_REQUESTED/COMMENT) on any PR,
+including ones it didn't author. It cannot alter branch protection (no `administration` permission
+granted) and cannot merge past a required-approval check through the review path alone — but it can
+supply that required approval on someone else's PR.
+
+**Dependencies** (credential source → invoked from):
+
+| Operation                                                                      | Credential source                                             | Sandbox-reachable?                                        |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------- | --------------------------------------------------------- |
+| Fresh-session build-time clone                                                 | Minted upstream into `ModalBuildSessionService`               | No — outside interactive sandbox                          |
+| Restore-time fetch/push                                                        | `resolve_clone_token()` (Python, `clone_token.py`)            | Injected into the restored sandbox's env — **yes**        |
+| `create_pull_request` tool                                                     | Control-plane per-push mint (`pull-request-service.ts`)       | Broker call from sandbox; sandbox never holds this token  |
+| PR review submission                                                           | `generateInstallationToken` (`github-bot/src/github-auth.ts`) | No — github-bot Worker only                               |
+| Any direct `gh`/`git` command the agent's shell runs in a **restored** sandbox | Whatever token is currently in env                            | **Yes — fully agent-controlled, fully prompt-injectable** |
+| Webhook signature verification                                                 | Separate `github_webhook_secret`, not the App token           | github-bot Worker                                         |
+
+### Acceptance criteria
+
+- [ ] The token injected into a restored sandbox (`VCS_CLONE_TOKEN`/`GITHUB_TOKEN`/
+      `GITHUB_APP_TOKEN`) is minted with a narrowed `permissions` object that excludes
+      `pull_requests` and `issues` write — request only what git operations need (`contents: write`,
+      implicit `metadata: read`).
+- [ ] The narrowed token is additionally scoped to the single repository being worked on via the
+      `repositories` field on the token-mint call, not the whole installation.
+- [ ] Live proof: from inside a restored sandbox,
+      `gh api repos/{owner}/{repo}/pulls/{n}/reviews -f     event=APPROVE` using the sandbox's own
+      injected credential returns `403` (insufficient scope), on a real PR, before and after
+      comparison.
+- [ ] Live proof: `git push` from the same restored sandbox still succeeds with the narrowed token —
+      the fix must not break the intended git workflow.
+- [ ] The `create_pull_request` broker path and the github-bot review path are unaffected (they mint
+      their own tokens independently already; confirm no shared code path regresses).
+
+### Capabilities
+
+- **Allowed:** modify the token-minting call in `packages/modal-infra/src/clone_token.py` /
+  `packages/sandbox_runtime/src/sandbox_runtime/auth/github_app.py` to pass narrowed `permissions`/
+  `repositories`; modify `vcs_env.py` only if the narrowing changes what env vars are safe to alias.
+- **Denied:** touching the control-plane's or github-bot's own token-minting (both already correctly
+  isolated per this audit); lowering the App's own declared permissions (that would break the
+  control plane's and github-bot's legitimate need for `pull_requests: write`); any change that
+  removes the sandbox's ability to `git push`.
+
+### Checks
+
+- `open-inspect-sandbox`'s CI unaffected (no change to that repo).
+- Manual live test against the real deployment: restore a session, confirm `git push` works and
+  `pulls/{n}/reviews` is rejected with the narrowed token; confirm an unrestored (fresh) session is
+  unaffected (it never held a token in the first place).
+
+### Terminal states
+
+- **Complete:** narrowed-token fix implemented and the four live-proof acceptance criteria above are
+  demonstrated on the real deployment, not just reasoned about.
+- **Escalate:** if GitHub's installation-token API rejects `permissions` narrowing for this App's
+  configuration for any reason — that's a real constraint to report, not to route around by leaving
+  the credential unnarrowed.
+
+### Acceptance test
+
+An independent live check after the fix: from a real restored sandbox, attempt the
+`pulls/{n}/reviews` call with the sandbox's own credential and confirm `403`; separately confirm
+`git push` still succeeds. Both run against the live deployment, not asserted from reading the diff.
+
+### Follow-up — fix not yet implemented
+
+This audit found the real gap (unnarrowed sandbox credential capable of the reviews endpoint) and
+the smallest concrete fix (narrow `permissions`/`repositories` at mint time for the restore-path
+token only). Per the audit-then-fix discipline used for items #1 and #2, implementation is queued as
+the next step, pending confirmation before touching production credential-minting code.
+
+### Evidence
+
+Read-only trace performed 2026-09-12 across `packages/modal-infra`, `packages/github-bot`,
+`packages/control-plane`, `packages/sandbox-runtime`, and the relevant Terraform modules (
+`terraform/environments/production/{modal,workers-control-plane,workers-github}.tf`). No token
+values printed or exfiltrated. Full file/line citations above.
+
+### Rollback
+
+N/A yet — audit only, no code changed.
