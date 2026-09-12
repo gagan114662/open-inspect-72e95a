@@ -2,6 +2,8 @@ import { useId } from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -84,67 +86,116 @@ export function AnalyticsTimeseriesChart({ series, loading }: TimeseriesChartPro
 
       <div className="mt-6 rounded-lg border border-border-muted bg-background p-3 sm:p-4">
         <div className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-              <defs>
+          <ResponsiveContainer width="100%" height="100%" debounce={200}>
+            {/* A line/area needs at least two points to draw anything — with
+                a single day of data an AreaChart renders as a near-invisible
+                dot in an otherwise empty frame. Bars read correctly with any
+                number of categories, including one, so switch chart types
+                rather than trying to force a trend line out of one point. */}
+            {data.length === 1 ? (
+              <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    color: "var(--popover-foreground)",
+                  }}
+                  labelFormatter={(_, payload) => {
+                    const rowDate = payload?.[0]?.payload?.date;
+                    return typeof rowDate === "string" ? formatAnalyticsLongDate(rowDate) : "";
+                  }}
+                  formatter={(value, name) => {
+                    const count = typeof value === "number" ? value : Number(value ?? 0);
+                    const label = labelMap[String(name)] ?? String(name);
+                    return [formatAnalyticsCount(count), label];
+                  }}
+                />
+                {groupKeys.map((groupKey, index) => (
+                  <Bar
+                    key={groupKey}
+                    dataKey={groupKey}
+                    fill={SERIES_COLORS[index % SERIES_COLORS.length]}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={64}
+                  />
+                ))}
+              </BarChart>
+            ) : (
+              <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  {groupKeys.map((groupKey, index) => {
+                    const color = SERIES_COLORS[index % SERIES_COLORS.length];
+                    const gradientId = getGradientId(groupKey, index);
+                    return (
+                      <linearGradient key={groupKey} id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={color} stopOpacity={0.18} />
+                        <stop offset="95%" stopColor={color} stopOpacity={0.03} />
+                      </linearGradient>
+                    );
+                  })}
+                </defs>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    color: "var(--popover-foreground)",
+                  }}
+                  labelFormatter={(_, payload) => {
+                    const rowDate = payload?.[0]?.payload?.date;
+                    return typeof rowDate === "string" ? formatAnalyticsLongDate(rowDate) : "";
+                  }}
+                  formatter={(value, name) => {
+                    const count = typeof value === "number" ? value : Number(value ?? 0);
+                    const label = labelMap[String(name)] ?? String(name);
+                    return [formatAnalyticsCount(count), label];
+                  }}
+                />
                 {groupKeys.map((groupKey, index) => {
                   const color = SERIES_COLORS[index % SERIES_COLORS.length];
                   const gradientId = getGradientId(groupKey, index);
                   return (
-                    <linearGradient key={groupKey} id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={color} stopOpacity={0.18} />
-                      <stop offset="95%" stopColor={color} stopOpacity={0.03} />
-                    </linearGradient>
+                    <Area
+                      key={groupKey}
+                      type="monotone"
+                      dataKey={groupKey}
+                      stroke={color}
+                      fill={`url(#${gradientId})`}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 3 }}
+                    />
                   );
                 })}
-              </defs>
-              <CartesianGrid stroke="var(--border)" vertical={false} />
-              <XAxis
-                dataKey="label"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-              />
-              <YAxis
-                allowDecimals={false}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "6px",
-                  color: "var(--popover-foreground)",
-                }}
-                labelFormatter={(_, payload) => {
-                  const rowDate = payload?.[0]?.payload?.date;
-                  return typeof rowDate === "string" ? formatAnalyticsLongDate(rowDate) : "";
-                }}
-                formatter={(value, name) => {
-                  const count = typeof value === "number" ? value : Number(value ?? 0);
-                  const label = labelMap[String(name)] ?? String(name);
-                  return [formatAnalyticsCount(count), label];
-                }}
-              />
-              {groupKeys.map((groupKey, index) => {
-                const color = SERIES_COLORS[index % SERIES_COLORS.length];
-                const gradientId = getGradientId(groupKey, index);
-                return (
-                  <Area
-                    key={groupKey}
-                    type="monotone"
-                    dataKey={groupKey}
-                    stroke={color}
-                    fill={`url(#${gradientId})`}
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 3 }}
-                  />
-                );
-              })}
-            </AreaChart>
+              </AreaChart>
+            )}
           </ResponsiveContainer>
         </div>
       </div>

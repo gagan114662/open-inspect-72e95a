@@ -4,6 +4,31 @@ import type { AnalyticsBreakdownResponse } from "@open-inspect/shared/types/anal
 import { formatAnalyticsCount } from "@/lib/analytics";
 import { formatSessionCost } from "@/lib/session-cost";
 
+const Y_AXIS_WIDTH = 140;
+// Rough average glyph width at fontSize 12 in the UI font; good enough to
+// decide a character budget without measuring text in the DOM.
+const CHAR_PX = 6.5;
+const MAX_LABEL_CHARS = Math.max(4, Math.floor((Y_AXIS_WIDTH - 12) / CHAR_PX));
+
+function truncateRepoLabel(label: string): string {
+  // Prefer dropping the owner segment first ("owner/repo" -> "repo") since
+  // the owner is redundant in a single-tenant deployment and this alone
+  // fits most real repo names without any ellipsis.
+  const shortName = label.includes("/") ? label.slice(label.indexOf("/") + 1) : label;
+  if (shortName.length <= MAX_LABEL_CHARS) return shortName;
+  return `${shortName.slice(0, MAX_LABEL_CHARS - 1)}…`;
+}
+
+function RepoAxisTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) {
+  const full = payload?.value ?? "";
+  return (
+    <text x={x} y={y} dy={4} textAnchor="end" fontSize={12} fill="var(--foreground)">
+      <title>{full}</title>
+      {truncateRepoLabel(full)}
+    </text>
+  );
+}
+
 interface RepoBarChartProps {
   entries?: AnalyticsBreakdownResponse["entries"];
   loading: boolean;
@@ -120,7 +145,7 @@ export function AnalyticsRepoBarChart({ entries, loading }: RepoBarChartProps) {
 
       <div className="mt-6 max-h-[420px] overflow-y-auto rounded-lg border border-border-muted bg-background p-3 pr-2 sm:p-4">
         <div style={{ height: chartHeight }}>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" debounce={200}>
             <BarChart
               data={chartData}
               layout="vertical"
@@ -137,10 +162,10 @@ export function AnalyticsRepoBarChart({ entries, loading }: RepoBarChartProps) {
               <YAxis
                 type="category"
                 dataKey="repo"
-                width={180}
+                width={Y_AXIS_WIDTH}
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "var(--foreground)", fontSize: 12 }}
+                tick={<RepoAxisTick />}
               />
               <Tooltip
                 cursor={{ fill: "var(--accent-muted)" }}

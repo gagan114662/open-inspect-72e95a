@@ -193,7 +193,10 @@ export function AnalyticsUserTable({
                   align="right"
                 />
               </th>
-              <th className="px-5 py-3 text-right" aria-sort={getAriaSort("prs")}>
+              <th
+                className="hidden px-5 py-3 text-right xl:table-cell"
+                aria-sort={getAriaSort("prs")}
+              >
                 <SortButton
                   label="PRs"
                   sortKey="prs"
@@ -203,7 +206,10 @@ export function AnalyticsUserTable({
                   align="right"
                 />
               </th>
-              <th className="px-5 py-3 text-right" aria-sort={getAriaSort("messageCount")}>
+              <th
+                className="hidden px-5 py-3 text-right xl:table-cell"
+                aria-sort={getAriaSort("messageCount")}
+              >
                 <SortButton
                   label="Messages"
                   sortKey="messageCount"
@@ -233,7 +239,10 @@ export function AnalyticsUserTable({
                   align="right"
                 />
               </th>
-              <th className="px-5 py-3 text-right" aria-sort={getAriaSort("lastActive")}>
+              <th
+                className="hidden px-5 py-3 text-right lg:table-cell"
+                aria-sort={getAriaSort("lastActive")}
+              >
                 <SortButton
                   label="Last Active"
                   sortKey="lastActive"
@@ -260,10 +269,10 @@ export function AnalyticsUserTable({
                 <td className="px-5 py-4 text-right">
                   <CompletionRateCell entry={entry} />
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="hidden px-5 py-4 text-right text-foreground xl:table-cell">
                   {formatAnalyticsCount(entry.prs)}
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="hidden px-5 py-4 text-right text-foreground xl:table-cell">
                   {formatAnalyticsCount(entry.messageCount)}
                 </td>
                 <td className="px-5 py-4 text-right text-foreground">
@@ -272,7 +281,7 @@ export function AnalyticsUserTable({
                 <td className="px-5 py-4 text-right text-foreground">
                   {entry.avgDuration > 0 ? formatAnalyticsDuration(entry.avgDuration) : "—"}
                 </td>
-                <td className="px-5 py-4 text-right text-muted-foreground">
+                <td className="hidden px-5 py-4 text-right text-muted-foreground lg:table-cell">
                   {formatRelativeTime(entry.lastActive)}
                 </td>
               </tr>

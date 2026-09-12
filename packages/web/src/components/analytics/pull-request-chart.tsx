@@ -1,6 +1,8 @@
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -72,65 +74,111 @@ export function AnalyticsPullRequestChart({ timeseries, loading }: PullRequestCh
 
       <div className="mt-6 rounded-lg border border-border-muted bg-background p-3 sm:p-4">
         <div className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-              <defs>
-                {SERIES.map((series) => (
-                  <linearGradient
-                    key={series.key}
-                    id={`${chartIdPrefix}-pr-series-${series.key}`}
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop offset="5%" stopColor={series.color} stopOpacity={0.18} />
-                    <stop offset="95%" stopColor={series.color} stopOpacity={0.03} />
-                  </linearGradient>
-                ))}
-              </defs>
-              <CartesianGrid stroke="var(--border)" vertical={false} />
-              <XAxis
-                dataKey="label"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-              />
-              <YAxis
-                allowDecimals={false}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "6px",
-                  color: "var(--popover-foreground)",
-                }}
-                labelFormatter={(_, payload) => {
-                  const rowDate = payload?.[0]?.payload?.date;
-                  return typeof rowDate === "string" ? formatAnalyticsLongDate(rowDate) : "";
-                }}
-                formatter={(value, name) => {
-                  const count = typeof value === "number" ? value : Number(value ?? 0);
-                  return [formatAnalyticsCount(count), labelMap[String(name)] ?? String(name)];
-                }}
-              />
-              {SERIES.map((series) => (
-                <Area
-                  key={series.key}
-                  type="monotone"
-                  dataKey={series.key}
-                  stroke={series.color}
-                  fill={`url(#${chartIdPrefix}-pr-series-${series.key})`}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 3 }}
+          <ResponsiveContainer width="100%" height="100%" debounce={200}>
+            {/* Same single-point fix as the sessions chart: an area/line
+                needs at least two points, so fall back to bars for a single
+                day instead of rendering a near-invisible dot. */}
+            {data.length === 1 ? (
+              <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
                 />
-              ))}
-            </AreaChart>
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    color: "var(--popover-foreground)",
+                  }}
+                  labelFormatter={(_, payload) => {
+                    const rowDate = payload?.[0]?.payload?.date;
+                    return typeof rowDate === "string" ? formatAnalyticsLongDate(rowDate) : "";
+                  }}
+                  formatter={(value, name) => {
+                    const count = typeof value === "number" ? value : Number(value ?? 0);
+                    return [formatAnalyticsCount(count), labelMap[String(name)] ?? String(name)];
+                  }}
+                />
+                {SERIES.map((series) => (
+                  <Bar
+                    key={series.key}
+                    dataKey={series.key}
+                    fill={series.color}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={64}
+                  />
+                ))}
+              </BarChart>
+            ) : (
+              <AreaChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  {SERIES.map((series) => (
+                    <linearGradient
+                      key={series.key}
+                      id={`${chartIdPrefix}-pr-series-${series.key}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="5%" stopColor={series.color} stopOpacity={0.18} />
+                      <stop offset="95%" stopColor={series.color} stopOpacity={0.03} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    color: "var(--popover-foreground)",
+                  }}
+                  labelFormatter={(_, payload) => {
+                    const rowDate = payload?.[0]?.payload?.date;
+                    return typeof rowDate === "string" ? formatAnalyticsLongDate(rowDate) : "";
+                  }}
+                  formatter={(value, name) => {
+                    const count = typeof value === "number" ? value : Number(value ?? 0);
+                    return [formatAnalyticsCount(count), labelMap[String(name)] ?? String(name)];
+                  }}
+                />
+                {SERIES.map((series) => (
+                  <Area
+                    key={series.key}
+                    type="monotone"
+                    dataKey={series.key}
+                    stroke={series.color}
+                    fill={`url(#${chartIdPrefix}-pr-series-${series.key})`}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 3 }}
+                  />
+                ))}
+              </AreaChart>
+            )}
           </ResponsiveContainer>
         </div>
       </div>
