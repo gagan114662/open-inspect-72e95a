@@ -8,6 +8,23 @@ test and Evidence sections filled in first.
 Status legend: **Open** (not started) · **In progress** · **Blocked** · **Done** (with evidence
 linked).
 
+## Framework gap map
+
+Against the article's core claims, as of 2026-09-12:
+
+| Article concept                                                      | This deployment                                                                                                     | Status                                                                                                                                                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validation harness that can't be gamed from inside                   | Acceptance suite (item #2): protected-path, name-matched required tests, invoked outside `package.json`             | **Closed** — repeat-audited against neutral PR descriptions and real bugs, not just self-disclosed attacks                                                                         |
+| Back-pressure / a reviewer that can actually block                   | Formal bot review path (item #1): real `APPROVED`/`CHANGES_REQUESTED`, commit-bound, dismissed on new pushes        | **Closed** — live-proven on two real PRs                                                                                                                                           |
+| Who controls "correct" isn't the same actor as who wrote the code    | Credential isolation (item #3): sandbox can no longer use its own git credential to approve PRs                     | **Fix implemented, twice independently verified — blocked on deploy** (needs `terraform apply`)                                                                                    |
+| Independent second opinion, not just the same model reviewing itself | Codex as a standing adversarial reviewer (item #4)                                                                  | **Adopted 2026-09-12** — used live on item #3's fix, caught one real P1 and two real P2s the first pass, a further test-quality gap the second; now a required step, not a one-off |
+| Self-improving over time                                             | This backlog itself: every item's audit → fix → independent verification → recorded evidence, feeding the next item | **Ongoing** — this table is the mechanism, updated as items close                                                                                                                  |
+
+The credential-isolation deploy is the one remaining hard blocker on closing the article's "who
+controls correct" gap end-to-end in production. Everything else needed to close it is done and
+verified; only the apply step is outstanding, and it requires the deployment owner's decision (see
+item #3's Follow-up).
+
 ---
 
 ## 1. Establish an eligible non-author reviewer path
@@ -314,7 +331,10 @@ N/A — audit only, nothing merged, nothing to roll back.
 
 ## 3. Credential isolation audit
 
-**Status:** Done (audit) — 2026-09-12. One real gap found, fix not yet implemented; see Follow-up.
+**Status:** In progress — 2026-09-12. Audit done, fix implemented and independently verified twice
+(once read-only, once with live execution) by a second model (Codex); **blocked only on deploying it
+to the live control plane and Modal app**, which requires `terraform apply` — a protected action
+this session cannot execute itself. See Implementation and Follow-up below.
 
 ### Objective and non-goals
 
@@ -458,20 +478,211 @@ An independent live check after the fix: from a real restored sandbox, attempt t
 `pulls/{n}/reviews` call with the sandbox's own credential and confirm `403`; separately confirm
 `git push` still succeeds. Both run against the live deployment, not asserted from reading the diff.
 
-### Follow-up — fix not yet implemented
+### Implementation — 2026-09-12, `feat/scoped-sandbox-credentials` (commits `a7983425`, `7cf3fdd5`)
 
-This audit found the real gap (unnarrowed sandbox credential capable of the reviews endpoint) and
-the smallest concrete fix (narrow `permissions`/`repositories` at mint time for the restore-path
-token only). Per the audit-then-fix discipline used for items #1 and #2, implementation is queued as
-the next step, pending confirmation before touching production credential-minting code.
+Scope ended up broader than the original "restore-path only" framing: the real live path most
+sandboxes use (fresh or restored) for `git`/`gh` operations is the control-plane's
+`generateCredentialHelperAuth` — feeding both the in-sandbox git credential helper and the
+image-wide `gh` CLI wrapper — not just the Modal restore-path static env var injection. Both are now
+fixed, independently:
+
+- `packages/control-plane/src/auth/github-app.ts` — new `getScopedInstallationTokenWithExpiry`,
+  uncached, mints `{repositories, permissions}`-narrowed tokens; rejects empty repo list or empty
+  permission set before ever calling GitHub (fail closed on malformed input, not just on GitHub's
+  own rejection).
+- `generateCredentialHelperAuth` now takes the **full list** of repositories the caller needs (not a
+  single "primary" one) — `packages/control-plane/src/session/http/handlers/sandbox.handler.ts`
+  sources this from `SessionCoreRepository.getSessionRepositories()`, and
+  `packages/control-plane/src/image-builds/planner.ts` passes every build repository — preserving
+  the platform's existing sibling-repo support, which a primary-only version would have silently
+  broken (caught by Codex's first review pass, see below).
+- `generatePushAuth` (the brokered push+PR-creation path) and the github-bot Worker's own
+  review-submission minting are **untouched** — neither is sandbox-reachable, and both legitimately
+  need the App's full grant.
+- Python side (`packages/modal-infra/src/clone_token.py`,
+  `packages/sandbox-runtime/src/sandbox_runtime/auth/github_app.py`) narrowed the same way for
+  defense in depth on the raw env var a restored sandbox still receives directly; fails closed
+  (returns `None`, never mints unnarrowed) when repo context is missing, and rejects an explicit
+  empty `permissions={}` rather than silently treating it as "no narrowing requested."
+
+**Independent verification, round 1 (Codex, read-only diff review):** found one real [P1] — the
+initial version scoped to only `repositories[0]`/`session.repo_owner`, breaking multi-repo sessions
+— and two real [P2]s (missing-repo-context defaulted to an unnarrowed mint; empty `permissions={}`
+silently dropped narrowing while still repo-scoping). All three fixed as described above.
+
+**Independent verification, round 2 (Codex, live `workspace-write` execution in an isolated
+worktree):** re-ran with actual execution access — not just reading the diff. Confirmed all three
+findings fixed by running the real test suites, and independently wrote and ran its own throwaway
+probes: a Python script calling `get_installation_token(repository="sibling-repo", permissions={})`
+directly (confirmed `ValueError`, confirmed the HTTP client was never constructed), and a Vitest
+file that ran `ImageBuildPlanner.planBuild()` against a mocked `fetch` and asserted the **literal
+outgoing request body** equalled
+`{"repositories":["primary","sibling"],"permissions":{"contents":"write","metadata":"read"}}` for a
+two-repo session, with a rejected (422) mint producing `{type:"unavailable"}` and no retry. This
+pass also caught a real test-quality gap:
+`test_resolve_clone_token_returns_none_without_repo_context` used a raising stub that
+`resolve_clone_token`'s broad `except Exception` made indistinguishable from a genuine narrowing
+failure — the test would have passed even with the guard deleted. Fixed (commit `7cf3fdd5`) with a
+non-raising `MagicMock` + `assert_not_called()`, and verified concretely: temporarily deleted the
+guard, confirmed the old test still passed and the new test correctly failed, then restored the
+guard and confirmed both pass.
+
+Full test status on the fix branch: control-plane unit tests 286/286 files, 4309/4309 tests;
+control-plane integration tests (real Cloudflare Workers pool) 105/105 files, 1253/1254 (1 skipped);
+modal-infra Python 57/57; sandbox-runtime Python 53/53 (including the new
+`test_github_app_auth.py`). All runs independently reproduced outside Codex's own execution sandbox,
+which has a known artifact (blocks local socket binds, causing unrelated `listen EPERM` failures in
+Codex's own run of the same commit) — noted rather than hidden.
+
+### Follow-up — blocked on deploy, not on code
+
+The fix is implemented, tested, and twice independently verified by a second model with live
+execution — but **not yet live**. Deploying it requires `terraform apply` against
+`terraform/environments/production`, which Claude Code's own auto-mode classifier refuses to run as
+a protected infrastructure action. `terraform plan` was reviewed (rebuilds+redeploys `control-plane`
+for this fix, `modal_app` for the Python side, and unconditionally rebuilds+redeploys `github-bot`
+too — that last one is this deployment's existing "always rebuild every worker on apply" pattern,
+not something caused by this change) and saved; running it needs either the deployment owner's own
+`terraform apply` or an explicit Bash permission grant for this scope. The four live acceptance
+criteria (restore/push still works, review-endpoint calls now `403`, cross-repo access denied,
+brokered PR creation/review still works) cannot be demonstrated until that deploy happens.
+
+Also still open, flagged rather than resolved: the residual authority of even a correctly-scoped
+`contents:write` token — it cannot itself write `.github/workflows/*` (this App was never granted
+the separate `workflows` permission, confirmed against the onboarding doc's configuration, not
+independently re-verified against the live App's current grant) and cannot bypass branch protection
+on its own (no `administration` permission), but it CAN still push directly to any non-protected
+branch, delete branches, and create/delete releases and tags within the repos it's scoped to —
+narrow compared to the pre-fix token, not zero. Snapshot credential persistence (whether a pre-fix,
+still-unexpired cached token could survive in an old snapshot's `/run/oi/scm-creds.json`) was
+reasoned through analytically — bounded to at most the token's own ~1-hour life regardless, self-
+resolving without manual cleanup — but not verified against this deployment's actual existing
+snapshots.
 
 ### Evidence
 
-Read-only trace performed 2026-09-12 across `packages/modal-infra`, `packages/github-bot`,
-`packages/control-plane`, `packages/sandbox-runtime`, and the relevant Terraform modules (
-`terraform/environments/production/{modal,workers-control-plane,workers-github}.tf`). No token
-values printed or exfiltrated. Full file/line citations above.
+Read-only audit trace: `docs/production-hardening-backlog.md` history above, performed 2026-09-12
+across `packages/modal-infra`, `packages/github-bot`, `packages/control-plane`,
+`packages/sandbox-runtime`, and the relevant Terraform modules. No token values printed or
+exfiltrated.
+
+Implementation: branch `feat/scoped-sandbox-credentials`, commits `a7983425` (scoping fix),
+`7cf3fdd5` (test-quality fix from Codex's live-execution pass). `terraform plan` reviewed and saved
+(not yet applied — see Follow-up).
 
 ### Rollback
 
-N/A yet — audit only, no code changed.
+`git revert` both commits on `feat/scoped-sandbox-credentials` before merge; post-deploy, a targeted
+`terraform apply` back to the prior commit re-widens the sandbox credential to the pre-fix
+unnarrowed grant (immediate, no data migration involved).
+
+---
+
+## 4. Independent second-model review as a standing practice
+
+**Status:** Adopted — 2026-09-12. In effect starting with item #3's fix; not retroactively applied
+to items #1/#2.
+
+### Objective and non-goals
+
+- **Objective:** every implementation in this hardening effort gets an adversarial pass from a model
+  that did not write the code and has no stake in the prior conclusion, before it's called done —
+  the same discipline this session's human reviewer has applied throughout, made repeatable instead
+  of depending on a person catching every gap.
+- **Non-goals:** this does not give Codex (or any second model) write access to this repo,
+  infrastructure, or credentials. It reviews and runs read/write commands only inside a disposable,
+  isolated `git worktree` copy that gets discarded — never the primary checkout, never against live
+  infrastructure. It is an advisory gate the implementing session must act on, not an autonomous
+  actor with its own standing authority over this deployment. "Lead engineer" in practice means: its
+  findings are treated as blocking until resolved or explicitly overridden with a stated reason —
+  not that it holds credentials or can merge/deploy on its own.
+
+### Context
+
+Tried live on item #3's credential-scoping fix, in two rounds:
+
+1. **Read-only diff review** (`codex exec -s read-only`, high reasoning effort): given the diff plus
+   context on what it was supposed to do, asked to find correctness/security issues. Found one real
+   [P1] (credential narrowing only covered a "primary" repository, breaking documented multi-repo
+   sessions) and two real [P2]s (a missing-repo-context code path that silently minted an unnarrowed
+   token; an empty `permissions={}` that silently dropped narrowing). All three were genuine bugs,
+   not false positives — confirmed by reproducing each, fixing each, and re-verifying.
+2. **Live execution review** (`codex exec -s workspace-write`, isolated `git worktree`, no network
+   access), after the fixes above: instructed not to trust the "fixed" claim and to verify by
+   actually running commands. It ran the real test suites, wrote and ran its own throwaway Python
+   and Vitest probes (including one that asserted the literal outgoing HTTP request body a live
+   token-mint call would send), and caught a further, more subtle issue neither the original
+   implementation nor the first review pass caught: a regression test whose mocked failure mode was
+   swallowed by the production code's own broad exception handling, making the test pass even with
+   its guard deleted (verified concretely by deleting the guard and confirming the old test still
+   passed).
+
+Two prior review layers already existed in this deployment (item #1's bot review, item #2's
+acceptance suite) — both are still necessary but not sufficient on their own: item #1's reviewer can
+be fooled by anything that doesn't touch obviously-suspicious code, and item #2's acceptance suite
+only catches regressions the checked-in test manifest actually names. An independent model with
+execution access, reviewing code neither harness was specifically built to check, caught real issues
+both missed.
+
+### Acceptance criteria
+
+- [x] Runs against a diff or branch, not the live working tree or production infrastructure.
+- [x] Has genuine execution access (not just static diff reading) for at least one verification pass
+      per reviewed change, in an isolated, disposable copy.
+- [x] Findings are reported as classified severities ([P1]/[P2]), not vague prose.
+- [x] At least one real, previously-unknown-to-the-implementer finding has been produced and fixed
+      (not just confirmation of what was already suspected) — proven on item #3.
+- [ ] Wired into this deployment's actual PR flow (not just this session's ad hoc invocation) so it
+      runs on future changes without a human remembering to invoke it — not yet done; see Terminal
+      states.
+
+### Capabilities
+
+- **Allowed:** read the full repository; execute arbitrary commands (tests, throwaway scripts)
+  inside an isolated worktree; write and delete scratch files there.
+- **Denied:** network access during execution passes
+  (`sandbox_workspace_write.network_access=false`); any access to the primary working tree, this
+  deployment's actual credentials, or live infrastructure; merge, deploy, or approval authority —
+  its output is advisory input to the implementing session, which remains responsible for deciding
+  what to act on.
+
+### Checks
+
+- The isolated worktree's own test suites (already covered per reviewed change — see item #3's
+  Evidence for the exact commands run).
+- A sanity check that any environment-specific failure (e.g. the `listen EPERM` sandbox artifact
+  observed in item #3) is independently reproduced or ruled out outside Codex's own sandbox before
+  being dismissed as noise — never dismissed on assertion alone.
+
+### Terminal states
+
+- **Complete for a given change:** the change has at least one live-execution Codex pass, its
+  findings are either fixed or explicitly recorded as accepted risk with a reason, and the pass's
+  raw output (or a faithful excerpt) is captured in that item's Evidence section.
+- **Not yet complete for this practice as a whole:** this is currently invoked manually per session,
+  not wired into `open-inspect-sandbox`'s or this deployment fork's actual CI/PR pipeline. Turning
+  it into an automatic, no-human-required gate (e.g. a CI job that runs `codex exec` against every
+  PR diff and posts findings, analogous to the bot review path in item #1) is the concrete next step
+  to make this self-sustaining rather than something a session has to remember to do.
+- **Escalate:** if Codex's own execution sandbox produces a failure that can't be independently
+  reproduced or explained (unlike the `listen EPERM` case, which was) — that's a real signal to
+  investigate, not to dismiss.
+
+### Acceptance test
+
+Any future change in this backlog cites, in its own Evidence section, the raw output of at least one
+Codex pass with genuine execution access — not merely "Codex was consulted."
+
+### Evidence
+
+Both rounds' full output are preserved in this session's transcript and summarized in item #3's
+Implementation section above: the [P1]/[P2] findings from the read-only pass, and the live-execution
+pass's test results, throwaway-probe results, and the test-quality finding, all independently
+reproduced rather than taken on Codex's word alone (e.g. the `listen EPERM` failures were confirmed
+as a sandbox artifact by re-running the identical commit outside Codex's sandbox and getting a clean
+pass).
+
+### Rollback
+
+N/A — this is a review practice, not a code or infrastructure change. Discontinuing it means simply
+not invoking it on the next change; nothing to revert.
