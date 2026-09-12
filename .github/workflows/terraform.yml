@@ -356,7 +356,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [validate, check-secrets]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.check-secrets.outputs.has-secrets == 'true'
+    # Deliberately workflow_dispatch-only, not push-triggered: this repo is
+    # private on GitHub's free plan, so the `environment: production` required-
+    # reviewer gate below can't be enforced natively (GitHub rejects it with
+    # "billing plan supports the required reviewers protection rule"). Without
+    # that gate, a push-triggered apply would be a fully unattended infra
+    # mutation on every merge to main. Requiring an explicit "Run workflow"
+    # click keeps a human in the loop until this repo is on a plan that
+    # supports required reviewers, at which point push-triggering is safe again.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.check-secrets.outputs.has-secrets == 'true'
     environment: production
     steps:
       - name: Checkout
