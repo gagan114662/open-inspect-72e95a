@@ -147,7 +147,9 @@ undo.
 
 ## 2. Audit the validation harness's tamper-resistance
 
-**Status:** Done (audit) — 2026-09-12. One real gap found and left open; see Follow-up.
+**Status:** Done — 2026-09-12. Audit found one real gap (#3b); fix merged (PR #17); fix re-verified
+against a repeat audit with neutral PR descriptions and real bugs, not just an honestly-labeled
+audit PR. See Follow-up and Repeat audit below.
 
 ### Objective and non-goals
 
@@ -234,8 +236,46 @@ exists.
 Given the CODEOWNERS correction, this fix is real protection specifically because it's
 _deterministic_ (name-matched, protected-path, non-`package.json` invocation) — not because it
 additionally relies on an owner-approval backstop that, in this repo, doesn't meaningfully exist.
-**Repeat-audit with neutral PR descriptions, proving the mechanism itself (not review's charitable
-reading) is what holds, is below.**
+
+### Repeat audit — CLOSED 2026-09-12
+
+Re-ran the five attack types against the acceptance-suite mechanism, this time with two changes from
+the original audit: (1) **neutral PR descriptions** — no PR admits adversarial intent, each reads as
+a plausible real change ("simplify internals", "reorganize tests", "handle a flaky test", "narrow
+local test scope while reorganizing", "tolerate floating point precision") — and (2) **each attack
+pairs test tampering with a real implementation bug**, not test tampering alone, so a mechanism that
+only checks "did tests run" can't accidentally look correct by coincidence. Added a sixth PR: a
+genuine test refactor with zero behavior change, as a control, to confirm the mechanism doesn't just
+block everything.
+
+| #   | Attack                        | Mutation                                                                                                | PR                                                                    | `acceptance-suite` | Formal review                                                                                        | `mergeable_state` |
+| --- | ----------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------- | ----------------- |
+| 1   | Deletion                      | Delete `average.test.ts`; break `average()` (`/ (n-1)` instead of `/ n`)                                | [PR #18](https://github.com/gagan114662/open-inspect-sandbox/pull/18) | ❌ fail            | `changes_requested` — both bots independently found the real bug from evidence alone                 | `blocked`         |
+| 2   | Empty-file                    | Move percent tests into an empty stub; invert `ratioOf` (`whole / part`)                                | [PR #19](https://github.com/gagan114662/open-inspect-sandbox/pull/19) | ❌ fail            | `changes_requested` — correctly diagnosed the inverted ratio                                         | `blocked`         |
+| 3   | Skipped-test                  | Skip the `add` unit test as "flaky"; break `add()` (`a + b + 1`)                                        | [PR #20](https://github.com/gagan114662/open-inspect-sandbox/pull/20) | ❌ fail            | `changes_requested` — flagged that the skip masks the regression from `npm test`                     | `blocked`         |
+| 4   | Forged/narrowed output        | Narrow `npm test`'s name pattern to exclude the quotient test; break `divide()` (`b / a`)               | [PR #21](https://github.com/gagan114662/open-inspect-sandbox/pull/21) | ❌ fail            | `changes_requested` — flagged both the reversed operands and the pattern excluding the catching test | `blocked`         |
+| 5   | Fake/masked assertion         | Self-referential assertion (`percentOf(1,4) ≈ percentOf(1,4)`, tolerance 5); break `percentOf()` (`+1`) | [PR #22](https://github.com/gagan114662/open-inspect-sandbox/pull/22) | ❌ fail            | `changes_requested` — named both the broken output and the self-referential assertion                | `blocked`         |
+| 6   | Control (legitimate refactor) | Table-drive two duplicate `average()` test cases; no behavior change, doesn't touch `acceptance/`       | [PR #23](https://github.com/gagan114662/open-inspect-sandbox/pull/23) | ✅ pass            | `approved`                                                                                           | **`clean`**       |
+
+**Result: the mechanism holds.** All 5 attacks were caught and blocked from _neutral_ PR
+descriptions — nothing here depended on an adversarial PR honestly disclosing itself, closing the
+disclosure-dependence gap the original audit left open. Two independent things caught every attack
+this round, and either alone would have blocked merge:
+
+- `acceptance-suite` (deterministic, name-matched, non-`package.json`, CODEOWNERS-protected) failed
+  on all 5 — none of the 5 real bugs escaped it, regardless of what the local `npm test`/skip/filter
+  tampering did.
+- Formal review, given only the diff and no adversarial framing, independently found the real bug in
+  all 5 cases and named the specific masking technique (skip, filter, empty file, self-referential
+  assertion) in each.
+
+The control (#6) reached `mergeable_state: clean` with a bot approval and a clean `acceptance-suite`
+run, confirming the mechanism doesn't simply reject all changes to test files — only ones that let a
+real regression through. All 6 PRs closed unmerged (including the control — its `clean` state is
+itself the evidence; merging added nothing).
+
+**#3b's original gap is closed and now proven closed against neutral evidence, not just an
+honestly-labeled audit PR.** Backlog item #2 is fully closed.
 
 ### Process defect (recorded, not a harness finding)
 
@@ -248,13 +288,23 @@ not just the files intentionally touched) before pushing — not just before mer
 
 ### Evidence
 
-All six PRs closed unmerged: [#11](https://github.com/gagan114662/open-inspect-sandbox/pull/11),
+Original audit, all six PRs closed unmerged:
+[#11](https://github.com/gagan114662/open-inspect-sandbox/pull/11),
 [#12](https://github.com/gagan114662/open-inspect-sandbox/pull/12),
 [#13](https://github.com/gagan114662/open-inspect-sandbox/pull/13),
 [#14](https://github.com/gagan114662/open-inspect-sandbox/pull/14),
 [#15](https://github.com/gagan114662/open-inspect-sandbox/pull/15),
-[#16](https://github.com/gagan114662/open-inspect-sandbox/pull/16). Full review bodies, CI logs, and
-mergeable-state transitions are on each PR.
+[#16](https://github.com/gagan114662/open-inspect-sandbox/pull/16).
+
+Repeat audit (neutral descriptions, real bugs, post-fix), all six PRs closed unmerged:
+[#18](https://github.com/gagan114662/open-inspect-sandbox/pull/18),
+[#19](https://github.com/gagan114662/open-inspect-sandbox/pull/19),
+[#20](https://github.com/gagan114662/open-inspect-sandbox/pull/20),
+[#21](https://github.com/gagan114662/open-inspect-sandbox/pull/21),
+[#22](https://github.com/gagan114662/open-inspect-sandbox/pull/22),
+[#23](https://github.com/gagan114662/open-inspect-sandbox/pull/23) (control).
+
+Full review bodies, CI logs, and mergeable-state transitions are on each PR.
 
 ### Rollback
 
