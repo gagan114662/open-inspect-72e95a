@@ -68,7 +68,7 @@ export default function AnalyticsPage() {
         </header>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <div className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 lg:p-8">
         <div className="relative z-10 mx-auto max-w-7xl space-y-6">
           <div className="relative overflow-hidden rounded-xl border border-border-muted bg-card px-5 py-5 sm:px-6 sm:py-6">
             <div className="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-[linear-gradient(135deg,var(--accent-muted),transparent)] opacity-70" />

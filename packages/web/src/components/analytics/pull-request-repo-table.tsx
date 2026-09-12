@@ -43,12 +43,16 @@ export function AnalyticsPullRequestRepoTable({ entries, loading }: PullRequestR
         <table className="min-w-full border-collapse text-sm">
           <thead className="bg-card">
             <tr className="border-b border-border-muted text-left text-secondary-foreground">
-              <th className="px-5 py-3 font-medium">Repository</th>
-              <th className="px-5 py-3 text-right font-medium">Created</th>
-              <th className="px-5 py-3 text-right font-medium">Merged</th>
-              <th className="px-5 py-3 text-right font-medium">Closed</th>
-              <th className="px-5 py-3 text-right font-medium">Acceptance</th>
-              <th className="px-5 py-3 text-right font-medium">Avg Time to Merge</th>
+              <th className="max-w-[10rem] px-3 py-3 font-medium sm:px-5">Repository</th>
+              <th className="hidden px-3 py-3 text-right font-medium sm:table-cell sm:px-5">
+                Created
+              </th>
+              <th className="px-3 py-3 text-right font-medium sm:px-5">Merged</th>
+              <th className="hidden px-3 py-3 text-right font-medium sm:table-cell sm:px-5">
+                Closed
+              </th>
+              <th className="px-3 py-3 text-right font-medium sm:px-5">Acceptance</th>
+              <th className="px-3 py-3 text-right font-medium sm:px-5">Avg Merge</th>
             </tr>
           </thead>
           <tbody>
@@ -57,20 +61,25 @@ export function AnalyticsPullRequestRepoTable({ entries, loading }: PullRequestR
                 key={entry.key}
                 className="border-b border-border-muted last:border-b-0 hover:bg-muted/50"
               >
-                <td className="px-5 py-4 font-medium text-foreground">{entry.key}</td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td
+                  className="max-w-[10rem] truncate px-3 py-4 font-medium text-foreground sm:px-5"
+                  title={entry.key}
+                >
+                  {entry.key}
+                </td>
+                <td className="hidden px-3 py-4 text-right text-foreground sm:table-cell sm:px-5">
                   {formatAnalyticsCount(entry.created)}
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="px-3 py-4 text-right text-foreground sm:px-5">
                   {formatAnalyticsCount(entry.merged)}
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="hidden px-3 py-4 text-right text-foreground sm:table-cell sm:px-5">
                   {formatAnalyticsCount(entry.closed)}
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="px-3 py-4 text-right text-foreground sm:px-5">
                   {formatPullRequestAcceptanceRate(entry)}
                 </td>
-                <td className="px-5 py-4 text-right text-foreground">
+                <td className="px-3 py-4 text-right text-foreground sm:px-5">
                   {entry.avgTimeToMergeMs !== null
                     ? formatAnalyticsLongDuration(entry.avgTimeToMergeMs)
                     : "—"}

@@ -87,7 +87,10 @@ function UserCell({ entry }: { entry: AnalyticsBreakdownEntry }) {
 
 function SessionsCell({ entry }: { entry: AnalyticsBreakdownEntry }) {
   return (
-    <div className="min-w-[11rem]">
+    // No fixed min-width: badges already wrap (flex-wrap) at any width, and
+    // an artificial minimum here was the last thing forcing the table wider
+    // than a phone viewport even after hiding lower-priority columns.
+    <div className="min-w-0">
       <div className="font-medium text-foreground">{formatAnalyticsCount(entry.sessions)}</div>
       <div className="mt-2 flex flex-wrap gap-1">
         <Badge variant="pr-merged">{formatAnalyticsCount(entry.completed)} completed</Badge>
