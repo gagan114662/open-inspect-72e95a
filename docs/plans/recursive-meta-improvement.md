@@ -76,11 +76,11 @@ archive:
 
 Measured against the archive as of round 10 with policy v1: coverage 0.61, anchor empty (no working
 sessions for this repository are indexed in Traces yet). The rule fired on coverage and proposed v2:
-one mined topic covering 5 of the 11 blind-spot findings, coverage 0.61 → 0.79 (the remaining blind
-spots are single-occurrence findings no bounded rule may claim). A second pass under v2 proposes
-nothing. With the verifier's own review sessions counted as the anchor, validity reads 0.95: the
-number agrees with the review signal because it _is_ the review signal, which is why the default
-excludes them.
+one mined topic covering 8 of the 11 blind-spot findings, coverage 0.61 → 0.89 (the remaining three
+are single-occurrence findings no bounded rule may claim). A second pass under v2 proposes nothing.
+With the verifier's own review sessions counted as the anchor, validity reads 0.95: the number
+agrees with the review signal because it _is_ the review signal, which is why the default excludes
+them.
 
 Reproduce:
 
