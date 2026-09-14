@@ -166,6 +166,137 @@ def test_no_rollback_when_unfamiliar_findings_lower_both_policies():
     assert decision["action"] != "rollback"
 
 
+def test_mined_topics_never_share_a_supporting_finding():
+    unclassified = [
+        {"round": 1, "finding": "Archive queue drops rounds under concurrency."},
+        {"round": 2, "finding": "Archive branch left behind after commit failure."},
+        {"round": 3, "finding": "Archive threshold missed; commit compare skipped."},
+        {"round": 4, "finding": "Concurrency setting cancels pending queue entries."},
+        {"round": 5, "finding": "Concurrency group drops a queued run."},
+    ]
+    mined = revise.mine_topics(unclassified, policy_mod.topic_keywords(policy_mod.builtin_policy()))
+    claimed = [e["finding"] for m in mined for e in m["evidence"]]
+    assert len(claimed) == len(set(claimed)), "a finding supported two topics"
+    for m in mined:
+        assert len(m["evidence"]) >= revise.MIN_FINDINGS_PER_TOPIC
+        # Every claimed finding really is classified by that topic's keywords.
+        for e in m["evidence"]:
+            assert policy_mod.classify_finding(e["finding"], {"_": m["keywords"]}) is not None
+
+
+def _four_topic_policy(weights):
+    policy = policy_mod.builtin_policy()
+    names = ["credential-redaction", "shell-semantics", "env-var-precedence", "fork-pr-permissions"]
+    policy["topics"] = {
+        n: {**policy["topics"][n], "weight": w} for n, w in zip(names, weights, strict=True)
+    }
+    return policy
+
+
+def _four_topic_archive():
+    # recurrence per topic: credential 2, shell 1, env 2, fork 1
+    return [
+        {
+            "round": 1,
+            "occurred_at": "2026-09-14T15:00:00Z",
+            "findings": ["[P1] Secret leaked.", "[P2] Precedence of env var wrong."],
+        },
+        {
+            "round": 2,
+            "occurred_at": "2026-09-14T16:00:00Z",
+            "findings": [
+                "[P2] Token exposed.",
+                "[P2] Shell exit code ignored.",
+                "[P2] Fork PR lacks github_token.",
+            ],
+        },
+        {
+            "round": 3,
+            "occurred_at": "2026-09-14T17:00:00Z",
+            "findings": ["[P2] Environment variable applied unconditionally."],
+        },
+    ]
+
+
+def _four_topic_evidence(counts):
+    names = ["credential-redaction", "shell-semantics", "env-var-precedence", "fork-pr-permissions"]
+    return {
+        "source": "traces",
+        "agents": ["claude-code"],
+        "topics": {
+            n: [{"id": f"{n}-{i}", "agentId": "claude-code", "timestamp": 1} for i in range(c)]
+            for n, c in zip(names, counts, strict=True)
+        },
+    }
+
+
+def test_weight_repair_is_dropped_when_it_would_lower_validity():
+    # Validity trigger fires (0.0 < MIN_VALIDITY); restoring credential-redaction's
+    # weight to 1.0 would move validity to -0.0556, so the reweighting is refused.
+    policy = _four_topic_policy([0.5, 1, 1, 1])
+    measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([1, 0, 2, 2]))
+    before = measurement["current"]["validity"]
+    assert before is not None and before < revise.MIN_VALIDITY
+    decision = revise.decide(_four_topic_archive(), policy, [], measurement, NOW)
+    assert decision["action"] == "none"
+    assert "no bounded, evidence-backed change" in decision["reason"]
+    restored = revise.validity_under(
+        _four_topic_policy([1, 1, 1, 1]), _four_topic_archive(), measurement["current"]["anchor"]
+    )
+    assert restored < before
+
+
+def test_rollback_on_validity_regression_with_same_coverage():
+    parent = _four_topic_policy([1, 1, 1, 1])
+    child = policy_mod.new_version(
+        parent,
+        topics=_four_topic_policy([0.25, 1, 1, 1])["topics"],
+        threshold=3,
+        origin="revision",
+        rationale="discount",
+        created_at="2026-09-14T14:00:00Z",
+    )
+    history = [
+        {"version": 1, "policy": parent},
+        {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": child},
+    ]
+    evidence = _four_topic_evidence(
+        [3, 1, 2, 0]
+    )  # the field strongly supports credential-redaction
+    measurement = measure.measure(_four_topic_archive(), child, evidence)
+    decision = revise.decide(_four_topic_archive(), child, history, measurement, NOW)
+    assert decision["action"] == "rollback"
+    assert "validity" in decision["reason"]
+
+
+def test_main_refuses_a_measurement_from_a_different_archive(tmp_path, capsys):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(
+        json.dumps(measure.measure(_archive()[:-1], policy_mod.builtin_policy(), None))
+    )
+    assert (
+        revise.main(
+            [
+                "r",
+                str(archive),
+                "--measurement",
+                str(m_path),
+                "--policy",
+                str(policy_path),
+                "--history",
+                str(tmp_path / "h.jsonl"),
+                "--dry-run",
+            ]
+        )
+        == 1
+    )
+    assert "archive digest" in capsys.readouterr().err
+
+
 def test_rollback_waits_for_enough_rounds_to_judge():
     parent = policy_mod.builtin_policy()
     bad = policy_mod.new_version(

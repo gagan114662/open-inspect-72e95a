@@ -2,7 +2,7 @@
   "version": 2,
   "parent": 1,
   "origin": "revision",
-  "created_at": "2026-09-14T19:33:48Z",
+  "created_at": "2026-09-14T20:01:51Z",
   "threshold": 3,
   "topics": {
     "credential-redaction": {
@@ -30,10 +30,6 @@
       "weight": 1.0,
       "mined_from": [
         {
-          "round": 8,
-          "finding": "[P2] No processed-round state was persisted, so two separate PRs each contributing one finding on the same topic never combined into a real recurrence -- each w"
-        },
-        {
           "round": 9,
           "finding": "**[P1]** Threshold detection still misses evidence accumulated through multiple pending archive PRs. In `.github/workflows/archive-and-recommend.yml`, each run "
         },
@@ -47,24 +43,26 @@
         },
         {
           "round": 10,
-          "finding": "**[P2]** **Archive PR creation cannot reliably recover after a partial failure.** If `git push` succeeds but `gh pr create` fails, the failure is swallowed and "
-        }
-      ]
-    },
-    "comment": {
-      "keywords": ["comment"],
-      "weight": 1.0,
-      "mined_from": [
+          "finding": "**[P2]** **The concurrency configuration drops review rounds.** `cancel-in-progress: false` protects the running workflow, but the default queue allows only one"
+        },
         {
-          "round": 8,
-          "finding": "[P2] Any PR commenter could forge a comment starting with '### Codex independent review' and have it trusted as the genuine review, since the original draft fil"
+          "round": 10,
+          "finding": "**[P2]** **Archive PR creation cannot reliably recover after a partial failure.** If `git push` succeeds but `gh pr create` fails, the failure is swallowed and "
         },
         {
           "round": 8,
           "finding": "[P2] The selected comment was not bound to the triggering workflow_run's commit; an older review comment from a prior commit could be reused, or a comment from "
+        },
+        {
+          "round": 8,
+          "finding": "[P2] Concurrency was scoped per-run-id, so overlapping runs could both pass the open-issue dedup check and create duplicate issues."
+        },
+        {
+          "round": 8,
+          "finding": "[P2] No processed-round state was persisted, so two separate PRs each contributing one finding on the same topic never combined into a real recurrence -- each w"
         }
       ]
     }
   },
-  "rationale": "Revised because coverage 0.6071 < 0.8. added topic archive-branch (keywords ['archive', 'branch', 'commit', 'create', 'creation']) covering 5 unclassified finding(s) added topic comment (keywords ['comment']) covering 2 unclassified finding(s)"
+  "rationale": "Revised because coverage 0.6071 < 0.8. added topic archive-branch (keywords ['archive', 'branch', 'commit', 'create', 'creation']) covering 8 unclassified finding(s)"
 }

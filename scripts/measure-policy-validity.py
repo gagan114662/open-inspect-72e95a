@@ -39,6 +39,7 @@ Prints human-readable lines, then a `---` separator, then a JSON object.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import re
@@ -84,6 +85,14 @@ def load_archive(path: str) -> list[dict]:
     return entries
 
 
+def archive_digest(entries: list[dict]) -> str:
+    """Content digest of the archive a measurement was taken against, so a
+    decision can refuse a measurement from a different archive (Codex
+    review of PR #10, round 2, finding 2)."""
+    canonical = json.dumps(entries, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()[:12]
+
+
 def parse_timestamp_ms(value: object) -> int | None:
     if not isinstance(value, str):
         return None
@@ -118,7 +127,13 @@ def rounds_in_order(entries: list[dict]) -> list[dict]:
         if rnd["timestamp_ms"] is None:
             rnd["timestamp_ms"] = last_ts
         last_ts = rnd["timestamp_ms"]
-    return ordered
+    # Replay order is time order, not round-number order: a round recorded
+    # later than a higher-numbered one must not be replayed against an
+    # earlier field snapshot (Codex review of PR #10, round 2, finding 4).
+    return sorted(
+        ordered,
+        key=lambda r: (r["timestamp_ms"] if r["timestamp_ms"] is not None else -1, r["round"]),
+    )
 
 
 # --- anchor evidence ---------------------------------------------------------
@@ -344,6 +359,7 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
     return {
         "policy_version": policy["version"],
         "policy_hash": policy_mod.policy_hash(policy),
+        "archive_digest": archive_digest(entries),
         "anchor": anchor_meta,
         "epochs": epochs,
         "current": current,

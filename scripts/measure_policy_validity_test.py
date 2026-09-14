@@ -136,6 +136,25 @@ def test_validity_uses_the_weighted_signal_the_detector_decides_on():
     assert discounted["validity"] != baseline["validity"]
 
 
+def test_replay_orders_rounds_by_time_not_round_number():
+    archive = _archive() + [
+        {"round": 9, "occurred_at": "2026-09-14T17:30:00Z", "findings": ["[P2] Nine first."]},
+        {"round": 8, "occurred_at": "2026-09-14T18:00:00Z", "findings": ["[P2] Eight later."]},
+    ]
+    rounds = measure.rounds_in_order(archive)
+    assert [r["round"] for r in rounds] == [1, 2, 3, 9, 8]
+    epochs = measure.measure(archive, policy_mod.builtin_policy(), None)["epochs"]
+    assert [e["round"] for e in epochs] == [1, 2, 3, 9, 8]
+    assert epochs[3]["findings_total"] == 7  # round 8's later finding is not in round 9's epoch
+
+
+def test_measurement_is_bound_to_the_archive_contents():
+    a = measure.measure(_archive(), policy_mod.builtin_policy(), None)["archive_digest"]
+    b = measure.measure(_archive()[:-1], policy_mod.builtin_policy(), None)["archive_digest"]
+    assert a != b
+    assert measure.archive_digest(_archive()) == a
+
+
 def test_empty_anchor_is_treated_as_no_anchor():
     evidence = {
         "source": "traces",

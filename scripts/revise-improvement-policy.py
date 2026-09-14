@@ -252,14 +252,25 @@ def mine_topics(
         if not candidates:
             break
         head = sorted(candidates, key=lambda t: (-df[t], t))[0]
-        covering = [item for item in remaining if head in item["tokens"]]
-        co = Counter(tok for item in covering for tok in item["tokens"] if tok != head)
+        covering_head = [item for item in remaining if head in item["tokens"]]
+        co = Counter(tok for item in covering_head for tok in item["tokens"] if tok != head)
         companions = [
             t
             for t, n in sorted(co.items(), key=lambda kv: (-kv[1], kv[0]))
             if n >= MIN_FINDINGS_PER_TOPIC
         ][: MAX_KEYWORDS_PER_TOPIC - 1]
         topic_keywords = [head, *companions]
+        # A topic claims exactly the findings it would classify: any keyword,
+        # by the same substring rule the detector uses. Those findings are
+        # then unavailable to later topics, so no finding supports two
+        # topics (Codex review of PR #10, round 2, finding 3).
+        covering = [
+            item
+            for item in remaining
+            if policy_mod.classify_finding(item["finding"], {"_": topic_keywords}) is not None
+        ]
+        if len(covering) < MIN_FINDINGS_PER_TOPIC:
+            break
         name = "-".join(topic_keywords[:2]) if companions else head
         if name in keywords or any(m["name"] == name for m in mined):
             name = f"{name}-{len(mined) + 1}"
@@ -273,10 +284,24 @@ def mine_topics(
             }
         )
         taken.update(topic_keywords)
-        remaining = [item for item in remaining if head not in item["tokens"]]
+        covered_ids = {id(item) for item in covering}
+        remaining = [item for item in remaining if id(item) not in covered_ids]
         for item in remaining:
             item["tokens"] -= set(topic_keywords)
     return mined
+
+
+def validity_under(policy: dict, entries: list[dict], anchor: dict | None) -> float | None:
+    """Validity a policy would score on the same findings and the same
+    anchor counts the measurement carried. Topics without a known anchor
+    count are excluded, exactly as the measurement excludes them."""
+    if anchor is None:
+        return None
+    current = measure_mod.measure(entries, policy, None)["current"]
+    known = [t for t in policy["topics"] if anchor.get(t) is not None]
+    return measure_mod.spearman(
+        [float(current["dev_weighted"][t]) for t in known], [float(anchor[t]) for t in known]
+    )
 
 
 def rounds_since(entries: list[dict], created_at: str) -> int:
@@ -336,24 +361,39 @@ def decide(
             parent = snapshot_for_version(policy["parent"], history)
             if parent is not None and coverage is not None:
                 parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
-                if parent_now is not None and coverage < parent_now:
+                anchor = current.get("anchor")
+                child_validity = validity_under(policy, entries, anchor)
+                parent_validity = validity_under(parent, entries, anchor)
+                worse_coverage = parent_now is not None and coverage < parent_now
+                worse_validity = (
+                    child_validity is not None
+                    and parent_validity is not None
+                    and child_validity < parent_validity
+                )
+                if worse_coverage or worse_validity:
+                    what = (
+                        f"coverage {coverage} vs {parent_now}"
+                        if worse_coverage
+                        else f"validity {child_validity} vs {parent_validity}"
+                    )
                     return {
                         "action": "rollback",
                         "reason": (
-                            f"on the same {current['findings_total']} findings, v{policy['version']} covers "
-                            f"{coverage} but its parent v{policy['parent']} covers {parent_now}"
+                            f"on the same {current['findings_total']} findings and anchor, "
+                            f"v{policy['version']} scores {what} against its parent v{policy['parent']}"
                         ),
                         "policy": policy_mod.new_version(
                             policy,
                             topics=parent["topics"],
                             threshold=parent["threshold"],
                             origin="rollback",
-                            rationale=f"Rollback to v{policy['parent']}: revision v{policy['version']} lowered coverage.",
+                            rationale=f"Rollback to v{policy['parent']}: revision v{policy['version']} scored worse ({what}).",
                             created_at=now,
                         ),
                         "coverage_before": coverage,
                         "coverage_after": parent_now,
-                        "validity_before": validity,
+                        "validity_before": child_validity,
+                        "validity_after": parent_validity,
                         "changes": [
                             f"restored taxonomy, weights and threshold of v{policy['parent']}"
                         ],
@@ -389,26 +429,42 @@ def decide(
             f"added topic {topic['name']} (keywords {topic['keywords']}) covering {len(topic['evidence'])} unclassified finding(s)"
         )
 
-    # 3. Validity repair: stop crediting what the field never shows.
+    # 3. Validity repair: stop crediting what the field never shows. A weight
+    #    change is kept only if the candidate scores at least the current
+    #    validity on the same anchor (Codex review of PR #10, round 2,
+    #    finding 1); otherwise it is dropped and recorded as such.
     anchor = current.get("anchor")
     if anchor is not None:
+        weight_topics = dict(new_topics)
+        weight_changes: list[str] = []
         for topic in current.get("dev_only_topics", []):
-            old = weights[topic]
-            new = max(MIN_WEIGHT, round(old * WEIGHT_DISCOUNT, 3))
-            if new < old:
-                new_topics[topic] = {**new_topics[topic], "weight": new}
-                changes.append(
-                    f"discounted {topic} weight {old} -> {new}: credited in {current['dev'][topic]} round(s), 0 field traces"
+            old_w = weights[topic]
+            new_w = max(MIN_WEIGHT, round(old_w * WEIGHT_DISCOUNT, 3))
+            if new_w < old_w:
+                weight_topics[topic] = {**weight_topics[topic], "weight": new_w}
+                weight_changes.append(
+                    f"discounted {topic} weight {old_w} -> {new_w}: credited in {current['dev'][topic]} round(s), 0 field traces"
                 )
         for topic, count in anchor.items():
             if count is not None and count > 0 and weights.get(topic, 1.0) < 1.0:
                 restored = min(1.0, round(weights[topic] / WEIGHT_DISCOUNT, 3))
-                new_topics[topic] = {**new_topics[topic], "weight": restored}
-                changes.append(
+                weight_topics[topic] = {**weight_topics[topic], "weight": restored}
+                weight_changes.append(
                     f"restored {topic} weight {weights[topic]} -> {restored}: {count} field trace(s)"
                 )
+        if weight_changes:
+            candidate = {**policy, "topics": weight_topics}
+            before_v = validity_under(policy, entries, anchor)
+            after_v = validity_under(candidate, entries, anchor)
+            if before_v is not None and after_v is not None and after_v < before_v:
+                changes.append(
+                    f"kept weights unchanged: proposed reweighting would lower validity {before_v} -> {after_v}"
+                )
+            else:
+                new_topics = weight_topics
+                changes.extend(weight_changes)
 
-    if not changes:
+    if not changes or all(c.startswith("kept weights unchanged") for c in changes):
         return {
             "action": "none",
             "reason": "triggered ("
@@ -435,7 +491,9 @@ def decide(
         "coverage_before": coverage,
         "coverage_after": after["coverage"],
         "validity_before": validity,
-        "validity_after": None,  # needs the next anchor collection under the new taxonomy
+        # Same anchor counts, candidate weights; newly mined topics are
+        # unknown to the anchor until evidence is re-collected.
+        "validity_after": validity_under(revised, entries, current.get("anchor")),
     }
 
 
@@ -481,6 +539,14 @@ def main(argv: list[str]) -> int:
         print(
             f"::error::measurement was taken under policy hash {measurement.get('policy_hash')}, "
             f"but {args.policy} hashes to {policy_mod.policy_hash(policy)}; re-measure first",
+            file=sys.stderr,
+        )
+        return 1
+    digest = measure_mod.archive_digest(entries)
+    if measurement.get("archive_digest") != digest:
+        print(
+            f"::error::measurement was taken against archive digest {measurement.get('archive_digest')}, "
+            f"but {args.archive_path} now digests to {digest}; re-measure first",
             file=sys.stderr,
         )
         return 1
