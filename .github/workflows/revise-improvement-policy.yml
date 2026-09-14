@@ -28,6 +28,8 @@ on:
     branches: [main]
     paths:
       - docs/self-improvement-archive.jsonl
+      # A refreshed field snapshot is new evidence too (Codex review of PR #10, round 10).
+      - docs/rsi/trace-evidence.json
   workflow_dispatch:
 
 permissions:
@@ -74,22 +76,22 @@ jobs:
             collected=$(python3 -c 'import json; print(json.load(open("docs/rsi/trace-evidence.json")).get("collected_at", "unknown"))')
             echo "::notice::Using the committed Traces evidence snapshot collected at ${collected}. Refresh it locally to update the field anchor."
             python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
-              --trace-evidence docs/rsi/trace-evidence.json > measurement.txt
+              --trace-evidence docs/rsi/trace-evidence.json --out-json docs/rsi/measurement.json > measurement.txt
           else
             echo "::notice::No Traces evidence snapshot committed; validity will be null and only coverage can trigger a revision."
-            python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl > measurement.txt
+            python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+              --out-json docs/rsi/measurement.json > measurement.txt
           fi
           sed -n '1,/^---/p' measurement.txt
-          sed -n '/^---/,$p' measurement.txt | tail -n +2 > docs/rsi/measurement.json
 
       - name: Apply the fixed acceptance rule
         id: revise
         run: |
           set -euo pipefail
           python3 scripts/revise-improvement-policy.py docs/self-improvement-archive.jsonl \
-            --measurement docs/rsi/measurement.json > revise.txt
+            --measurement docs/rsi/measurement.json --out-json decision.json > revise.txt
           sed -n '1,/^---/p' revise.txt
-          action=$(sed -n '/^---/,$p' revise.txt | tail -n +2 | python3 -c 'import json,sys; print(json.load(sys.stdin)["action"])')
+          action=$(python3 -c 'import json; print(json.load(open("decision.json"))["action"])')
           echo "action=$action" >> "$GITHUB_OUTPUT"
           if [ "$action" != "none" ]; then
             # The measurement that justified the decision is evidence; keep it.
@@ -98,11 +100,11 @@ jobs:
             cp docs/rsi/measurement.json docs/rsi/measurement-decision.json
             if [ -f docs/rsi/trace-evidence.json ]; then
               python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
-                --trace-evidence docs/rsi/trace-evidence.json > remeasure.txt
+                --trace-evidence docs/rsi/trace-evidence.json --out-json docs/rsi/measurement.json > remeasure.txt
             else
-              python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl > remeasure.txt
+              python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+                --out-json docs/rsi/measurement.json > remeasure.txt
             fi
-            sed -n '/^---/,$p' remeasure.txt | tail -n +2 > docs/rsi/measurement.json
           fi
 
       - name: Re-render the dashboard

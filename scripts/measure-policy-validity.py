@@ -418,6 +418,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--save-evidence", default=None)
     parser.add_argument("--anchor-agents", default=",".join(DEFAULT_ANCHOR_AGENTS))
     parser.add_argument("--traces-bin", default="traces")
+    parser.add_argument(
+        "--out-json",
+        default=None,
+        help="Also write the JSON result to this path (machine-readable output kept apart from the report)",
+    )
     args = parser.parse_args(argv[1:])
 
     policy = (
@@ -454,7 +459,10 @@ def main(argv: list[str]) -> int:
         f"(anchor: {result['anchor']['source']}, {result['anchor']['traces_considered']} trace(s))"
     )
     for item in current["unclassified_findings"]:
-        print(f"  unclassified (round {item['round']}): {item['finding'][:100]}")
+        # One line per finding: embedded newlines must not be able to forge
+        # the report/JSON boundary (Codex review of PR #10, round 10).
+        text = " ".join(item["finding"].split())[:100]
+        print(f"  unclassified (round {item['round']}): {text}")
     if current["dev_only_topics"]:
         print(f"  credited by reviews, never seen in the field: {current['dev_only_topics']}")
     if current["anchor_only_topics"]:
@@ -463,6 +471,8 @@ def main(argv: list[str]) -> int:
         print(
             f"  not yet searched in the field (re-collect evidence): {current['anchor_unknown_topics']}"
         )
+    if args.out_json:
+        Path(args.out_json).write_text(json.dumps(result, indent=2) + "\n")
     print("---")
     print(json.dumps(result, indent=2))
     return 0

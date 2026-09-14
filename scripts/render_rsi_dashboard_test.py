@@ -172,3 +172,13 @@ def test_evidence_strings_are_escaped_in_the_echo_note(tmp_path):
     assert "<script>alert(1)</script>" not in page
     assert "<img src=x" not in page
     assert "&lt;img src=x onerror=alert(1)&gt;" in page
+
+
+def test_trigger_chart_plots_current_policy_validity():
+    before = {"policy_version": 1, "epochs": [{"round": 1, "coverage": 0.5, "validity": 0.9}]}
+    after = {"policy_version": 2, "epochs": [{"round": 1, "coverage": 0.8, "validity": 0.1}]}
+    svg = render.trigger_chart(before, after, [], 0.8)
+    # y(v) = pad_t + (h - pad_t - pad_b) * (1 - v): 0.1 -> 236, 0.9 -> 44 (minus the 3px offset)
+    assert 'y="233.0" width="6" height="6"' in svg
+    assert 'y="41.0" width="6" height="6"' not in svg
+    assert "v2 validity" in svg

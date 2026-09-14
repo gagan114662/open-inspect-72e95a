@@ -210,9 +210,12 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
         parts.append(
             f'<text x="{xs[i]:.1f}" y="{h - pad_b + 16}" font-size="11" text-anchor="middle" fill="{GREY}">r{e["round"]}</text>'
         )
-        if e.get("validity") is not None:
+        # Validity squares belong to the CURRENT policy, whose coverage the
+        # orange line shows (Codex review of PR #10, round 10).
+        v = epochs_a[i].get("validity") if i < len(epochs_a) else None
+        if v is not None:
             parts.append(
-                f'<rect x="{xs[i] - 3:.1f}" y="{y(max(0, e["validity"])) - 3:.1f}" width="6" height="6" fill="{NAVY}"/>'
+                f'<rect x="{xs[i] - 3:.1f}" y="{y(max(0, v)) - 3:.1f}" width="6" height="6" fill="{NAVY}"/>'
             )
     # revision / rollback markers at the epoch they were created after
     marker_n = 0
@@ -229,7 +232,7 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
                 f'<text x="{x - 6:.1f}" y="{label_y}" font-size="11" text-anchor="end" fill="{color}">v{v["version"]} {v["origin"]}</text>'
             )
     parts.append(
-        f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">grey: coverage under v1 · orange: coverage under v{after["policy_version"]} · navy squares: validity vs field anchor</text>'
+        f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">grey: coverage under v1 · orange: coverage under v{after["policy_version"]} · navy squares: v{after["policy_version"]} validity vs field anchor</text>'
     )
     parts.append("</svg>")
     return "".join(parts)

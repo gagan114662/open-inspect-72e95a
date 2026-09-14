@@ -671,6 +671,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--out-policy", default=None, help="Defaults to overwriting --policy")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--now", default=None)
+    parser.add_argument(
+        "--out-json", default=None, help="Also write the decision JSON to this path"
+    )
     args = parser.parse_args(argv[1:])
 
     entries = measure_mod.load_archive(args.archive_path)
@@ -722,6 +725,8 @@ def main(argv: list[str]) -> int:
                 f"  wrote {policy_mod.relative_to_repo(out_policy)} and {policy_mod.relative_to_repo(args.history)}"
             )
 
+    if args.out_json:
+        Path(args.out_json).write_text(json.dumps(dict(decision), indent=2, default=str) + "\n")
     print("---")
     print(json.dumps(dict(decision), indent=2, default=str))
     return 0

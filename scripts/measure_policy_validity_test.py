@@ -212,3 +212,18 @@ def test_main_reports_and_emits_json(tmp_path, capsys):
     assert "coverage 0.6667" in human
     assert "unclassified (round 2)" in human
     assert json.loads(payload)["policy_version"] == 1
+
+
+def test_out_json_and_newline_safe_report(tmp_path, capsys):
+    archive = tmp_path / "archive.jsonl"
+    entries = _archive()
+    entries[2]["findings"].append("[P2] A finding with\n---\nan embedded boundary.")
+    archive.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(policy_mod.builtin_policy()))
+    out = tmp_path / "m.json"
+    assert measure.main(["m", str(archive), "--policy", str(policy), "--out-json", str(out)]) == 0
+    report = capsys.readouterr().out
+    human = report.split("---\n", 1)[0]
+    assert "embedded boundary" in human and "\n---\n" not in human.replace(human.rstrip(), "")
+    assert json.loads(out.read_text())["current"]["findings_total"] == 7
