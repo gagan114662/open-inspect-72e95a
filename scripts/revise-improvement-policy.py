@@ -102,6 +102,32 @@ STOPWORDS = frozenset(
         "cannot",
         "check",
         "checks",
+        "traceback",
+        "recent",
+        "call",
+        "last",
+        "line",
+        "module",
+        "string",
+        "stdin",
+        "exit",
+        "passed",
+        "tool",
+        "input",
+        "json",
+        "true",
+        "false",
+        "none",
+        "required",
+        "found",
+        "such",
+        "directory",
+        "usage",
+        "error",
+        "errors",
+        "warning",
+        "please",
+        "reason",
         "existing",
         "compares",
         "compare",
@@ -530,7 +556,9 @@ def field_blind_spots(field_failures: dict | None, keywords: dict[str, list[str]
     seen: set[str] = set()
     items: list[dict] = []
     for failure in field_failures.get("blind_spots", []):
-        text = f"{failure.get('command', '')} {failure.get('excerpt', '')}".strip()
+        # The output, not the command: command text is full of paths and
+        # repository names that would name topics after folders.
+        text = f"{failure.get('kind', '')}: {failure.get('excerpt', '')}".strip(": ")
         if not text or text in seen:
             continue
         if policy_mod.classify_finding(text, keywords) is not None:
