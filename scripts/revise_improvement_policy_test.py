@@ -480,6 +480,88 @@ def test_candidate_acceptance_and_rollback_use_the_same_evidence_window():
     assert decision["action"] == "none" or decision.get("validity_after") is None
 
 
+def test_rolled_back_configuration_is_not_retried_on_the_same_evidence():
+    parent = policy_mod.builtin_policy()
+    measurement = measure.measure(_archive(), parent, None)
+    first = revise.decide(_archive(), parent, [], measurement, NOW)
+    assert first["action"] == "revise"
+    rejected_hash = policy_mod.policy_hash(first["policy"])
+    history = [
+        {"version": 1, "policy": parent},
+        {
+            "version": 2,
+            "parent": 1,
+            "origin": "revision",
+            "coverage_before": 0.4,
+            "policy": first["policy"],
+        },
+        {
+            "version": 3,
+            "parent": 2,
+            "origin": "rollback",
+            "replaced_policy_hash": rejected_hash,
+            "replaced_version": 2,
+            "archive_digest": measurement["archive_digest"],
+            "evidence_collected_at": None,
+            "policy": {**parent, "version": 3, "parent": 2, "origin": "rollback"},
+        },
+    ]
+    current = {**parent, "version": 3, "parent": 2, "origin": "rollback"}
+    again = revise.decide(
+        _archive(), current, history, measure.measure(_archive(), current, None), NOW
+    )
+    assert again["action"] == "none"
+    assert "rolled back" in again["reason"]
+    # New archive content lifts the block.
+    grown = _archive() + [
+        {
+            "round": 4,
+            "occurred_at": "2026-09-14T18:00:00Z",
+            "findings": ["[P2] Archive queue overflow again."],
+        }
+    ]
+    retry = revise.decide(grown, current, history, measure.measure(grown, current, None), NOW)
+    assert retry["action"] == "revise"
+
+
+def test_evidence_against_a_removed_topic_survives_for_candidates():
+    current = {
+        "anchor": {"credential-redaction": 1},
+        "anchor_evidence": {"credential-redaction": 1, "archive-ops": 0, "shell-semantics": 2},
+    }
+    merged = revise.candidate_anchor(current)
+    assert merged == {"credential-redaction": 1, "archive-ops": 0, "shell-semantics": 2}
+
+
+def test_main_writes_nothing_when_the_history_path_is_refused(tmp_path, monkeypatch):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(json.dumps(measure.measure(_archive(), policy_mod.builtin_policy(), None)))
+    monkeypatch.setattr(
+        policy_mod, "AI_OWNED_COMPONENTS", {"policy": policy_mod.relative_to_repo(policy_path)}
+    )
+    before = policy_path.read_text()
+    with pytest.raises(PermissionError):
+        revise.main(
+            [
+                "r",
+                str(archive),
+                "--measurement",
+                str(m_path),
+                "--policy",
+                str(policy_path),
+                "--history",
+                str(tmp_path / "h.jsonl"),
+                "--now",
+                NOW,
+            ]
+        )
+    assert policy_path.read_text() == before
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))

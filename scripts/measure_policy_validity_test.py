@@ -173,6 +173,9 @@ def test_findings_newer_than_the_evidence_do_not_mark_topics_dev_only():
     assert current["rounds_after_evidence"] == 2
     # credential-redaction recurs in rounds 1-3 but only round 1 predates the snapshot.
     assert current["dev_only_topics"] == []
+    # Reported validity is the covered-window figure; the all-rounds value is kept, labelled.
+    assert "validity_all_rounds" in current
+    assert set(current["anchor_evidence"]) == set(evidence["topics"])
     fresh = dict(evidence, collected_at="2026-09-14T18:00:00Z")
     assert measure.measure(_archive(), policy_mod.builtin_policy(), fresh)["current"][
         "dev_only_topics"

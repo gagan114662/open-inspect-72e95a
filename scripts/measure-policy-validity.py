@@ -385,7 +385,18 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
             aligned = measure_epoch(seen_rounds, keywords, weights, evidence, None)
             current["dev_only_topics"] = aligned["dev_only_topics"]
             current["anchor_only_topics"] = aligned["anchor_only_topics"]
+            # The reported validity is the one decisions are judged on: the
+            # covered window. The all-rounds figure stays available, labelled
+            # (Codex review of PR #10, round 9).
+            current["validity_all_rounds"] = current["validity"]
+            current["validity"] = aligned["validity"]
     current["rounds_after_evidence"] = rounds_after_evidence
+    # Anchor counts for EVERY topic the evidence searched, not only the
+    # policy's current topics, so a topic removed by a rollback keeps its
+    # adverse evidence when a revision tries to mine it again.
+    current["anchor_evidence"] = (
+        anchor_counts_at(evidence, list(evidence.get("topics", {})), None) if evidence else None
+    )
     return {
         "policy_version": policy["version"],
         "policy_hash": policy_mod.policy_hash(policy),

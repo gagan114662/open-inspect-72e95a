@@ -343,7 +343,7 @@ def weight_repair(
     review of PR #10, round 3, finding 2), and discount topics the field
     never shows (only when the validity trigger fired). The whole proposal
     is kept only if it does not regress validity on the same anchor."""
-    anchor = current.get("anchor")
+    anchor = candidate_anchor(current)
     weights = policy_mod.topic_weights(policy)
     if anchor is None:
         return policy["topics"], []
@@ -379,6 +379,34 @@ def weight_repair(
             f"kept weights unchanged: proposed reweighting would move validity {before_v} -> {after_v}"
         ]
     return topics, changes
+
+
+def candidate_anchor(current: dict) -> dict | None:
+    """Anchor counts for judging a candidate: the policy's topics plus every
+    other topic the evidence searched, so evidence against a topic survives
+    that topic's removal (Codex review of PR #10, round 9)."""
+    anchor = current.get("anchor")
+    if anchor is None:
+        return None
+    merged = dict(current.get("anchor_evidence") or {})
+    merged.update(anchor)
+    return merged
+
+
+def rejected_configuration(candidate: dict, history: list[dict], measurement: dict) -> dict | None:
+    """A configuration rolled back on the same archive and evidence is not
+    retried: the rollback's history entry records the rejected hash and
+    what it was judged on."""
+    wanted = policy_mod.policy_hash(candidate)
+    collected = (measurement.get("anchor") or {}).get("collected_at")
+    for entry in history:
+        if entry.get("origin") != "rollback" or entry.get("replaced_policy_hash") != wanted:
+            continue
+        if entry.get("archive_digest") == measurement.get("archive_digest") and (
+            entry.get("evidence_collected_at") == collected
+        ):
+            return entry
+    return None
 
 
 def rounds_under(entries: list[dict], policy: dict) -> int:
@@ -445,7 +473,7 @@ def decide(
             parent = snapshot_for_version(policy["parent"], history)
             if parent is not None and coverage is not None:
                 parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
-                anchor = current.get("anchor")
+                anchor = candidate_anchor(current)
                 # Validity is judged only on rounds the evidence snapshot could
                 # have seen; rounds archived after collection would make an
                 # unchanged field look like a regression (Codex review of
@@ -572,9 +600,20 @@ def decide(
     )
     # The whole candidate, not just its weight changes, must not regress
     # validity against the policy it replaces (Codex review of PR #10, round 4).
-    anchor = current.get("anchor")
+    anchor = candidate_anchor(current)
     v_before = validity_under(policy, covered, anchor)
     v_after = validity_under(revised, covered, anchor)
+    rejected = rejected_configuration(revised, history, measurement)
+    if rejected is not None:
+        return {
+            "action": "none",
+            "reason": (
+                f"candidate reproduces configuration {policy_mod.policy_hash(revised)}, rolled back as "
+                f"v{rejected.get('replaced_version', '?')} on the same archive and evidence; needs new evidence"
+            ),
+            "triggers": triggers,
+            "rejected_changes": changes,
+        }
     if validity_regressed(v_before, v_after):
         return {
             "action": "none",
@@ -614,6 +653,9 @@ def history_entry(decision: dict, policy: dict, measurement: dict, now: str) -> 
         "measured_policy_hash": measurement.get("policy_hash"),
         "anchor": measurement.get("anchor"),
         "replaced_policy_hash": policy_mod.policy_hash(policy),
+        "replaced_version": policy["version"],
+        "archive_digest": measurement.get("archive_digest"),
+        "evidence_collected_at": (measurement.get("anchor") or {}).get("collected_at"),
         "policy": new_policy,
     }
 
@@ -667,10 +709,15 @@ def main(argv: list[str]) -> int:
             print(f"  coverage {decision['coverage_before']} -> {decision['coverage_after']}")
         if not args.dry_run:
             out_policy = args.out_policy or args.policy
-            policy_mod.save_policy(decision["policy"], out_policy)
+            # Both destinations are checked before either is written, so a
+            # refused history path cannot leave a policy in force without its
+            # record (Codex review of PR #10, round 9).
+            policy_mod.assert_ai_may_write(out_policy)
+            policy_mod.assert_ai_may_write(args.history)
             policy_mod.append_history(
                 history_entry(decision, policy, measurement, now), args.history
             )
+            policy_mod.save_policy(decision["policy"], out_policy)
             print(
                 f"  wrote {policy_mod.relative_to_repo(out_policy)} and {policy_mod.relative_to_repo(args.history)}"
             )
