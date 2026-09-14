@@ -918,11 +918,13 @@ def main(argv: list[str]) -> int:
             # Both destinations are checked before either is written, so a
             # refused history path cannot leave a policy in force without its
             # record (Codex review of PR #10, round 9).
-            policy_mod.assert_ai_may_write(out_policy)
-            policy_mod.assert_ai_may_write(args.history)
+            # Role-specific destinations: the policy goes only to the policy
+            # component and the record only to the history component, so
+            # swapped or duplicated arguments are refused before any write
+            # (Codex review of PR #10, rounds 20 and 35).
+            policy_mod.assert_ai_may_write(out_policy, role="policy")
+            policy_mod.assert_ai_may_write(args.history, role="history")
             if Path(out_policy).resolve() == Path(args.history).resolve():
-                # Role-specific destinations: the policy must never be written
-                # over its own history (Codex review of PR #10, round 20).
                 raise PermissionError("--out-policy and --history must be different files")
             policy_mod.append_history(
                 history_entry(decision, policy, measurement, now), args.history

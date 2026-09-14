@@ -192,15 +192,32 @@ def relative_to_repo(path: Path | str) -> str:
         return resolved.as_posix()
 
 
-def assert_ai_may_write(path: Path | str, *, allowed: dict[str, str] | None = None) -> None:
-    """Attribution guard: the meta-improver only ever writes the files it owns.
+def component_paths(role: str | None, allowed: dict[str, str] | None = None) -> set[str]:
+    """Paths the meta-improver may write for one role ('policy' or
+    'history'), or for any role when role is None."""
+    components = allowed or AI_OWNED_COMPONENTS
+    if role is None:
+        return set(components.values())
+    return {p for name, p in components.items() if name == role or name.endswith(f"-{role}")}
+
+
+def assert_ai_may_write(
+    path: Path | str, *, allowed: dict[str, str] | None = None, role: str | None = None
+) -> None:
+    """Attribution guard: the meta-improver only ever writes the files it owns,
+    and each file only in its own role: the policy destination must be the
+    policy component and the history destination the history component, so
+    swapped arguments cannot append a policy to the history or overwrite the
+    policy with a history line (Codex review of PR #10, rounds 20 and 35).
     Raises PermissionError otherwise, so a bug that tries to 'fix' the archive
     or the verifier fails loudly instead of silently widening autonomy."""
-    allowed_paths = set((allowed or AI_OWNED_COMPONENTS).values())
+    allowed_paths = component_paths(role, allowed)
     rel = relative_to_repo(path)
     if rel not in allowed_paths:
+        what = f"the {role} component" if role else "a file it owns"
         raise PermissionError(
-            f"{rel} is fixed infrastructure; the meta-improver may only write {sorted(allowed_paths)}"
+            f"{rel} is fixed infrastructure or not {what}; "
+            f"the meta-improver may only write {sorted(allowed_paths)} here"
         )
 
 
@@ -240,7 +257,7 @@ def assert_safe_output(
 def save_policy(
     policy: dict, path: Path | str = POLICY_PATH, *, allowed: dict[str, str] | None = None
 ) -> None:
-    assert_ai_may_write(path, allowed=allowed)
+    assert_ai_may_write(path, allowed=allowed, role="policy")
     validate_policy(policy)
     Path(path).write_text(json.dumps(policy, indent=2) + "\n")
 
@@ -260,7 +277,7 @@ def load_history(path: Path | str = HISTORY_PATH) -> list[dict]:
 def append_history(
     entry: dict, path: Path | str = HISTORY_PATH, *, allowed: dict[str, str] | None = None
 ) -> None:
-    assert_ai_may_write(path, allowed=allowed)
+    assert_ai_may_write(path, allowed=allowed, role="history")
     # No sort_keys: a snapshot's topic order is its classification
     # precedence, and restoring an alphabetized snapshot would silently
     # reclassify findings (Codex review of PR #10, finding 2).

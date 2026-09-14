@@ -250,3 +250,18 @@ def test_history_version_labels_are_escaped_in_the_chart():
     svg = render.trigger_chart(before, after, hostile, 0.8)
     assert "<script>" not in svg
     assert "&lt;script&gt;" in svg
+
+
+def test_reproduce_commands_only_use_flags_their_scripts_define():
+    # The footer once told readers to run measure-policy-validity.py with
+    # --repo-dir/--save-evidence, which it does not accept (Codex, round 35).
+    scripts_dir = Path(__file__).parent
+    for command in render.REPRODUCE_COMMANDS:
+        tokens = command.split()
+        assert tokens[:2] == ["python3", tokens[1]] and tokens[1].startswith("scripts/")
+        source = (scripts_dir / Path(tokens[1]).name).read_text()
+        for flag in (t for t in tokens if t.startswith("--")):
+            assert f'"{flag}"' in source, f"{tokens[1]} does not define {flag}"
+    footer = render.render(_archive(), policy_mod.builtin_policy(), [], None, None, "abc123")
+    assert "mine-trace-failures.py" in footer
+    assert "--repo-dir" not in footer.split("measure-policy-validity.py", 1)[1].split("</code>")[0]

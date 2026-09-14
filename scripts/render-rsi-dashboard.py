@@ -156,6 +156,17 @@ def load_evidence(path: str | None) -> dict | None:
 # --- svg -------------------------------------------------------------------
 
 
+# The commands the footer prints; a test checks each one against the script
+# it invokes, so the documented refresh cannot drift from the real CLIs
+# (Codex review of PR #10, round 35).
+REPRODUCE_COMMANDS: tuple[str, ...] = (
+    "python3 scripts/mine-trace-failures.py --repo-dir . --save-evidence docs/rsi/trace-evidence.json",
+    "python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl --trace-evidence docs/rsi/trace-evidence.json --out-json docs/rsi/measurement.json",
+    "python3 scripts/revise-improvement-policy.py docs/self-improvement-archive.jsonl --measurement docs/rsi/measurement.json --dry-run",
+    "python3 scripts/render-rsi-dashboard.py docs/self-improvement-archive.jsonl --trace-evidence docs/rsi/trace-evidence.json --out docs/rsi/dashboard.html",
+)
+
+
 def marker_epoch_index(epochs: list[dict], created_at: str | None) -> int:
     """Index of the last epoch that existed when a policy version was
     created, so a revision is drawn where it happened rather than at the
@@ -506,9 +517,7 @@ def render(
 </section>
 
 </main>
-<footer>Reproduce: <code>python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl --repo-dir . --save-evidence docs/rsi/trace-evidence.json</code>
-→ <code>python3 scripts/revise-improvement-policy.py docs/self-improvement-archive.jsonl --measurement docs/rsi/measurement.json</code>
-→ <code>python3 scripts/render-rsi-dashboard.py docs/self-improvement-archive.jsonl --trace-evidence docs/rsi/trace-evidence.json --out docs/rsi/dashboard.html</code></footer>
+<footer>Reproduce: {" → ".join(f"<code>{esc(c)}</code>" for c in REPRODUCE_COMMANDS)}</footer>
 </body></html>
 """
 

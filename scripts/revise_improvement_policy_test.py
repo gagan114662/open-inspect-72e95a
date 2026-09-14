@@ -782,7 +782,7 @@ def test_out_policy_may_not_be_the_history_file(tmp_path, monkeypatch):
             "history": policy_mod.relative_to_repo(history),
         },
     )
-    with pytest.raises(PermissionError, match="different files"):
+    with pytest.raises(PermissionError, match="policy component"):
         revise.main(
             [
                 "r",
@@ -1087,3 +1087,53 @@ def test_failure_kind_labels_cannot_become_a_mined_topic():
     mined = revise.mine_topics(spots, keywords)
     assert all("tool" not in m["keywords"] and "error" not in m["keywords"] for m in mined)
     assert mined == []
+
+
+def test_swapped_policy_and_history_destinations_are_refused_before_any_write(
+    tmp_path, monkeypatch
+):
+    # Both paths are AI-owned, so the shared allowlist accepted them in either
+    # role; swapped arguments appended a policy to the history and overwrote
+    # the policy with a history line (Codex, round 35).
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(json.dumps(measure.measure(_archive(), policy_mod.builtin_policy(), None)))
+    history = tmp_path / "history.jsonl"
+    history.write_text("")
+    monkeypatch.setattr(
+        policy_mod,
+        "AI_OWNED_COMPONENTS",
+        {
+            "policy": policy_mod.relative_to_repo(policy_path),
+            "history": policy_mod.relative_to_repo(history),
+        },
+    )
+    before_policy = policy_path.read_text()
+    with pytest.raises(PermissionError, match="policy component"):
+        revise.main(
+            [
+                "r",
+                str(archive),
+                "--measurement",
+                str(m_path),
+                "--policy",
+                str(policy_path),
+                "--history",
+                str(policy_path),
+                "--out-policy",
+                str(history),
+                "--now",
+                NOW,
+            ]
+        )
+    assert policy_path.read_text() == before_policy
+    assert history.read_text() == ""
+    # The library guards agree with the CLI: a policy may not be saved to the
+    # history component, nor a history entry appended to the policy component.
+    with pytest.raises(PermissionError, match="policy component"):
+        policy_mod.save_policy(policy_mod.builtin_policy(), history)
+    with pytest.raises(PermissionError, match="history component"):
+        policy_mod.append_history({"version": 1}, policy_path)
