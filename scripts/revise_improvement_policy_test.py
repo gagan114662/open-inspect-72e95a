@@ -883,6 +883,36 @@ def test_rollback_check_does_not_clobber_full_archive_coverage():
     assert decision["action"] == "revise" or "coverage" in decision["reason"]
 
 
+def test_out_json_may_not_overwrite_the_field_failures_input(tmp_path):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(json.dumps(measure.measure(_archive(), policy_mod.builtin_policy(), None)))
+    failures = tmp_path / "failures.json"
+    failures.write_text(json.dumps({"blind_spots": []}))
+    with pytest.raises(PermissionError, match="input of this run"):
+        revise.main(
+            [
+                "r",
+                str(archive),
+                "--measurement",
+                str(m_path),
+                "--policy",
+                str(policy_path),
+                "--history",
+                str(tmp_path / "h.jsonl"),
+                "--field-failures",
+                str(failures),
+                "--dry-run",
+                "--out-json",
+                str(failures),
+            ]
+        )
+    assert json.loads(failures.read_text()) == {"blind_spots": []}
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))

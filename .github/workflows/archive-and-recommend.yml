@@ -59,7 +59,12 @@ on:
     types: [completed]
   push:
     branches: [main]
-    paths: ["docs/self-improvement-archive.jsonl"]
+    paths:
+      - "docs/self-improvement-archive.jsonl"
+      # A revised policy (new topic, restored weight) can cross the
+      # mechanism-fix threshold on the existing archive; re-evaluate then
+      # too (Codex review of PR #10, round 31).
+      - "docs/improvement-policy.json"
 
 permissions:
   contents: write
