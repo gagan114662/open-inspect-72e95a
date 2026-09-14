@@ -207,6 +207,10 @@ def collect_trace_evidence(
                 }
         topics[topic] = sorted(matches.values(), key=lambda t: (t["timestamp"] or 0, t["id"]))
     return {
+        # The keyword definition each topic was searched with: a topic whose
+        # keywords change keeps its name but not its counts (Codex review of
+        # PR #10, round 11).
+        "definitions": {topic: list(words) for topic, words in keywords.items()},
         "source": "traces",
         "collected_at": policy_mod.utc_now_iso(),
         "repo_dir": repo_dir,
@@ -217,7 +221,10 @@ def collect_trace_evidence(
 
 
 def anchor_counts_at(
-    evidence: dict | None, topics: list[str], until_ms: int | None
+    evidence: dict | None,
+    topics: list[str],
+    until_ms: int | None,
+    keywords: dict[str, list[str]] | None = None,
 ) -> dict[str, int | None] | None:
     """Per-topic trace counts at a point in time. A topic the evidence
     snapshot never searched (added by a later policy revision) is None,
@@ -227,9 +234,17 @@ def anchor_counts_at(
         return None
     searched = evidence.get("topics", {})
     truncated = set(evidence.get("truncated", []))
+    definitions = evidence.get("definitions")
     counts: dict[str, int | None] = {}
     for topic in topics:
         if topic not in searched or topic in truncated:
+            counts[topic] = None
+            continue
+        if keywords is not None and (
+            definitions is None or list(definitions.get(topic, [])) != list(keywords.get(topic, []))
+        ):
+            # Searched under a different (or unrecorded) definition: unknown
+            # until the evidence is refreshed.
             counts[topic] = None
             continue
         traces = searched[topic]
@@ -302,7 +317,7 @@ def measure_epoch(
     # measured on the same signal, or discounting a topic could never
     # change what is measured (Codex review of PR #10, finding 4).
     dev_weighted = {t: round(dev[t] * weights.get(t, 1.0), 4) for t in topics}
-    anchor = anchor_counts_at(evidence, topics, until_ms)
+    anchor = anchor_counts_at(evidence, topics, until_ms, keywords)
     validity = None
     known = [t for t in topics if anchor is not None and anchor[t] is not None]
     if anchor is not None:
@@ -395,7 +410,11 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
     # policy's current topics, so a topic removed by a rollback keeps its
     # adverse evidence when a revision tries to mine it again.
     current["anchor_evidence"] = (
-        anchor_counts_at(evidence, list(evidence.get("topics", {})), None) if evidence else None
+        anchor_counts_at(
+            evidence, list(evidence.get("topics", {})), None, evidence.get("definitions") or {}
+        )
+        if evidence
+        else None
     )
     return {
         "policy_version": policy["version"],
@@ -428,6 +447,10 @@ def main(argv: list[str]) -> int:
     policy = (
         policy_mod.load_policy(args.policy) if args.policy else policy_mod.load_policy_or_builtin()
     )
+    inputs = [args.archive_path, args.policy, args.trace_evidence]
+    for out in (args.out_json, args.save_evidence):
+        if out:
+            policy_mod.assert_safe_output(out, inputs=inputs)
     entries = load_archive(args.archive_path)
 
     evidence: dict | None = None

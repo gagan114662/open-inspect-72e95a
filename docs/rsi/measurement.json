@@ -5,7 +5,7 @@
   "anchor": {
     "source": "traces (empty)",
     "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
-    "collected_at": "2026-09-14T19:14:08Z",
+    "collected_at": "2026-09-14T21:05:11Z",
     "traces_considered": 0
   },
   "epochs": [

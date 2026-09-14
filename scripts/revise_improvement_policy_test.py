@@ -84,6 +84,7 @@ def test_low_validity_discounts_topics_the_field_never_shows():
     evidence = {
         "source": "traces",
         "agents": ["claude-code"],
+        "definitions": {**policy_mod.BUILTIN_TOPIC_KEYWORDS, "archive-ops": ["archive"]},
         "topics": {
             "credential-redaction": [],
             "shell-semantics": [{"id": "s1", "agentId": "claude-code", "timestamp": 1}],
@@ -227,6 +228,7 @@ def _four_topic_evidence(counts):
     return {
         "source": "traces",
         "agents": ["claude-code"],
+        "definitions": {n: policy_mod.BUILTIN_TOPIC_KEYWORDS[n] for n in names},
         "topics": {
             n: [{"id": f"{n}-{i}", "agentId": "claude-code", "timestamp": 1} for i in range(c)]
             for n, c in zip(names, counts, strict=True)
@@ -560,6 +562,32 @@ def test_main_writes_nothing_when_the_history_path_is_refused(tmp_path, monkeypa
             ]
         )
     assert policy_path.read_text() == before
+
+
+def test_out_json_may_not_target_a_protected_or_input_file(tmp_path):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(json.dumps(measure.measure(_archive(), policy_mod.builtin_policy(), None)))
+    for bad in (policy_mod.REPO_ROOT / "docs" / "self-improvement-archive.jsonl", archive, m_path):
+        with pytest.raises(PermissionError):
+            revise.main(
+                [
+                    "r",
+                    str(archive),
+                    "--measurement",
+                    str(m_path),
+                    "--policy",
+                    str(policy_path),
+                    "--history",
+                    str(tmp_path / "h.jsonl"),
+                    "--dry-run",
+                    "--out-json",
+                    str(bad),
+                ]
+            )
 
 
 def test_accepted_revision_never_regresses_validity():

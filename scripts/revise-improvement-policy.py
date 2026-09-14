@@ -676,6 +676,10 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv[1:])
 
+    if args.out_json:
+        policy_mod.assert_safe_output(
+            args.out_json, inputs=[args.archive_path, args.measurement, args.policy, args.history]
+        )
     entries = measure_mod.load_archive(args.archive_path)
     policy = policy_mod.load_policy(args.policy)
     history = policy_mod.load_history(args.history)

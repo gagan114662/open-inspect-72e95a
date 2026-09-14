@@ -193,6 +193,26 @@ def assert_ai_may_write(path: Path | str, *, allowed: dict[str, str] | None = No
         )
 
 
+PROTECTED_OUTPUT_PREFIXES: tuple[str, ...] = (".github/", "scripts/", "packages/", "terraform/")
+PROTECTED_OUTPUT_FILES: tuple[str, ...] = (
+    "docs/self-improvement-archive.jsonl",
+    "docs/improvement-policy.json",
+    "docs/improvement-policy-history.jsonl",
+)
+
+
+def assert_safe_output(path: Path | str, *, inputs: list[str | Path] = ()) -> None:
+    """Report/JSON side outputs may go anywhere EXCEPT the loop's own records,
+    its code, and the files the invocation is reading (Codex review of
+    PR #10, round 11)."""
+    rel = relative_to_repo(path)
+    if rel in PROTECTED_OUTPUT_FILES or any(rel.startswith(p) for p in PROTECTED_OUTPUT_PREFIXES):
+        raise PermissionError(f"{rel} is a protected file; choose another output path")
+    for source in inputs:
+        if source and Path(source).resolve() == Path(path).resolve():
+            raise PermissionError(f"{rel} is an input of this run; choose another output path")
+
+
 def save_policy(
     policy: dict, path: Path | str = POLICY_PATH, *, allowed: dict[str, str] | None = None
 ) -> None:

@@ -1,6 +1,14 @@
 {
+  "definitions": {
+    "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
+    "shell-semantics": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
+    "env-var-precedence": ["precedence", "env var", "environment variable", "unconditionally"],
+    "fork-pr-permissions": ["fork", "github_token", "persist-credentials"],
+    "auth-lifecycle": ["refresh token", "rotat", "expir", "auth.json", "stale"],
+    "archive-branch": ["archive", "branch", "commit", "create", "creation"]
+  },
   "source": "traces",
-  "collected_at": "2026-09-14T19:14:08Z",
+  "collected_at": "2026-09-14T21:05:11Z",
   "repo_dir": "/Users/gaganarora/workplace/open-inspect-72e95a",
   "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
   "topics": {
@@ -8,6 +16,8 @@
     "shell-semantics": [],
     "env-var-precedence": [],
     "fork-pr-permissions": [],
-    "auth-lifecycle": []
-  }
+    "auth-lifecycle": [],
+    "archive-branch": []
+  },
+  "truncated": []
 }

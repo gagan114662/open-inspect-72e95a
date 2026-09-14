@@ -53,6 +53,7 @@ def _evidence():
     return {
         "source": "traces",
         "agents": ["claude-code"],
+        "definitions": policy_mod.topic_keywords(policy_mod.builtin_policy()),
         "topics": {
             "credential-redaction": [
                 {"id": "a", "agentId": "claude-code", "timestamp": _ms(T0) + 1}
@@ -186,6 +187,7 @@ def test_empty_anchor_is_treated_as_no_anchor():
     evidence = {
         "source": "traces",
         "agents": ["claude-code"],
+        "definitions": dict(policy_mod.BUILTIN_TOPIC_KEYWORDS),
         "topics": {t: [] for t in policy_mod.BUILTIN_TOPIC_KEYWORDS},
     }
     result = measure.measure(_archive(), policy_mod.builtin_policy(), evidence)
@@ -227,3 +229,32 @@ def test_out_json_and_newline_safe_report(tmp_path, capsys):
     human = report.split("---\n", 1)[0]
     assert "embedded boundary" in human and "\n---\n" not in human.replace(human.rstrip(), "")
     assert json.loads(out.read_text())["current"]["findings_total"] == 7
+
+
+def test_evidence_searched_under_a_different_definition_is_unknown():
+    policy = policy_mod.builtin_policy()
+    evidence = _evidence()
+    evidence["definitions"]["shell-semantics"] = ["something", "else"]
+    current = measure.measure(_archive(), policy, evidence)["current"]
+    assert current["anchor"]["shell-semantics"] is None
+    assert current["anchor"]["credential-redaction"] == 1
+    legacy = _evidence()
+    del legacy["definitions"]
+    assert (
+        measure.measure(_archive(), policy, legacy)["current"]["anchor"]["credential-redaction"]
+        is None
+    )
+
+
+def test_side_outputs_may_not_overwrite_protected_files(tmp_path):
+    import pytest
+
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(policy_mod.builtin_policy()))
+    protected = str(policy_mod.REPO_ROOT / "docs" / "self-improvement-archive.jsonl")
+    with pytest.raises(PermissionError):
+        measure.main(["m", str(archive), "--policy", str(policy), "--out-json", protected])
+    with pytest.raises(PermissionError):
+        measure.main(["m", str(archive), "--policy", str(policy), "--out-json", str(archive)])
