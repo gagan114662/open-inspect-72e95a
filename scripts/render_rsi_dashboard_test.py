@@ -229,3 +229,24 @@ def test_out_may_not_overwrite_protected_or_input_files(tmp_path):
                     str(bad),
                 ]
             )
+
+
+def test_history_version_labels_are_escaped_in_the_chart():
+    before = {
+        "policy_version": 1,
+        "epochs": [{"round": 1, "coverage": 0.5, "validity": None, "timestamp_ms": 1}],
+    }
+    after = {
+        "policy_version": 2,
+        "epochs": [{"round": 1, "coverage": 0.8, "validity": None, "timestamp_ms": 1}],
+    }
+    hostile = [
+        {
+            "version": "</text><script>alert(1)</script><text>",
+            "origin": "revision",
+            "created_at": None,
+        }
+    ]
+    svg = render.trigger_chart(before, after, hostile, 0.8)
+    assert "<script>" not in svg
+    assert "&lt;script&gt;" in svg

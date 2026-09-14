@@ -762,6 +762,42 @@ def test_current_definition_mismatch_does_not_erase_an_ancestors_evidence():
     assert revise.candidate_anchor(current, changed)["archive-ops"] is None
 
 
+def test_out_policy_may_not_be_the_history_file(tmp_path, monkeypatch):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(json.dumps(measure.measure(_archive(), policy_mod.builtin_policy(), None)))
+    history = tmp_path / "history.jsonl"
+    monkeypatch.setattr(
+        policy_mod,
+        "AI_OWNED_COMPONENTS",
+        {
+            "policy": policy_mod.relative_to_repo(policy_path),
+            "history": policy_mod.relative_to_repo(history),
+        },
+    )
+    with pytest.raises(PermissionError, match="different files"):
+        revise.main(
+            [
+                "r",
+                str(archive),
+                "--measurement",
+                str(m_path),
+                "--policy",
+                str(policy_path),
+                "--history",
+                str(history),
+                "--out-policy",
+                str(history),
+                "--now",
+                NOW,
+            ]
+        )
+    assert not history.exists()
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))

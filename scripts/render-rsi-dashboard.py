@@ -229,7 +229,7 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
                 f'<line x1="{x:.1f}" y1="{pad_t}" x2="{x:.1f}" y2="{h - pad_b}" stroke="{color}" stroke-width="2" stroke-dasharray="3 3"/>'
             )
             parts.append(
-                f'<text x="{x - 6:.1f}" y="{label_y}" font-size="11" text-anchor="end" fill="{color}">v{v["version"]} {v["origin"]}</text>'
+                f'<text x="{x - 6:.1f}" y="{label_y}" font-size="11" text-anchor="end" fill="{color}">v{esc(v["version"])} {esc(v["origin"])}</text>'
             )
     parts.append(
         f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">grey: coverage under v1 · orange: coverage under v{after["policy_version"]} · navy squares: v{after["policy_version"]} validity vs field anchor</text>'

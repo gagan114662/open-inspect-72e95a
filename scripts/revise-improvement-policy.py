@@ -803,6 +803,10 @@ def main(argv: list[str]) -> int:
             # record (Codex review of PR #10, round 9).
             policy_mod.assert_ai_may_write(out_policy)
             policy_mod.assert_ai_may_write(args.history)
+            if Path(out_policy).resolve() == Path(args.history).resolve():
+                # Role-specific destinations: the policy must never be written
+                # over its own history (Codex review of PR #10, round 20).
+                raise PermissionError("--out-policy and --history must be different files")
             policy_mod.append_history(
                 history_entry(decision, policy, measurement, now), args.history
             )
