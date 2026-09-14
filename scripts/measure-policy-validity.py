@@ -455,6 +455,15 @@ def main(argv: list[str]) -> int:
         policy_mod.assert_safe_output(args.out_json, inputs=inputs)
     if args.save_evidence:
         policy_mod.assert_safe_output(args.save_evidence, inputs=inputs, kind="evidence")
+    if (
+        args.out_json
+        and args.save_evidence
+        and Path(args.out_json).resolve() == Path(args.save_evidence).resolve()
+    ):
+        # The measurement would overwrite the evidence it just collected
+        # (Codex review of PR #10, round 16).
+        print("::error::--out-json and --save-evidence must be different files", file=sys.stderr)
+        return 1
     entries = load_archive(args.archive_path)
 
     evidence: dict | None = None

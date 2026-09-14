@@ -258,3 +258,28 @@ def test_side_outputs_may_not_overwrite_protected_files(tmp_path):
         measure.main(["m", str(archive), "--policy", str(policy), "--out-json", protected])
     with pytest.raises(PermissionError):
         measure.main(["m", str(archive), "--policy", str(policy), "--out-json", str(archive)])
+
+
+def test_out_json_and_save_evidence_may_not_be_the_same_file(tmp_path, capsys):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(policy_mod.builtin_policy()))
+    same = tmp_path / "same.json"
+    code = measure.main(
+        [
+            "m",
+            str(archive),
+            "--policy",
+            str(policy),
+            "--repo-dir",
+            str(tmp_path),
+            "--out-json",
+            str(same),
+            "--save-evidence",
+            str(same),
+        ]
+    )
+    assert code == 1
+    assert "must be different files" in capsys.readouterr().err
+    assert not same.exists()

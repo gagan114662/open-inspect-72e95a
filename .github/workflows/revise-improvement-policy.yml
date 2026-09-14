@@ -60,6 +60,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Record the commit actually checked out
+        # The default branch may have advanced past the triggering commit, and
+        # a manual dispatch may come from another ref; label everything with
+        # what this run measured (Codex review of PR #10, round 16).
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Measure policy validity
         # The field anchor is Traces evidence from WORKING sessions, which
         # live on developers' machines, not on this runner: a fresh runner
@@ -108,9 +115,11 @@ jobs:
           fi
 
       - name: Re-render the dashboard
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           set -euo pipefail
-          args=(docs/self-improvement-archive.jsonl --head "${GITHUB_SHA:0:8}" --out docs/rsi/dashboard.html)
+          args=(docs/self-improvement-archive.jsonl --head "${SOURCE_SHA:0:8}" --out docs/rsi/dashboard.html)
           [ -f docs/rsi/trace-evidence.json ] && args+=(--trace-evidence docs/rsi/trace-evidence.json)
           [ -f docs/rsi/trace-evidence-verifier.json ] && args+=(--verifier-evidence docs/rsi/trace-evidence-verifier.json)
           python3 scripts/render-rsi-dashboard.py "${args[@]}"
@@ -119,6 +128,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ACTION: ${{ steps.revise.outputs.action }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           set -euo pipefail
           if git diff --quiet -- docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/; then
@@ -139,13 +149,13 @@ jobs:
           git push --force origin "$branch"
           existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
           if [ -n "$existing_pr" ]; then
-            gh pr comment "$existing_pr" --body "Superseded by a newer archive round at \`${GITHUB_SHA}\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version})."
+            gh pr comment "$existing_pr" --body "Superseded by a newer archive round at \`${SOURCE_SHA}\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version})."
             echo "Updated the open proposal PR #$existing_pr in place."
             exit 0
           fi
           gh pr create \
             --title "chore(rsi): ${ACTION} of the improvement policy (v${version})" \
-            --body "Automatically proposed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) after the archive changed at \`${GITHUB_SHA}\`. Action: **${ACTION}**. See \`docs/improvement-policy-history.jsonl\` for the evidence and \`docs/rsi/dashboard.html\` for the rendered state. This changes only the AI-owned policy files; a human merges it, same as every other change in this repo." \
+            --body "Automatically proposed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) after the archive changed at \`${SOURCE_SHA}\`. Action: **${ACTION}**. See \`docs/improvement-policy-history.jsonl\` for the evidence and \`docs/rsi/dashboard.html\` for the rendered state. This changes only the AI-owned policy files; a human merges it, same as every other change in this repo." \
             --label "self-improvement-archive" \
             --base "$default_branch" \
             --head "$branch"

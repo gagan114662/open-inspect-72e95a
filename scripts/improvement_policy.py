@@ -100,7 +100,13 @@ def validate_policy(policy: dict) -> None:
         raise ValueError("policy.topics must be a non-empty object")
     for name, spec in topics.items():
         keywords = spec.get("keywords")
-        if not isinstance(keywords, list) or not all(isinstance(k, str) and k for k in keywords):
+        if (
+            not isinstance(keywords, list)
+            or not keywords
+            or not all(isinstance(k, str) and k for k in keywords)
+        ):
+            # An empty list would classify nothing while matching every trace
+            # (Codex review of PR #10, round 16).
             raise ValueError(f"topic {name!r} needs a non-empty list of keyword strings")
         weight = spec.get("weight", 1.0)
         if not isinstance(weight, int | float) or weight <= 0:

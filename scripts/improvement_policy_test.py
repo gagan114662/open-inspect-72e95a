@@ -123,3 +123,10 @@ def test_history_round_trips(tmp_path):
     )
     assert [e["version"] for e in improvement_policy.load_history(history)] == [2, 3]
     assert improvement_policy.load_history(tmp_path / "missing.jsonl") == []
+
+
+def test_validate_policy_rejects_empty_keyword_lists():
+    policy = improvement_policy.builtin_policy()
+    policy["topics"]["empty"] = {"keywords": [], "weight": 1.0}
+    with pytest.raises(ValueError, match="non-empty"):
+        improvement_policy.validate_policy(policy)
