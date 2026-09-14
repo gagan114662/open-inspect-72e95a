@@ -9,9 +9,16 @@ name: Codex Review
 # protection is separately configured to require it — that's a deliberate,
 # explicit decision left to the repo owner, not made here.
 #
-# Requires a `CODEX_API_KEY` (or `OPENAI_API_KEY`) repository secret. Without
-# one, this job reports that plainly and exits — it never silently no-ops as
-# if review happened.
+# Requires ONE of:
+#   - CODEX_AUTH_JSON: the contents of a `codex login`-produced ~/.codex/auth.json
+#     (ChatGPT-subscription auth — ties usage to that account's plan, not a
+#     separate API budget; see docs/production-hardening-backlog.md item #4)
+#   - CODEX_API_KEY / OPENAI_API_KEY: a standard API key
+# Without one of these, this job reports that plainly and exits — it never
+# silently no-ops as if review happened. Secrets are only available to
+# `pull_request` runs triggered from THIS repo (never from a fork, by GitHub
+# Actions' own default security model — this workflow deliberately uses
+# `pull_request`, not `pull_request_target`, to keep that protection).
 
 on:
   pull_request:
@@ -40,8 +47,12 @@ jobs:
       - name: Check for Codex credentials
         id: has-key
         run: |
-          if [ -n "${{ secrets.CODEX_API_KEY }}${{ secrets.OPENAI_API_KEY }}" ]; then
+          if [ -n "${{ secrets.CODEX_AUTH_JSON }}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "mode=auth-json" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ secrets.CODEX_API_KEY }}${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "mode=api-key" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
@@ -49,8 +60,8 @@ jobs:
       - name: Report missing credentials
         if: steps.has-key.outputs.present == 'false'
         run: |
-          echo "::warning::No CODEX_API_KEY or OPENAI_API_KEY secret is configured — Codex review did not run. Add one of those secrets to activate this check."
-          echo "No CODEX_API_KEY or OPENAI_API_KEY secret is configured. Codex review did not run for this PR." > /tmp/codex-review-status.txt
+          echo "::warning::No CODEX_AUTH_JSON, CODEX_API_KEY, or OPENAI_API_KEY secret is configured — Codex review did not run. Add one to activate this check."
+          echo "No Codex credentials secret is configured. Codex review did not run for this PR." > /tmp/codex-review-status.txt
 
       - name: Setup Node.js
         if: steps.has-key.outputs.present == 'true'
@@ -62,10 +73,21 @@ jobs:
         if: steps.has-key.outputs.present == 'true'
         run: npm install -g @openai/codex
 
+      - name: Write ChatGPT-subscription auth
+        if: steps.has-key.outputs.mode == 'auth-json'
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex-home"
+          umask 077
+          printf '%s' "$CODEX_AUTH_JSON" > "$RUNNER_TEMP/codex-home/auth.json"
+          chmod 600 "$RUNNER_TEMP/codex-home/auth.json"
+
       - name: Run Codex review
         if: steps.has-key.outputs.present == 'true'
         id: review
         env:
+          CODEX_HOME: ${{ steps.has-key.outputs.mode == 'auth-json' && format('{0}/codex-home', runner.temp) || '' }}
           CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -125,3 +147,7 @@ jobs:
         run: |
           echo "::error::Codex review found at least one [P1] (critical) finding — see the PR comment."
           exit 1
+
+      - name: Clean up auth material
+        if: always() && steps.has-key.outputs.mode == 'auth-json'
+        run: rm -rf "$RUNNER_TEMP/codex-home"
