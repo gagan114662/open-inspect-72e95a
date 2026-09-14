@@ -14,6 +14,7 @@ assert _spec is not None and _spec.loader is not None
 archive_round = importlib.util.module_from_spec(_spec)
 sys.modules["archive_round"] = archive_round
 _spec.loader.exec_module(archive_round)
+policy_mod = sys.modules["improvement_policy"]
 
 
 def _write_archive(path, entries):
@@ -135,9 +136,12 @@ def test_cross_pr_accumulation_crosses_threshold_on_the_third_contributing_round
     assert "credential-redaction" in topics
 
 
-def test_no_findings_in_review_does_not_append_anything(tmp_path, capsys):
+def test_clean_review_is_persisted_as_a_stamped_round(tmp_path, capsys):
+    # A review with no findings is still a completed round under the current
+    # policy; discarding it would keep a policy that eliminates findings from
+    # ever accumulating the rounds needed to judge it (Codex, round 32).
     archive_path = tmp_path / "archive.jsonl"
-    _write_archive(archive_path, [])
+    _write_archive(archive_path, [{"round": 1, "findings": ["**[P1]** old finding."]}])
 
     review_path = tmp_path / "review.txt"
     review_path.write_text("### Codex independent review\n\nNo issues found.\n")
@@ -146,7 +150,13 @@ def test_no_findings_in_review_does_not_append_anything(tmp_path, capsys):
         ["archive-round.py", str(archive_path), str(review_path), "sha-empty"]
     )
     assert exit_code == 0
-    assert archive_path.read_text().strip() == ""
+    entries = [json.loads(line) for line in archive_path.read_text().splitlines()]
+    assert entries[-1]["round"] == 2
+    assert entries[-1]["findings"] == []
+    assert entries[-1]["source_sha"] == "sha-empty"
+    assert entries[-1]["policy_version"] == policy_mod.POLICY_VERSION
+    assert entries[-1]["policy_hash"] == policy_mod.POLICY_HASH
     out = json.loads(capsys.readouterr().out.strip())
-    assert out["round"] is None
+    assert out["round"] == 2
+    assert out["newly_crossed"] == []
     assert out["already_processed"] is False

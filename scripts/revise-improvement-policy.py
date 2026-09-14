@@ -439,8 +439,11 @@ def candidate_anchor(current: dict, policy: dict) -> dict | None:
     keywords = policy_mod.topic_keywords(policy)
     result: dict[str, int | None] = {}
     for topic, count in merged.items():
+        if "@" in topic:
+            continue  # older definitions are reached through resolve_evidence_key
         if topic in keywords and list(definitions.get(topic, [])) != list(keywords[topic]):
-            result[topic] = None
+            key = measure_mod.resolve_evidence_key(definitions, topic, list(keywords[topic]))
+            result[topic] = merged.get(key) if key else None
         else:
             result[topic] = count
     return result
@@ -557,11 +560,14 @@ def field_blind_spots(field_failures: dict | None, keywords: dict[str, list[str]
     items: list[dict] = []
     for failure in field_failures.get("blind_spots", []):
         # The output, not the command: command text is full of paths and
-        # repository names that would name topics after folders.
-        text = f"{failure.get('kind', '')}: {failure.get('excerpt', '')}".strip(": ")
-        if not text or text in seen:
+        # repository names that would name topics after folders. Classify
+        # the excerpt alone: a kind label such as "tool-error" would match
+        # keywords like "-e" (Codex review of PR #10, round 32).
+        excerpt = str(failure.get("excerpt", "")).strip()
+        text = f"{failure.get('kind', '')} {excerpt}".strip()
+        if not excerpt or text in seen:
             continue
-        if policy_mod.classify_finding(text, keywords) is not None:
+        if policy_mod.classify_finding(excerpt, keywords) is not None:
             continue
         seen.add(text)
         items.append({"round": f"field:{str(failure.get('trace_id', ''))[:8]}", "finding": text})

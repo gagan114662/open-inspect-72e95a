@@ -1005,3 +1005,34 @@ def test_main_writes_only_ai_owned_files(tmp_path, capsys, monkeypatch):
     entries = policy_mod.load_history(history)
     assert entries[-1]["version"] == 2 and entries[-1]["policy"] == written
     assert "REVISION -> policy v2" in capsys.readouterr().out
+
+
+def test_failure_kind_labels_do_not_hide_field_blind_spots():
+    # "tool-error" contains the shell-semantics keyword "-e"; the label must
+    # not classify a failure the policy has no topic for (Codex, round 32).
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    assert "-e" in keywords["shell-semantics"]
+    failures = [
+        {"kind": "tool-error", "excerpt": "ModuleNotFoundError: No module named yaml"},
+        {"kind": "tool-error", "excerpt": "bash: set -e aborted the pipeline"},
+        {"kind": "tool-error", "excerpt": ""},
+    ]
+    spots = revise.field_blind_spots({"blind_spots": failures}, keywords)
+    assert [s["finding"] for s in spots] == ["tool-error ModuleNotFoundError: No module named yaml"]
+
+
+def test_candidate_anchor_reaches_an_older_definition_of_a_reused_name():
+    old_policy = policy_mod.builtin_policy()
+    old_policy["topics"]["archive-branch"] = {"keywords": ["archive", "branch"], "weight": 1.0}
+    new_policy = policy_mod.builtin_policy()
+    new_policy["topics"]["archive-branch"] = {"keywords": ["archive", "commit"], "weight": 1.0}
+    current = {
+        "anchor": {"archive-branch": 1},
+        "anchor_evidence": {"archive-branch": 1, "archive-branch@old": 4},
+        "anchor_definitions": {
+            "archive-branch": ["archive", "commit"],
+            "archive-branch@old": ["archive", "branch"],
+        },
+    }
+    assert revise.candidate_anchor(current, new_policy) == {"archive-branch": 1}
+    assert revise.candidate_anchor(current, old_policy) == {"archive-branch": 4}

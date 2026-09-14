@@ -147,9 +147,45 @@ def historical_definitions(
     for entry in history:
         snapshot = entry.get("policy") or {}
         for name, spec in (snapshot.get("topics") or {}).items():
-            if name not in keywords and isinstance(spec.get("keywords"), list) and spec["keywords"]:
-                extra[name] = list(spec["keywords"])
+            words = spec.get("keywords")
+            if not isinstance(words, list) or not words:
+                continue
+            words = list(words)
+            if keywords.get(name) == words or any(
+                key.split("@")[0] == name and recorded == words for key, recorded in extra.items()
+            ):
+                continue
+            # A name reused with different keywords keeps every definition
+            # under its own key, so an ancestor that used the older words is
+            # still judged on evidence searched for those words rather than
+            # on nothing (Codex review of PR #10, round 32).
+            key = (
+                name
+                if name not in keywords and name not in extra
+                else f"{name}@{definition_tag(words)}"
+            )
+            extra[key] = words
     return extra
+
+
+def definition_tag(words: list[str]) -> str:
+    return hashlib.sha256(json.dumps(list(words)).encode()).hexdigest()[:8]
+
+
+def resolve_evidence_key(
+    definitions: dict[str, list[str]] | None, topic: str, words: list[str]
+) -> str | None:
+    """The evidence key searched with exactly these keywords for this topic:
+    the plain name, or a `name@tag` variant kept for an older definition.
+    None when no matching search was recorded."""
+    if not definitions:
+        return None
+    if list(definitions.get(topic, [])) == list(words):
+        return topic
+    for key, recorded in definitions.items():
+        if key.split("@")[0] == topic and list(recorded) == list(words):
+            return key
+    return None
 
 
 def anchor_counts_at(
@@ -169,17 +205,15 @@ def anchor_counts_at(
     definitions = evidence.get("definitions")
     counts: dict[str, int | None] = {}
     for topic in topics:
-        if topic not in searched or topic in truncated:
-            counts[topic] = None
-            continue
-        if keywords is not None and (
-            definitions is None or list(definitions.get(topic, [])) != list(keywords.get(topic, []))
-        ):
+        key = topic
+        if keywords is not None:
             # Searched under a different (or unrecorded) definition: unknown
             # until the evidence is refreshed.
+            key = resolve_evidence_key(definitions, topic, list(keywords.get(topic, []))) or ""
+        if key not in searched or key in truncated:
             counts[topic] = None
             continue
-        traces = searched[topic]
+        traces = searched[key]
         if until_ms is None:
             counts[topic] = len(traces)
         elif any(not isinstance(t.get("timestamp"), int | float) for t in traces):

@@ -318,3 +318,56 @@ def test_history_path_counts_as_an_input_for_output_guards(tmp_path):
                 str(history),
             ]
         )
+
+
+def test_reused_topic_name_keeps_every_historical_definition():
+    # v2 mined "archive-branch" as [archive, branch]; v3 rolled back; v4 re-mined
+    # the same name with different words. The refresh must search both
+    # definitions, not only the latest (Codex, round 32).
+    current = dict(policy_mod.topic_keywords(policy_mod.builtin_policy()))
+    current["archive-branch"] = ["archive", "commit"]
+    v2 = policy_mod.builtin_policy()
+    v2["topics"]["archive-branch"] = {"keywords": ["archive", "branch"], "weight": 1.0}
+    v4 = policy_mod.builtin_policy()
+    v4["topics"]["archive-branch"] = {"keywords": ["archive", "commit"], "weight": 1.0}
+    history = [
+        {"version": 2, "policy": v2},
+        {"version": 3, "origin": "rollback", "policy": policy_mod.builtin_policy()},
+        {"version": 4, "policy": v4},
+        {"version": 5, "policy": v2},  # the same old definition again: no duplicate key
+    ]
+    extra = measure.historical_definitions(history, current)
+    assert list(extra.values()) == [["archive", "branch"]]
+    (key,) = extra
+    assert key.startswith("archive-branch@") and key != "archive-branch"
+    assert (
+        measure.resolve_evidence_key({**current, **extra}, "archive-branch", ["archive", "branch"])
+        == key
+    )
+    assert (
+        measure.resolve_evidence_key({**current, **extra}, "archive-branch", ["archive", "commit"])
+        == "archive-branch"
+    )
+    assert measure.resolve_evidence_key({**current, **extra}, "archive-branch", ["other"]) is None
+
+
+def test_anchor_counts_use_the_evidence_searched_under_the_topics_own_definition():
+    evidence = _evidence()
+    evidence["topics"]["archive-branch"] = [{"id": "n", "agentId": "claude-code", "timestamp": 1}]
+    evidence["topics"]["archive-branch@old"] = [
+        {"id": "o1", "agentId": "claude-code", "timestamp": 1},
+        {"id": "o2", "agentId": "claude-code", "timestamp": 1},
+    ]
+    evidence["definitions"]["archive-branch"] = ["archive", "commit"]
+    evidence["definitions"]["archive-branch@old"] = ["archive", "branch"]
+    old_policy = {"archive-branch": ["archive", "branch"]}
+    new_policy = {"archive-branch": ["archive", "commit"]}
+    assert measure.anchor_counts_at(evidence, ["archive-branch"], None, old_policy) == {
+        "archive-branch": 2
+    }
+    assert measure.anchor_counts_at(evidence, ["archive-branch"], None, new_policy) == {
+        "archive-branch": 1
+    }
+    assert measure.anchor_counts_at(
+        evidence, ["archive-branch"], None, {"archive-branch": ["x"]}
+    ) == {"archive-branch": None}

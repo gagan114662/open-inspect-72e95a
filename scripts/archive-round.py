@@ -106,10 +106,10 @@ def main(argv: list[str]) -> int:
         comment_text = f.read()
     findings = parse_findings_mod.parse_findings(comment_text)
 
-    if not findings:
-        print(json.dumps({"already_processed": False, "round": None, "newly_crossed": []}))
-        return 0
-
+    # A clean review is still a completed round under the current policy:
+    # dropping it would mean a policy that eliminates findings can never
+    # accumulate the rounds needed to be judged (Codex review of PR #10,
+    # round 32).
     newly_crossed = analyze_mod.find_newly_crossed_topics(archive_entries, findings, threshold)
     entry = build_round_entry(archive_entries, findings, args.source_sha, args.target)
     append_entry(args.archive_path, entry)
