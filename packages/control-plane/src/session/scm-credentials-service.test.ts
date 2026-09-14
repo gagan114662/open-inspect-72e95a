@@ -25,7 +25,7 @@ function makeProvider(
 }
 
 describe("ScmCredentialsService", () => {
-  it("returns credentials on success", async () => {
+  it("returns credentials on success and logs an audit record", async () => {
     const expiresAtEpochMs = Date.now() + 60 * 60 * 1000;
     const provider = makeProvider({
       name: "github",
@@ -35,9 +35,11 @@ describe("ScmCredentialsService", () => {
         expiresAtEpochMs,
       }),
     });
+    const log = createTestLogger();
 
-    const result = await new ScmCredentialsService(provider, createTestLogger()).getCredentials([
+    const result = await new ScmCredentialsService(provider, log).getCredentials([
       { owner: "acme", name: "repo" },
+      { owner: "acme", name: "sibling" },
     ]);
 
     expect(result).toEqual({
@@ -46,6 +48,36 @@ describe("ScmCredentialsService", () => {
       password: "ghs_token",
       expiresAtEpochMs,
     });
+    // A successful mint must be logged — previously only failures were,
+    // leaving no durable record of who received a credential and when.
+    expect(log.info).toHaveBeenCalledWith(
+      "SCM credential helper auth issued",
+      expect.objectContaining({
+        scm_provider: "github",
+        repos: ["acme/repo", "acme/sibling"],
+        expires_at_epoch_ms: expiresAtEpochMs,
+      })
+    );
+  });
+
+  it("never logs the credential password on a successful mint", async () => {
+    const secret = "ghs_super_secret_token";
+    const provider = makeProvider({
+      generateCredentialHelperAuth: vi.fn().mockResolvedValue({
+        username: "x-access-token",
+        password: secret,
+        expiresAtEpochMs: Date.now() + 60 * 60 * 1000,
+      }),
+    });
+    const log = createTestLogger();
+
+    await new ScmCredentialsService(provider, log).getCredentials([
+      { owner: "acme", name: "repo" },
+    ]);
+
+    for (const call of (log.info as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(JSON.stringify(call)).not.toContain(secret);
+    }
   });
 
   it("rejects invalid provider credential payloads", async () => {
