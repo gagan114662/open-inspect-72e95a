@@ -148,7 +148,8 @@ def test_evidence_counts_sessions_per_topic_and_records_definitions(monkeypatch)
         mine, "run_traces_json", _fake_runner({"t1": _events(), "t2": _events()[:3]})
     )
     keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
-    traces = mine.list_traces("traces", "/repo", ["claude-code"], 50)
+    traces, complete = mine.list_traces("traces", "/repo", ["claude-code"], 50)
+    assert complete
     failures = [f for t in traces for f in mine.mine_trace("traces", t)]
     evidence = mine.build_evidence(failures, keywords, "/repo", ["claude-code"])
     assert evidence["source"] == "trace-failures"
@@ -185,3 +186,71 @@ def test_main_writes_report_and_evidence(tmp_path, monkeypatch, capsys):
     assert json.loads(out.read_text())["traces_scanned"] == 1
     assert "topics" in json.loads(evidence.read_text())
     assert "distinct failure(s)" in capsys.readouterr().out
+
+
+def test_cli_json_is_parsed_past_a_leading_notice():
+    assert mine.parse_cli_json('Hydrating 3 traces...\n{"ok": true, "data": {"events": []}}') == {
+        "ok": True,
+        "data": {"events": []},
+    }
+    assert mine.parse_cli_json("not json at all") is None
+
+
+def test_line_numbers_and_file_contents_are_not_failures():
+    read_with_line_numbers = {
+        "type": "tool_result",
+        "toolName": "Read",
+        "status": "success",
+        "output": "401 env_vars = {}\n402 json.dumps(x)\nTraceback (most recent call last) appears in this docstring",
+    }
+    assert mine.failure_kind(read_with_line_numbers) is None
+    read_error = {
+        "type": "tool_result",
+        "toolName": "Read",
+        "status": "error",
+        "output": "File does not exist",
+    }
+    assert mine.failure_kind(read_error) == "tool-error"
+    real_auth = {
+        "type": "tool_result",
+        "toolName": "Bash",
+        "status": "success",
+        "output": "HTTP 401 Unauthorized",
+    }
+    assert mine.failure_kind(real_auth) == "auth"
+    bare_number = {
+        "type": "tool_result",
+        "toolName": "Bash",
+        "status": "success",
+        "output": "line 401 of 900",
+    }
+    assert mine.failure_kind(bare_number) is None
+
+
+def test_capped_listing_marks_every_topic_unknown(monkeypatch):
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": _events(), "t2": _events()}))
+    traces, complete = mine.list_traces("traces", "/repo", ["claude-code"], 2)
+    assert not complete
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    evidence = mine.build_evidence([], keywords, "/repo", ["claude-code"], complete)
+    assert set(evidence["truncated"]) == set(keywords)
+
+
+def test_evidence_matches_every_topic_independently_of_order():
+    failure = {
+        "trace_id": "t1",
+        "agent": "claude-code",
+        "timestamp": 1,
+        "command": "git push",
+        "excerpt": "secret token expired",
+    }
+    keywords = {"a": ["secret"], "b": ["expir"]}
+    assert mine.matching_topics(failure, keywords) == ["a", "b"]
+    reordered = {"b": ["expir"], "a": ["secret"]}
+    evidence_1 = mine.build_evidence([failure], keywords, "/repo", None)
+    evidence_2 = mine.build_evidence([failure], reordered, "/repo", None)
+    assert (
+        [t["id"] for t in evidence_1["topics"]["b"]]
+        == [t["id"] for t in evidence_2["topics"]["b"]]
+        == ["t1"]
+    )

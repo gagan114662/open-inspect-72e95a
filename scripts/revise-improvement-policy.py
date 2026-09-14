@@ -70,6 +70,10 @@ MIN_COVERAGE = 0.8
 MIN_VALIDITY = 0.3
 MIN_ROUNDS_TO_JUDGE = 2
 MAX_NEW_TOPICS = 2
+# Field blind spots: failures mined from working sessions that no topic
+# claims. Enough of them is a trigger of its own, so the taxonomy can learn
+# from what actually broke and not only from what reviews wrote up.
+MIN_FIELD_BLIND_SPOTS = 5
 MIN_FINDINGS_PER_TOPIC = 2
 MAX_KEYWORDS_PER_TOPIC = 5
 MIN_TOKEN_LENGTH = 4
@@ -518,12 +522,31 @@ def adoption_entry(version: int, history: list[dict]) -> dict | None:
     return None
 
 
+def field_blind_spots(field_failures: dict | None, keywords: dict[str, list[str]]) -> list[dict]:
+    """Unclassified failures from mine-trace-failures.py, shaped like archive
+    findings so the same mining applies. Deduplicated by excerpt."""
+    if not field_failures:
+        return []
+    seen: set[str] = set()
+    items: list[dict] = []
+    for failure in field_failures.get("blind_spots", []):
+        text = f"{failure.get('command', '')} {failure.get('excerpt', '')}".strip()
+        if not text or text in seen:
+            continue
+        if policy_mod.classify_finding(text, keywords) is not None:
+            continue
+        seen.add(text)
+        items.append({"round": f"field:{str(failure.get('trace_id', ''))[:8]}", "finding": text})
+    return items
+
+
 def decide(
     entries: list[dict],
     policy: dict,
     history: list[dict],
     measurement: dict,
     now: str,
+    field_failures: dict | None = None,
 ) -> dict:
     """Pure decision: returns {"action": "none"|"revise"|"rollback", ...}
     without touching disk, so it can be tested and dry-run."""
@@ -631,14 +654,22 @@ def decide(
         triggers.append(f"coverage {coverage} < {MIN_COVERAGE}")
     if validity is not None and validity < MIN_VALIDITY:
         triggers.append(f"validity {validity} < {MIN_VALIDITY}")
+    blind = field_blind_spots(field_failures, keywords)
+    if len(blind) >= MIN_FIELD_BLIND_SPOTS:
+        triggers.append(f"{len(blind)} field failures match no topic")
 
     changes: list[str] = []
     new_topics = dict(policy["topics"])
 
     # 2. Coverage repair: mine the blind spots.
+    mining_input = list(current.get("unclassified_findings", []))
+    if any(t.startswith("field") for t in triggers) or (
+        coverage is not None and coverage < MIN_COVERAGE
+    ):
+        mining_input.extend(blind)
     mined = (
-        mine_topics(current.get("unclassified_findings", []), keywords)
-        if coverage is not None and coverage < MIN_COVERAGE
+        mine_topics(mining_input, keywords)
+        if any(t.startswith("coverage") or t.startswith("field") for t in triggers)
         else []
     )
     for topic in mined:
@@ -776,6 +807,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--out-json", default=None, help="Also write the decision JSON to this path"
     )
+    parser.add_argument(
+        "--field-failures",
+        default=None,
+        help="JSON written by mine-trace-failures.py --out-json; its blind spots feed topic mining",
+    )
     args = parser.parse_args(argv[1:])
 
     if args.out_json:
@@ -804,7 +840,11 @@ def main(argv: list[str]) -> int:
         return 1
     now = args.now or policy_mod.utc_now_iso()
 
-    decision = decide(entries, policy, history, measurement, now)
+    field_failures = None
+    if args.field_failures:
+        with open(args.field_failures) as f:
+            field_failures = json.load(f)
+    decision = decide(entries, policy, history, measurement, now, field_failures)
     if decision["action"] == "none":
         print(f"no revision: {decision['reason']}")
     else:

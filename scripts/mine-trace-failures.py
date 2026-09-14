@@ -35,6 +35,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -66,49 +67,93 @@ FAILURE_PATTERNS: dict[str, re.Pattern[str]] = {
     "permission": re.compile(
         r"Permission denied|EACCES|denied by the .* classifier|Operation not permitted"
     ),
+    # HTTP-shaped only: a bare "401" is far more often a line number in a
+    # file read than an auth failure.
     "auth": re.compile(
-        r"\b(401|403)\b|Unauthorized|Forbidden|token (?:expired|invalid)|authentication failed",
+        r"HTTP/?[\d.]* ?40[13]\b|\b40[13] (?:Unauthorized|Forbidden)|status(?: code)?[:=]? ?40[13]\b"
+        r"|\bUnauthorized\b|\bForbidden\b|token (?:expired|invalid)|authentication failed",
         re.I,
     ),
-    "git-rejected": re.compile(r"non-fast-forward|rejected\]|fatal: |merge conflict", re.I),
+    "git-rejected": re.compile(r"non-fast-forward|rejected\]|^fatal: |merge conflict", re.I | re.M),
     "timeout": re.compile(r"timed out|timeout of \d+|ETIMEDOUT|TLS handshake timeout", re.I),
-    "not-found": re.compile(
-        r"No such file or directory|command not found|ENOENT|not found: ", re.I
-    ),
+    "not-found": re.compile(r"No such file or directory|command not found|ENOENT", re.I),
 }
+
+# Failure shapes are only looked for in the output of tools that run
+# commands; a file read that happens to contain the word "Traceback" is
+# content, not a failure. Other tools count only when Traces marked the
+# result as an error.
+COMMAND_TOOL_HINTS = ("bash", "shell", "command", "exec", "terminal", "run")
 
 
 class TracesCliError(RuntimeError):
     pass
 
 
-def run_traces_json(traces_bin: str, args: list[str]) -> dict:
-    try:
-        result = subprocess.run(
-            [traces_bin, *args, "--json"], capture_output=True, text=True, timeout=120
-        )
-    except OSError as exc:
-        raise TracesCliError(f"Could not run `{traces_bin}`: {exc}") from exc
-    if result.returncode != 0:
-        raise TracesCliError(f"`{traces_bin} {' '.join(args)}` failed: {result.stderr.strip()}")
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise TracesCliError(f"Non-JSON output from `{traces_bin} {' '.join(args)}`") from exc
-    if not payload.get("ok"):
-        raise TracesCliError(f"`{traces_bin} {' '.join(args)}` reported failure: {payload}")
-    return payload["data"]
+def parse_cli_json(stdout: str) -> dict | None:
+    """The CLI may print a hydration notice before the JSON document the
+    first time a session's events are loaded; parse from the first brace."""
+    for candidate in (stdout, stdout[stdout.find("{") :] if "{" in stdout else ""):
+        if not candidate:
+            continue
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+    return None
 
 
-def list_traces(traces_bin: str, repo_dir: str, agents: list[str] | None, limit: int) -> list[dict]:
+def run_traces_json(traces_bin: str, args: list[str], *, retries: int = 1) -> dict:
+    last_error = "no output"
+    for attempt in range(retries + 1):
+        # stdout goes to a file, not a pipe: the CLI truncates piped output at
+        # 64 KiB (observed: 65519 bytes of an 80 KB document), while a file
+        # redirect receives everything.
+        try:
+            with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as out:
+                result = subprocess.run(
+                    [traces_bin, *args, "--json"],
+                    stdout=out,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=300,
+                )
+                out.seek(0)
+                stdout = out.read()
+        except OSError as exc:
+            raise TracesCliError(f"Could not run `{traces_bin}`: {exc}") from exc
+        if result.returncode != 0:
+            raise TracesCliError(f"`{traces_bin} {' '.join(args)}` failed: {result.stderr.strip()}")
+        payload = parse_cli_json(stdout)
+        if payload is not None:
+            if not payload.get("ok"):
+                raise TracesCliError(f"`{traces_bin} {' '.join(args)}` reported failure: {payload}")
+            return payload["data"]
+        last_error = stdout[:120].replace("\n", " ")
+        if attempt < retries:
+            continue
+    raise TracesCliError(f"Non-JSON output from `{traces_bin} {' '.join(args)}`: {last_error}")
+
+
+def list_traces(
+    traces_bin: str, repo_dir: str, agents: list[str] | None, limit: int
+) -> tuple[list[dict], bool]:
+    """Sessions recorded in the folder, and whether the listing was complete.
+    A listing that fills its limit may have missed sessions, and evidence
+    built from it must say so rather than report confirmed zero counts
+    (Codex review of PR #10, round 27)."""
     found: dict[str, dict] = {}
+    complete = True
     for agent_args in [["--agent", a] for a in agents] if agents else [[]]:
         data = run_traces_json(
             traces_bin, ["list", "--dir", repo_dir, *agent_args, "--limit", str(limit)]
         )
-        for trace in data.get("traces", []):
+        traces = data.get("traces", [])
+        if len(traces) >= limit:
+            complete = False
+        for trace in traces:
             found[trace["id"]] = trace
-    return sorted(found.values(), key=lambda t: (t.get("timestamp") or 0, t["id"]))
+    return sorted(found.values(), key=lambda t: (t.get("timestamp") or 0, t["id"])), complete
 
 
 def iter_events(traces_bin: str, trace_id: str):
@@ -124,11 +169,17 @@ def iter_events(traces_bin: str, trace_id: str):
         offset += len(events)
 
 
+def is_command_tool(tool: str) -> bool:
+    lowered = tool.lower()
+    return any(hint in lowered for hint in COMMAND_TOOL_HINTS)
+
+
 def failure_kind(event: dict) -> str | None:
     output = str(event.get("output") or event.get("text") or "")
-    for name, pattern in FAILURE_PATTERNS.items():
-        if pattern.search(output):
-            return name
+    if is_command_tool(str(event.get("toolName") or "")):
+        for name, pattern in FAILURE_PATTERNS.items():
+            if pattern.search(output):
+                return name
     if event.get("status") == "error":
         return "tool-error"
     return None
@@ -189,6 +240,18 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
     return sorted(failures.values(), key=lambda f: (f["event_number"] or 0))
 
 
+def failure_text(failure: dict) -> str:
+    return f"{failure['command']} {failure['excerpt']}".lower()
+
+
+def matching_topics(failure: dict, keywords: dict[str, list[str]]) -> list[str]:
+    """Every topic whose keywords appear in the failure, independently of
+    taxonomy order, so a stored count never depends on which other topics
+    existed when it was collected (Codex review of PR #10, round 27)."""
+    text = failure_text(failure)
+    return [topic for topic, words in keywords.items() if any(w.lower() in text for w in words)]
+
+
 def classify(failure: dict, keywords: dict[str, list[str]]) -> str | None:
     text = f"{failure['command']} {failure['excerpt']}"
     return policy_mod.classify_finding(text, keywords)
@@ -199,20 +262,19 @@ def build_evidence(
     keywords: dict[str, list[str]],
     repo_dir: str,
     agents: list[str] | None,
+    complete: bool = True,
 ) -> dict:
     per_topic: dict[str, dict[str, dict]] = defaultdict(dict)
     for failure in failures:
-        topic = classify(failure, keywords)
-        if topic is None:
-            continue
-        per_topic[topic].setdefault(
-            failure["trace_id"],
-            {
-                "id": failure["trace_id"],
-                "agentId": failure["agent"],
-                "timestamp": failure["timestamp"],
-            },
-        )
+        for topic in matching_topics(failure, keywords):
+            per_topic[topic].setdefault(
+                failure["trace_id"],
+                {
+                    "id": failure["trace_id"],
+                    "agentId": failure["agent"],
+                    "timestamp": failure["timestamp"],
+                },
+            )
     return {
         "source": "trace-failures",
         "collected_at": policy_mod.utc_now_iso(),
@@ -226,7 +288,8 @@ def build_evidence(
             )
             for topic in keywords
         },
-        "truncated": [],
+        "truncated": [] if complete else list(keywords),
+        "listing_complete": complete,
         "failure_count": len(failures),
     }
 
@@ -237,10 +300,10 @@ def report(failures: list[dict], keywords: dict[str, list[str]]) -> tuple[list[s
     by_topic: Counter[str] = Counter()
     blind: list[dict] = []
     for failure in failures:
-        topic = classify(failure, keywords)
-        if topic is None:
+        topics = matching_topics(failure, keywords)
+        if not topics:
             blind.append(failure)
-        else:
+        for topic in topics:
             by_topic[topic] += 1
     sessions = {f["trace_id"] for f in failures}
     lines.append(f"{len(failures)} distinct failure(s) across {len(sessions)} session(s)")
@@ -304,7 +367,11 @@ def main(argv: list[str]) -> int:
     )
 
     try:
-        traces = list_traces(args.traces_bin, args.repo_dir, agents, args.limit)
+        traces, complete = list_traces(args.traces_bin, args.repo_dir, agents, args.limit)
+        if not complete:
+            print(
+                f"::warning::session listing hit --limit {args.limit}; evidence counts are marked unknown, raise --limit"
+            )
         failures: list[dict] = []
         for trace in traces:
             if agents is None and trace.get("agentId") == VERIFIER_AGENT:
@@ -316,12 +383,16 @@ def main(argv: list[str]) -> int:
 
     lines, summary = report(failures, keywords)
     summary["traces_scanned"] = len(traces)
+    summary["listing_complete"] = complete
     summary["repo_dir"] = args.repo_dir
     for line in lines:
         print(line)
     if args.save_evidence:
         Path(args.save_evidence).write_text(
-            json.dumps(build_evidence(failures, keywords, args.repo_dir, agents), indent=2) + "\n"
+            json.dumps(
+                build_evidence(failures, keywords, args.repo_dir, agents, complete), indent=2
+            )
+            + "\n"
         )
         print(f"evidence written to {args.save_evidence}")
     if args.out_json:

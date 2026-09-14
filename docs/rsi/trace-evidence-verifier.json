@@ -1,4 +1,9 @@
 {
+  "source": "trace-failures",
+  "collected_at": "2026-09-14T22:39:28Z",
+  "repo_dir": "/Users/gaganarora/workplace/open-inspect-72e95a",
+  "agents": ["all"],
+  "event_types": "tool_result(status=error) or failure-shaped output",
   "definitions": {
     "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
     "shell-semantics": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
@@ -7,18 +12,26 @@
     "auth-lifecycle": ["refresh token", "rotat", "expir", "auth.json", "stale"],
     "archive-branch": ["archive", "branch", "commit", "create", "creation"]
   },
-  "source": "traces",
-  "collected_at": "2026-09-14T22:26:27Z",
-  "repo_dir": "/Users/gaganarora/workplace/open-inspect-72e95a",
-  "agents": ["all"],
-  "event_types": "tool_result,error",
   "topics": {
-    "credential-redaction": [],
+    "credential-redaction": [
+      {
+        "id": "01a09724-57f6-7c30-8144-8d05f8245670",
+        "agentId": "codex",
+        "timestamp": 1789242150697
+      },
+      {
+        "id": "01a0973d-4d37-7c20-84d7-0107f071310f",
+        "agentId": "codex",
+        "timestamp": 1789243794642
+      }
+    ],
     "shell-semantics": [],
     "env-var-precedence": [],
     "fork-pr-permissions": [],
     "auth-lifecycle": [],
     "archive-branch": []
   },
-  "truncated": []
+  "truncated": [],
+  "listing_complete": true,
+  "failure_count": 3
 }

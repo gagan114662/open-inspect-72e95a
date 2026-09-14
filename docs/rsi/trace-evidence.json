@@ -1,4 +1,9 @@
 {
+  "source": "trace-failures",
+  "collected_at": "2026-09-14T22:39:26Z",
+  "repo_dir": "/Users/gaganarora/Desktop/my projects/background agents",
+  "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
+  "event_types": "tool_result(status=error) or failure-shaped output",
   "definitions": {
     "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
     "shell-semantics": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
@@ -7,18 +12,64 @@
     "auth-lifecycle": ["refresh token", "rotat", "expir", "auth.json", "stale"],
     "archive-branch": ["archive", "branch", "commit", "create", "creation"]
   },
-  "source": "traces",
-  "collected_at": "2026-09-14T22:26:25Z",
-  "repo_dir": "/Users/gaganarora/workplace/open-inspect-72e95a",
-  "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
-  "event_types": "tool_result,error",
   "topics": {
-    "credential-redaction": [],
-    "shell-semantics": [],
+    "credential-redaction": [
+      {
+        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
+        "agentId": "claude-code",
+        "timestamp": 1789220862989
+      },
+      {
+        "id": "dbdc7f1d-23a9-57e2-a9cd-42d43a2c40a7",
+        "agentId": "claude-code",
+        "timestamp": 1789244561654
+      },
+      {
+        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
+        "agentId": "claude-code",
+        "timestamp": 1789423511799
+      }
+    ],
+    "shell-semantics": [
+      {
+        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
+        "agentId": "claude-code",
+        "timestamp": 1789219270517
+      },
+      {
+        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
+        "agentId": "claude-code",
+        "timestamp": 1789411081354
+      }
+    ],
     "env-var-precedence": [],
     "fork-pr-permissions": [],
-    "auth-lifecycle": [],
-    "archive-branch": []
+    "auth-lifecycle": [
+      {
+        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
+        "agentId": "claude-code",
+        "timestamp": 1789236199880
+      },
+      {
+        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
+        "agentId": "claude-code",
+        "timestamp": 1789423511799
+      }
+    ],
+    "archive-branch": [
+      {
+        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
+        "agentId": "claude-code",
+        "timestamp": 1789219270517
+      },
+      {
+        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
+        "agentId": "claude-code",
+        "timestamp": 1789412579985
+      }
+    ]
   },
-  "truncated": []
+  "truncated": [],
+  "listing_complete": true,
+  "failure_count": 184
 }
