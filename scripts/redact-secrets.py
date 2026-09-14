@@ -85,7 +85,7 @@ def main(argv: list[str]) -> int:
     src, dst = argv[1], argv[2]
     secrets = collect_secrets_from_env(os.environ)
 
-    with open(src, "r", errors="replace") as f:
+    with open(src, errors="replace") as f:
         text = f.read()
 
     if secrets:

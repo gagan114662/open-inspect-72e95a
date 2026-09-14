@@ -1,14 +1,12 @@
 """Tests for redact-secrets.py.
 
-Run with: python3 -m pytest scripts/redact-secrets.test.py -q
+Run with: python3 -m pytest scripts/redact_secrets_test.py -q
 (stdlib-only script; no project venv required.)
 """
 
 import importlib.util
 import sys
 from pathlib import Path
-
-import pytest
 
 _MODULE_PATH = Path(__file__).parent / "redact-secrets.py"
 _spec = importlib.util.spec_from_file_location("redact_secrets", _MODULE_PATH)
