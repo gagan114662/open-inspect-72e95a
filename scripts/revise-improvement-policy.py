@@ -322,22 +322,26 @@ def decide(
     weights = policy_mod.topic_weights(policy)
 
     # 1. Safe inheritance: a revision that made things worse gets rolled back
-    #    before any new revision is layered on top of it.
+    #    before any new revision is layered on top of it. Both policies are
+    #    re-measured on the SAME findings: comparing today's coverage with
+    #    the parent's historical number would punish a revision merely for
+    #    being alive when unfamiliar findings arrived (Codex review of
+    #    PR #10, finding 1).
     if policy.get("origin") == "revision" and policy.get("parent") is not None:
         adopted = adoption_entry(policy["version"], history)
         if (
             adopted is not None
             and rounds_since(entries, policy["created_at"]) >= MIN_ROUNDS_TO_JUDGE
         ):
-            before = adopted.get("coverage_before")
-            if coverage is not None and before is not None and coverage < before:
-                parent = snapshot_for_version(policy["parent"], history)
-                if parent is not None:
+            parent = snapshot_for_version(policy["parent"], history)
+            if parent is not None and coverage is not None:
+                parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
+                if parent_now is not None and coverage < parent_now:
                     return {
                         "action": "rollback",
                         "reason": (
-                            f"coverage {coverage} after {MIN_ROUNDS_TO_JUDGE}+ rounds under v{policy['version']} "
-                            f"is below the {before} its parent v{policy['parent']} had at adoption"
+                            f"on the same {current['findings_total']} findings, v{policy['version']} covers "
+                            f"{coverage} but its parent v{policy['parent']} covers {parent_now}"
                         ),
                         "policy": policy_mod.new_version(
                             policy,
@@ -348,6 +352,7 @@ def decide(
                             created_at=now,
                         ),
                         "coverage_before": coverage,
+                        "coverage_after": parent_now,
                         "validity_before": validity,
                         "changes": [
                             f"restored taxonomy, weights and threshold of v{policy['parent']}"
@@ -396,7 +401,7 @@ def decide(
                     f"discounted {topic} weight {old} -> {new}: credited in {current['dev'][topic]} round(s), 0 field traces"
                 )
         for topic, count in anchor.items():
-            if count > 0 and weights.get(topic, 1.0) < 1.0:
+            if count is not None and count > 0 and weights.get(topic, 1.0) < 1.0:
                 restored = min(1.0, round(weights[topic] / WEIGHT_DISCOUNT, 3))
                 new_topics[topic] = {**new_topics[topic], "weight": restored}
                 changes.append(

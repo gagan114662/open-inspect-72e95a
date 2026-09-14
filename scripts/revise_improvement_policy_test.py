@@ -132,6 +132,40 @@ def test_rollback_when_an_adopted_revision_is_worse_than_its_parent():
     assert "archive-ops" in decision["policy"]["topics"]
 
 
+def test_no_rollback_when_unfamiliar_findings_lower_both_policies():
+    parent = policy_mod.builtin_policy()
+    child_topics = {**parent["topics"], "archive-ops": {"keywords": ["archive"], "weight": 1.0}}
+    child = policy_mod.new_version(
+        parent,
+        topics=child_topics,
+        threshold=3,
+        origin="revision",
+        rationale="coverage repair",
+        created_at="2026-09-14T15:30:00Z",
+    )
+    history = [
+        {
+            "version": 2,
+            "parent": 1,
+            "origin": "revision",
+            "coverage_before": 0.4,
+            "coverage_after": 1.0,
+            "policy": child,
+        }
+    ]
+    noisy = _archive() + [
+        {
+            "round": 4,
+            "occurred_at": "2026-09-14T18:00:00Z",
+            "findings": [f"[P2] Unfamiliar problem number {i}." for i in range(20)],
+        },
+    ]
+    measurement = measure.measure(noisy, child, None)
+    assert measurement["current"]["coverage"] < 0.4  # far below the parent's historical number
+    decision = revise.decide(noisy, child, history, measurement, NOW)
+    assert decision["action"] != "rollback"
+
+
 def test_rollback_waits_for_enough_rounds_to_judge():
     parent = policy_mod.builtin_policy()
     bad = policy_mod.new_version(

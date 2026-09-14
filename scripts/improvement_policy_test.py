@@ -42,6 +42,23 @@ def test_policy_hash_ignores_metadata_but_tracks_decision_fields():
     assert improvement_policy.policy_hash(retuned) != improvement_policy.policy_hash(base)
 
 
+def test_policy_hash_is_sensitive_to_topic_order():
+    base = improvement_policy.builtin_policy()
+    reordered = {**base, "topics": dict(reversed(list(base["topics"].items())))}
+    assert improvement_policy.policy_hash(reordered) != improvement_policy.policy_hash(base)
+
+
+def test_history_snapshots_preserve_topic_order(tmp_path):
+    history = tmp_path / "history.jsonl"
+    allowed = {"history": improvement_policy.relative_to_repo(history)}
+    policy = improvement_policy.builtin_policy()
+    policy["topics"] = dict(reversed(list(policy["topics"].items())))
+    improvement_policy.append_history({"version": 2, "policy": policy}, history, allowed=allowed)
+    restored = improvement_policy.load_history(history)[0]["policy"]
+    assert list(restored["topics"]) == list(policy["topics"])
+    assert improvement_policy.policy_hash(restored) == improvement_policy.policy_hash(policy)
+
+
 def test_classify_uses_policy_order_and_returns_none_when_uncovered():
     keywords = improvement_policy.topic_keywords(improvement_policy.builtin_policy())
     assert (

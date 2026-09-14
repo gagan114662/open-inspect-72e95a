@@ -194,12 +194,20 @@ def collect_trace_evidence(
 
 def anchor_counts_at(
     evidence: dict | None, topics: list[str], until_ms: int | None
-) -> dict[str, int] | None:
+) -> dict[str, int | None] | None:
+    """Per-topic trace counts at a point in time. A topic the evidence
+    snapshot never searched (added by a later policy revision) is None,
+    unknown, not zero: reusing an old snapshot must not make a new topic
+    look unsupported (Codex review of PR #10, finding 5)."""
     if evidence is None:
         return None
-    counts = {}
+    searched = evidence.get("topics", {})
+    counts: dict[str, int | None] = {}
     for topic in topics:
-        traces = evidence.get("topics", {}).get(topic, [])
+        if topic not in searched:
+            counts[topic] = None
+            continue
+        traces = searched[topic]
         if until_ms is None:
             counts[topic] = len(traces)
         else:
@@ -246,6 +254,7 @@ def spearman(xs: list[float], ys: list[float]) -> float | None:
 def measure_epoch(
     rounds: list[dict],
     keywords: dict[str, list[str]],
+    weights: dict[str, float],
     evidence: dict | None,
     until_ms: int | None,
 ) -> dict:
@@ -264,10 +273,17 @@ def measure_epoch(
             classified += 1
             dev_rounds[topic].add(rnd["round"])
     dev = {t: len(dev_rounds[t]) for t in topics}
+    # The detector decides on weighted recurrence, so validity must be
+    # measured on the same signal, or discounting a topic could never
+    # change what is measured (Codex review of PR #10, finding 4).
+    dev_weighted = {t: round(dev[t] * weights.get(t, 1.0), 4) for t in topics}
     anchor = anchor_counts_at(evidence, topics, until_ms)
     validity = None
+    known = [t for t in topics if anchor is not None and anchor[t] is not None]
     if anchor is not None:
-        validity = spearman([float(dev[t]) for t in topics], [float(anchor[t]) for t in topics])
+        validity = spearman(
+            [float(dev_weighted[t]) for t in known], [float(anchor[t]) for t in known]
+        )
     coverage = round(classified / total, 4) if total else None
     return {
         "round": rounds[-1]["round"] if rounds else None,
@@ -276,14 +292,18 @@ def measure_epoch(
         "findings_classified": classified,
         "coverage": coverage,
         "dev": dev,
+        "dev_weighted": dev_weighted,
         "anchor": anchor,
+        "anchor_unknown_topics": sorted(
+            t for t in topics if anchor is not None and anchor[t] is None
+        ),
         "validity": validity,
         "unclassified_findings": unclassified,
         "dev_only_topics": sorted(
-            t for t in topics if dev[t] >= 2 and anchor is not None and anchor[t] == 0
+            t for t in known if dev[t] >= 2 and anchor is not None and anchor[t] == 0
         ),
         "anchor_only_topics": sorted(
-            t for t in topics if dev[t] == 0 and anchor is not None and anchor[t] > 0
+            t for t in known if dev[t] == 0 and anchor is not None and (anchor[t] or 0) > 0
         ),
     }
 
@@ -296,6 +316,7 @@ def evidence_trace_ids(evidence: dict | None) -> set[str]:
 
 def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
     keywords = policy_mod.topic_keywords(policy)
+    weights = policy_mod.topic_weights(policy)
     rounds = rounds_in_order(entries)
     anchor_meta: dict = {"source": "none", "agents": [], "traces_considered": 0}
     if evidence is not None:
@@ -314,10 +335,12 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
             evidence = None
     epochs = []
     for i in range(len(rounds)):
-        epoch = measure_epoch(rounds[: i + 1], keywords, evidence, rounds[i]["timestamp_ms"])
+        epoch = measure_epoch(
+            rounds[: i + 1], keywords, weights, evidence, rounds[i]["timestamp_ms"]
+        )
         epoch.pop("unclassified_findings")
         epochs.append(epoch)
-    current = measure_epoch(rounds, keywords, evidence, None)
+    current = measure_epoch(rounds, keywords, weights, evidence, None)
     return {
         "policy_version": policy["version"],
         "policy_hash": policy_mod.policy_hash(policy),
@@ -379,6 +402,10 @@ def main(argv: list[str]) -> int:
         print(f"  credited by reviews, never seen in the field: {current['dev_only_topics']}")
     if current["anchor_only_topics"]:
         print(f"  seen in the field, never credited by reviews: {current['anchor_only_topics']}")
+    if current["anchor_unknown_topics"]:
+        print(
+            f"  not yet searched in the field (re-collect evidence): {current['anchor_unknown_topics']}"
+        )
     print("---")
     print(json.dumps(result, indent=2))
     return 0

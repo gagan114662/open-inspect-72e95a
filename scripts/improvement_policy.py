@@ -111,10 +111,20 @@ def policy_hash(policy: dict) -> str:
     """Content hash of the decision-relevant fields. Two policies with the
     same taxonomy, weights, and threshold decide identically, whatever their
     version metadata says — this is what the dashboard pins per epoch to
-    show the evaluator was frozen while a round was decided."""
+    show the evaluator was frozen while a round was decided.
+
+    Topic ORDER is part of the hash: classification takes the first topic
+    whose keyword matches, so reordering overlapping topics changes
+    decisions and must not pass the stale-measurement guard (Codex review
+    of PR #10, finding 3)."""
     canonical = json.dumps(
-        {"threshold": policy["threshold"], "topics": policy["topics"]},
-        sort_keys=True,
+        {
+            "threshold": policy["threshold"],
+            "topics": [
+                [name, spec["keywords"], float(spec.get("weight", 1.0))]
+                for name, spec in policy["topics"].items()
+            ],
+        },
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
@@ -207,5 +217,8 @@ def append_history(
     entry: dict, path: Path | str = HISTORY_PATH, *, allowed: dict[str, str] | None = None
 ) -> None:
     assert_ai_may_write(path, allowed=allowed)
+    # No sort_keys: a snapshot's topic order is its classification
+    # precedence, and restoring an alphabetized snapshot would silently
+    # reclassify findings (Codex review of PR #10, finding 2).
     with open(path, "a") as f:
-        f.write(json.dumps(entry, sort_keys=True) + "\n")
+        f.write(json.dumps(entry) + "\n")

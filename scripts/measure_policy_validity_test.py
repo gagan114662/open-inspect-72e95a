@@ -116,6 +116,26 @@ def test_dev_only_topics_flag_review_credit_the_field_never_corroborates():
     assert current["dev_only_topics"] == ["credential-redaction"]
 
 
+def test_unsearched_topics_are_unknown_not_zero():
+    policy = policy_mod.builtin_policy()
+    policy["topics"]["archive-ops"] = {"keywords": ["archive"], "weight": 1.0}
+    current = measure.measure(_archive(), policy, _evidence())["current"]
+    assert current["anchor"]["archive-ops"] is None
+    assert current["anchor_unknown_topics"] == ["archive-ops"]
+    assert "archive-ops" not in current["dev_only_topics"]
+    assert current["dev"]["archive-ops"] == 2
+
+
+def test_validity_uses_the_weighted_signal_the_detector_decides_on():
+    policy = policy_mod.builtin_policy()
+    baseline = measure.measure(_archive(), policy, _evidence())["current"]
+    policy["topics"]["credential-redaction"]["weight"] = 0.25
+    discounted = measure.measure(_archive(), policy, _evidence())["current"]
+    assert discounted["dev"] == baseline["dev"]
+    assert discounted["dev_weighted"]["credential-redaction"] == 0.75
+    assert discounted["validity"] != baseline["validity"]
+
+
 def test_empty_anchor_is_treated_as_no_anchor():
     evidence = {
         "source": "traces",

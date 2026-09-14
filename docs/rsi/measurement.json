@@ -1,6 +1,6 @@
 {
   "policy_version": 2,
-  "policy_hash": "ab3b76c7a8cd",
+  "policy_hash": "44c4f68c3232",
   "anchor": {
     "source": "traces (empty)",
     "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
@@ -23,7 +23,17 @@
         "archive-branch": 0,
         "comment": 0
       },
+      "dev_weighted": {
+        "credential-redaction": 1.0,
+        "shell-semantics": 1.0,
+        "env-var-precedence": 0.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0,
+        "comment": 0.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -43,7 +53,17 @@
         "archive-branch": 0,
         "comment": 0
       },
+      "dev_weighted": {
+        "credential-redaction": 2.0,
+        "shell-semantics": 1.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0,
+        "comment": 0.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -63,7 +83,17 @@
         "archive-branch": 0,
         "comment": 0
       },
+      "dev_weighted": {
+        "credential-redaction": 3.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0,
+        "comment": 0.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -83,7 +113,17 @@
         "archive-branch": 0,
         "comment": 0
       },
+      "dev_weighted": {
+        "credential-redaction": 4.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0,
+        "comment": 0.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -103,7 +143,17 @@
         "archive-branch": 0,
         "comment": 0
       },
+      "dev_weighted": {
+        "credential-redaction": 5.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0,
+        "comment": 0.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -123,7 +173,17 @@
         "archive-branch": 0,
         "comment": 0
       },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0,
+        "comment": 0.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -143,7 +203,17 @@
         "archive-branch": 0,
         "comment": 0
       },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0,
+        "comment": 0.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -163,7 +233,17 @@
         "archive-branch": 1,
         "comment": 1
       },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 1.0,
+        "comment": 1.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -183,7 +263,17 @@
         "archive-branch": 2,
         "comment": 1
       },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 2.0,
+        "comment": 1.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -203,7 +293,17 @@
         "archive-branch": 3,
         "comment": 1
       },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 3.0,
+        "comment": 1.0
+      },
       "anchor": null,
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -224,7 +324,17 @@
       "archive-branch": 3,
       "comment": 1
     },
+    "dev_weighted": {
+      "credential-redaction": 6.0,
+      "shell-semantics": 2.0,
+      "env-var-precedence": 1.0,
+      "fork-pr-permissions": 0.0,
+      "auth-lifecycle": 0.0,
+      "archive-branch": 3.0,
+      "comment": 1.0
+    },
     "anchor": null,
+    "anchor_unknown_topics": [],
     "validity": null,
     "unclassified_findings": [
       {
