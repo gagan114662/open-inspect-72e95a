@@ -266,8 +266,13 @@ def anchor_counts_at(
         traces = searched[topic]
         if until_ms is None:
             counts[topic] = len(traces)
+        elif any(not isinstance(t.get("timestamp"), int | float) for t in traces):
+            # An undated trace cannot be placed in time; a historical count
+            # that would include or exclude it is unknown (Codex review of
+            # PR #10, round 22).
+            counts[topic] = None
         else:
-            counts[topic] = sum(1 for t in traces if (t.get("timestamp") or 0) <= until_ms)
+            counts[topic] = sum(1 for t in traces if t["timestamp"] <= until_ms)
     return counts
 
 
@@ -479,7 +484,9 @@ def main(argv: list[str]) -> int:
     policy = (
         policy_mod.load_policy(args.policy) if args.policy else policy_mod.load_policy_or_builtin()
     )
-    inputs = [args.archive_path, args.policy, args.trace_evidence]
+    # Every file this run reads is an input, the history included (Codex
+    # review of PR #10, round 23).
+    inputs = [args.archive_path, args.policy, args.trace_evidence, args.history]
     if args.out_json:
         policy_mod.assert_safe_output(args.out_json, inputs=inputs)
     if args.save_evidence:

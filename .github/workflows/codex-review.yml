@@ -87,7 +87,7 @@ jobs:
         if: steps.has-key.outputs.present == 'false'
         run: |
           echo "::warning::No CODEX_AUTH_JSON, CODEX_API_KEY, or OPENAI_API_KEY secret is configured — Codex review did not run. Add one to activate this check."
-          echo "No Codex credentials secret is configured. Codex review did not run for this PR." > /tmp/codex-review-status.txt
+          echo "No Codex credentials secret is configured. Codex review did not run for this PR." > $RUNNER_TEMP/codex-review-status.txt
 
       - name: Setup Node.js
         if: steps.has-key.outputs.present == 'true'
@@ -153,7 +153,7 @@ jobs:
       - name: Report unavailable trusted baseline
         if: steps.has-key.outputs.present == 'true' && steps.extract.outputs.available == 'false'
         run: |
-          echo "No trusted copy of scripts/redact-secrets.py exists on the base branch, so this PR cannot be safely reviewed by this job yet (failing closed rather than trusting the PR's own copy of the redactor)." > /tmp/codex-review-status.txt
+          echo "No trusted copy of scripts/redact-secrets.py exists on the base branch, so this PR cannot be safely reviewed by this job yet (failing closed rather than trusting the PR's own copy of the redactor)." > $RUNNER_TEMP/codex-review-status.txt
 
       - name: Write ChatGPT-subscription auth
         if: steps.has-key.outputs.mode == 'auth-json' && steps.extract.outputs.available == 'true'
@@ -164,6 +164,10 @@ jobs:
           umask 077
           printf '%s' "$CODEX_AUTH_JSON" > "$RUNNER_TEMP/codex-home/auth.json"
           chmod 600 "$RUNNER_TEMP/codex-home/auth.json"
+
+      # Review artifacts live under $RUNNER_TEMP, outside the sandbox's
+      # writable roots (the checkout and /tmp), so a PR-controlled test cannot
+      # replace the reviewer's output or the redaction inputs.
 
       # Runs the review and fails closed: any non-zero exit (crash, auth
       # failure, timeout) leaves review_failed=true and no output file, so a
@@ -212,14 +216,14 @@ jobs:
             git diff "origin/${BASE_REF}...HEAD"
             echo
             echo "DIFF_END"
-          } > /tmp/codex-review-prompt.txt
+          } > $RUNNER_TEMP/codex-review-prompt.txt
 
           # workspace-write (still OS-sandboxed): read-only refused the writes
           # pytest needs, which is why every earlier review reported its shell
           # failing and stayed static.
           if timeout 900 codex exec -s workspace-write - \
             -c 'model_reasoning_effort="high"' \
-            < /tmp/codex-review-prompt.txt > /tmp/codex-review-raw.txt 2>/tmp/codex-review-err.txt
+            < $RUNNER_TEMP/codex-review-prompt.txt > $RUNNER_TEMP/codex-review-raw.txt 2>$RUNNER_TEMP/codex-review-err.txt
           then
             exit_code=0
           else
@@ -244,24 +248,24 @@ jobs:
           # implementation, reused here and by any future workflow that
           # needs the same redaction.
           python3 "$RUNNER_TEMP/trusted/redact-secrets.py" \
-            /tmp/codex-review-raw.txt /tmp/codex-review-output.txt
+            $RUNNER_TEMP/codex-review-raw.txt $RUNNER_TEMP/codex-review-output.txt
           python3 "$RUNNER_TEMP/trusted/redact-secrets.py" \
-            /tmp/codex-review-err.txt /tmp/codex-review-err-redacted.txt
+            $RUNNER_TEMP/codex-review-err.txt $RUNNER_TEMP/codex-review-err-redacted.txt
 
           if [ "$exit_code" -ne 0 ]; then
             echo "::error::Codex review command failed or timed out (exit $exit_code) — see logs."
-            cat /tmp/codex-review-err-redacted.txt
-            if grep -qiE 'auth|unauthoriz|401|403|token expired|login' /tmp/codex-review-err-redacted.txt; then
+            cat $RUNNER_TEMP/codex-review-err-redacted.txt
+            if grep -qiE 'auth|unauthoriz|401|403|token expired|login' $RUNNER_TEMP/codex-review-err-redacted.txt; then
               echo "::warning::This looks like an authentication failure. If using CODEX_AUTH_JSON, the stored ChatGPT session may have rotated or expired — run 'codex login' again locally and update the secret (gh secret set CODEX_AUTH_JSON --repo ${{ github.repository }} < ~/.codex/auth.json)."
             fi
             echo "review_failed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          cat /tmp/codex-review-output.txt
+          cat $RUNNER_TEMP/codex-review-output.txt
           echo "review_failed=false" >> "$GITHUB_OUTPUT"
 
-          if grep -qE '\*\*\[P1\]' /tmp/codex-review-output.txt; then
+          if grep -qE '\*\*\[P1\]' $RUNNER_TEMP/codex-review-output.txt; then
             echo "found_p1=true" >> "$GITHUB_OUTPUT"
           else
             echo "found_p1=false" >> "$GITHUB_OUTPUT"
@@ -273,7 +277,7 @@ jobs:
       # Selects the comment body by review_failed/has-key STATUS explicitly,
       # not by which temp file happens to exist. An earlier version checked
       # file existence only: since redaction unconditionally creates
-      # /tmp/codex-review-output.txt (even on a crash, where it holds
+      # $RUNNER_TEMP/codex-review-output.txt (even on a crash, where it holds
       # whatever partial/empty text codex wrote to stdout before dying),
       # that version could post a crashed run's leftover output as if it
       # were a completed, clean review instead of clearly reporting failure.
@@ -293,17 +297,17 @@ jobs:
 
             let body;
             if (!hasKey) {
-              body = fs.existsSync('/tmp/codex-review-status.txt')
-                ? fs.readFileSync('/tmp/codex-review-status.txt', 'utf8')
+              body = fs.existsSync(process.env.RUNNER_TEMP + '/codex-review-status.txt')
+                ? fs.readFileSync(process.env.RUNNER_TEMP + '/codex-review-status.txt', 'utf8')
                 : 'No Codex credentials secret is configured. Codex review did not run for this PR.';
             } else if (extractUnavailable) {
-              body = fs.existsSync('/tmp/codex-review-status.txt')
-                ? fs.readFileSync('/tmp/codex-review-status.txt', 'utf8')
+              body = fs.existsSync(process.env.RUNNER_TEMP + '/codex-review-status.txt')
+                ? fs.readFileSync(process.env.RUNNER_TEMP + '/codex-review-status.txt', 'utf8')
                 : 'No trusted copy of the redaction script is available on the base branch — failing closed rather than trusting this PR\'s own copy.';
             } else if (reviewFailed) {
               body = '**Review did not complete successfully** (command failed, crashed, or timed out — see job logs). This is not a passing review; no findings below should be read as "nothing found."';
-            } else if (fs.existsSync('/tmp/codex-review-output.txt')) {
-              body = fs.readFileSync('/tmp/codex-review-output.txt', 'utf8');
+            } else if (fs.existsSync(process.env.RUNNER_TEMP + '/codex-review-output.txt')) {
+              body = fs.readFileSync(process.env.RUNNER_TEMP + '/codex-review-output.txt', 'utf8');
             } else {
               // Should not happen given the states above, but never claim a
               // review happened without an output file to back it up.

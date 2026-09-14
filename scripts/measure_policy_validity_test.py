@@ -307,3 +307,38 @@ def test_evidence_refresh_keeps_searching_topics_from_earlier_policy_versions():
     extra = measure.historical_definitions(history, current)
     assert extra == {"archive-branch": ["archive", "branch"]}
     assert "credential-redaction" not in extra
+
+
+def test_undated_traces_make_historical_counts_unknown_but_not_current_ones():
+    evidence = _evidence()
+    evidence["topics"]["shell-semantics"].append(
+        {"id": "u", "agentId": "claude-code", "timestamp": None}
+    )
+    result = measure.measure(_archive(), policy_mod.builtin_policy(), evidence)
+    assert all(e["anchor"]["shell-semantics"] is None for e in result["epochs"])
+    assert result["epochs"][1]["anchor"]["credential-redaction"] == 1
+    assert result["current"]["anchor"]["shell-semantics"] == 3
+
+
+def test_history_path_counts_as_an_input_for_output_guards(tmp_path):
+    import pytest
+
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(policy_mod.builtin_policy()))
+    history = tmp_path / "history.jsonl"
+    history.write_text("")
+    with pytest.raises(PermissionError, match="input of this run"):
+        measure.main(
+            [
+                "m",
+                str(archive),
+                "--policy",
+                str(policy),
+                "--history",
+                str(history),
+                "--out-json",
+                str(history),
+            ]
+        )
