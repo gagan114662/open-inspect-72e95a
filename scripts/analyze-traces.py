@@ -94,23 +94,24 @@ def hydrate_trace(traces_bin: str, trace_id: str) -> None:
     )
 
 
-def search_topic(traces_bin: str, pattern: str, repo_dir: str) -> list[dict]:
+def search_topic(traces_bin: str, pattern: str, scope_args: list[str]) -> list[dict]:
     data = run_traces_json(
         traces_bin,
-        ["search", pattern, "--dir", repo_dir, "--result-level", "trace", "--limit", "100"],
+        ["search", pattern, *scope_args, "--result-level", "trace", "--limit", "100"],
     )
     return data.get("traces", [])
 
 
-def analyze(traces_bin: str, repo_dir: str, limit: int) -> dict:
-    trace_ids = list_repo_trace_ids(traces_bin, repo_dir, limit)
-    for trace_id in trace_ids:
-        hydrate_trace(traces_bin, trace_id)
-
+def analyze_by_topic(traces_bin: str, scope_args: list[str]) -> list[dict]:
+    """Runs every topic's keyword search under the same scope (a `--dir`
+    filter, a `--trace-id` allowlist, etc.) and returns per-topic results
+    sorted by match count. Shared by both the local-directory flow (analyze)
+    and the specific-trace-ID flow a CI job uses after syncing traces linked
+    to a PR via git notes."""
     topics = []
     for topic, keywords in detect_mod.TOPIC_KEYWORDS.items():
         pattern = "|".join(keywords)
-        matches = search_topic(traces_bin, pattern, repo_dir)
+        matches = search_topic(traces_bin, pattern, scope_args)
         topics.append(
             {
                 "topic": topic,
@@ -118,11 +119,18 @@ def analyze(traces_bin: str, repo_dir: str, limit: int) -> dict:
                 "trace_ids": [m["id"] for m in matches],
             }
         )
+    return sorted(topics, key=lambda t: -t["matching_traces"])
+
+
+def analyze(traces_bin: str, repo_dir: str, limit: int) -> dict:
+    trace_ids = list_repo_trace_ids(traces_bin, repo_dir, limit)
+    for trace_id in trace_ids:
+        hydrate_trace(traces_bin, trace_id)
 
     return {
         "repo_dir": repo_dir,
         "traces_scanned": len(trace_ids),
-        "topics": sorted(topics, key=lambda t: -t["matching_traces"]),
+        "topics": analyze_by_topic(traces_bin, ["--dir", repo_dir]),
     }
 
 

@@ -44,7 +44,7 @@ def test_search_topic_parses_real_cli_json_shape(tmp_path):
             echo '{"ok":true,"data":{"count":1,"traces":[{"id":"xyz789","matchCount":2}]}}'
             """),
     )
-    matches = analyze_traces.search_topic(mock, "redact|credential", "/some/repo")
+    matches = analyze_traces.search_topic(mock, "redact|credential", ["--dir", "/some/repo"])
     assert matches == [{"id": "xyz789", "matchCount": 2}]
 
 
