@@ -1,0 +1,235 @@
+name: Archive and Recommend
+
+# Closes the specific gap named in docs/production-hardening-backlog.md
+# item #4's self-improvement work: scripts/detect-recurring-pattern.py could
+# already derive a target-vs-mechanism recommendation from
+# docs/self-improvement-archive.jsonl's accumulated evidence, but something
+# still had to run it and decide whether to act on the result. That
+# "when to act" decision was a human/agent judgment call made by reading
+# the archive. This workflow makes it automatic, but ONLY for two
+# deliberately bounded actions: proposing an append-only audit entry to the
+# archive AS A PULL REQUEST (never a direct push — a human still merges
+# it), and opening a tracking issue. It never merges, deploys, or touches
+# secrets, and requests no secrets.
+#
+# History: the first draft of this workflow computed "newly crossed
+# threshold" purely in memory against the static on-disk archive, never
+# persisting the round. Codex's review of that draft found the real
+# consequence: two separate PRs that each contribute one finding on the
+# same topic never combine, because each is compared against the same
+# unchanged baseline in isolation -- evidence never actually accumulates
+# across PRs. scripts/archive-round.py fixes this by appending each
+# processed round to the archive, tagged with the PR commit SHA it came
+# from. The first version of this fix pushed that change directly to the
+# default branch; Claude Code's own auto-mode classifier correctly refused
+# that ("Merge Without Review") -- an automated direct push to the default
+# branch is exactly the review-bypass pattern this whole hardening effort
+# has otherwise never allowed itself, even for "just data". The archive
+# update is proposed as a PR instead, same as every other change in this
+# repo's history.
+# The same Codex review also found that filtering PR comments by their
+# opening text alone lets any PR commenter forge a fake "Codex independent
+# review" comment; this workflow now requires both the posting account to
+# be github-actions[bot] AND the comment to carry the exact head-SHA marker
+# .github/workflows/codex-review.yml embeds, binding the analyzed comment
+# to the specific commit this workflow_run was triggered by.
+#
+# Runs after "Codex Review" (.github/workflows/codex-review.yml) completes.
+# Uses `workflow_run`, not `pull_request`: workflow_run always executes the
+# workflow file AND checks out source from the repository's default
+# branch, never the PR's own commits -- so, unlike codex-review.yml, this
+# workflow has no PR-authored-script trust boundary to manage. It requests
+# no secrets: everything it reads (the posted review comment, the archive
+# file) is already-redacted, already-public PR content.
+on:
+  workflow_run:
+    workflows: ["Codex Review"]
+    types: [completed]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+# Repo-wide singleton, not per-run: overlapping "Codex Review" completions
+# (e.g. rapid pushes to the same or different PRs) must not race each other
+# past the open-issue dedup check or the archive-PR dedup check, or both
+# can pass simultaneously and create duplicate issues / duplicate PRs.
+concurrency:
+  group: archive-and-recommend
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    name: Analyze review for recurring patterns
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.pull_requests[0] != null
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ensure required labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "self-improvement-archive" \
+            --color "0e8a16" \
+            --description "Automated archive-round PR from archive-and-recommend.yml" \
+            --force
+          gh label create "self-improvement-recommendation" \
+            --color "b60205" \
+            --description "Automatically opened: a finding topic crossed the mechanism-fix recurrence threshold" \
+            --force
+
+      - name: Fetch the bot-authored, SHA-bound Codex review comment
+        id: fetch-comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.workflow_run.pull_requests[0].number;
+            const headSha = context.payload.workflow_run.head_sha;
+            const marker = `<!-- codex-review-sha: ${headSha} -->`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            // Both checks matter: the author check stops a PR commenter
+            // from forging a review-shaped comment; the SHA marker stops
+            // an old (correctly bot-authored) review comment from a prior
+            // commit being mistaken for this run's review.
+            const reviewComments = comments.filter(
+              (c) =>
+                (c.body || "").startsWith("### Codex independent review") &&
+                (c.body || "").includes(marker) &&
+                c.user?.type === "Bot" &&
+                c.user?.login === "github-actions[bot]"
+            );
+
+            if (reviewComments.length === 0) {
+              core.setOutput("found", "false");
+              return;
+            }
+
+            const latest = reviewComments[reviewComments.length - 1];
+            const fs = require("fs");
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/review-comment.txt", latest.body, "utf8");
+            core.setOutput("found", "true");
+            core.setOutput("pr-number", String(prNumber));
+            core.setOutput("head-sha", headSha);
+
+      - name: Archive this round (in the working tree) and check for newly-crossed thresholds
+        id: archive
+        if: steps.fetch-comment.outputs.found == 'true'
+        run: |
+          python3 scripts/archive-round.py \
+            docs/self-improvement-archive.jsonl \
+            "$RUNNER_TEMP/review-comment.txt" \
+            "${{ steps.fetch-comment.outputs.head-sha }}" \
+            > "$RUNNER_TEMP/archive-result.json"
+          cat "$RUNNER_TEMP/archive-result.json"
+
+      - name: Propose the archived round as a pull request
+        if: steps.fetch-comment.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.fetch-comment.outputs.head-sha }}
+          PR_NUMBER: ${{ steps.fetch-comment.outputs.pr-number }}
+        run: |
+          if git diff --quiet -- docs/self-improvement-archive.jsonl; then
+            echo "No archive changes to propose (already processed, or no findings)."
+            exit 0
+          fi
+
+          branch="archive-round-${SOURCE_SHA:0:12}"
+
+          # Idempotency: a prior run may have already opened this exact PR
+          # (e.g. a rerun of this workflow for the same review comment).
+          existing_pr=$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')
+          if [ -n "$existing_pr" ]; then
+            echo "PR #$existing_pr already proposes this round — skipping."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add docs/self-improvement-archive.jsonl
+          git commit -m "chore: archive round from PR #${PR_NUMBER} review"
+          git push origin "$branch"
+          gh pr create \
+            --title "chore: archive round from PR #${PR_NUMBER} review" \
+            --body "Automatically proposed by [\`archive-and-recommend.yml\`](../blob/main/.github/workflows/archive-and-recommend.yml) after the Codex review on PR #${PR_NUMBER} (commit \`${SOURCE_SHA}\`). This is an append-only audit-log entry — no code or workflow behavior changes. A human still reviews and merges it, same as every other change in this repo." \
+            --label "self-improvement-archive" \
+            --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)" \
+            --head "$branch" || echo "::warning::Could not open the archive-round PR (label may not exist yet, or another race). The round is still reflected in this run's own comparison below."
+
+      - name: Open a tracking issue for each newly-crossed topic
+        if: steps.fetch-comment.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const prNumber = "${{ steps.fetch-comment.outputs.pr-number }}";
+            const raw = fs.readFileSync(process.env.RUNNER_TEMP + "/archive-result.json", "utf8");
+            const { newly_crossed: newlyCrossed } = JSON.parse(raw);
+
+            if (!newlyCrossed || newlyCrossed.length === 0) {
+              console.log("No topic newly crossed the mechanism-fix threshold. Nothing to do.");
+              return;
+            }
+
+            for (const item of newlyCrossed) {
+              const title = `Recurring pattern: ${item.topic} — mechanism-level fix recommended`;
+
+              // Idempotency: don't open a second issue for a topic that
+              // already has an open tracking issue.
+              const existing = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                labels: "self-improvement-recommendation",
+                per_page: 100,
+              });
+              if (existing.some((issue) => issue.title === title)) {
+                console.log(`Issue already open for topic "${item.topic}" — skipping.`);
+                continue;
+              }
+
+              const body = [
+                `Automatically opened by [\`archive-and-recommend.yml\`](../blob/main/.github/workflows/archive-and-recommend.yml).`,
+                ``,
+                `A finding topic newly crossed the mechanism-level-fix recurrence`,
+                `threshold in \`docs/self-improvement-archive.jsonl\`, as of the`,
+                `Codex review on PR #${prNumber}.`,
+                ``,
+                `**Topic:** \`${item.topic}\``,
+                `**Recommended action:** ${item.recommended_action}-level fix`,
+                ``,
+                `Run \`python3 scripts/detect-recurring-pattern.py docs/self-improvement-archive.jsonl\``,
+                `for the full evidence trail (which rounds, which findings) behind this`,
+                `recommendation.`,
+                ``,
+                `This issue was opened automatically. Deciding what the mechanism-level`,
+                `fix should be, and merging/deploying it, remains a human decision — this`,
+                `workflow never merges, deploys, or touches secrets; the archive update`,
+                `itself is a proposed pull request, not a direct commit.`,
+              ].join("\n");
+
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["self-improvement-recommendation"],
+              });
+              console.log(`Opened tracking issue for topic "${item.topic}".`);
+            }
