@@ -99,6 +99,39 @@ jobs:
         if: steps.has-key.outputs.present == 'true'
         run: npm install -g @openai/codex
 
+      # Extracts redact-secrets.py from the BASE branch, not the PR's own
+      # checked-out HEAD. Without this, a same-repository PR could modify
+      # the redaction script itself to exfiltrate credentials or fabricate
+      # a clean review result — the script would be running with the Codex
+      # secrets in its environment while being fully attacker-controlled
+      # content. `git show <ref>:<path>` reads the file's content at that
+      # ref directly from the already-fetched history (fetch-depth: 0 on
+      # the checkout step above) without switching the working tree, so the
+      # untrusted PR diff being reviewed is never touched by this step.
+      #
+      # One-time bootstrap exception: the very first PR that introduces this
+      # script (this one) cannot extract it from the base branch, because it
+      # doesn't exist there yet. That gap is unavoidable for a brand-new
+      # tool's first introduction and is not silently swallowed — it prints
+      # a loud, explicit warning and falls back to the PR's own copy only in
+      # that specific case. Every PR after this one merges is protected: the
+      # base branch will have a copy by then, so the fallback path stops
+      # being reachable in normal operation.
+      - name: Extract trusted redaction script from the base branch
+        if: steps.has-key.outputs.present == 'true'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted"
+          if git show "origin/${BASE_REF}:scripts/redact-secrets.py" > "$RUNNER_TEMP/trusted/redact-secrets.py" 2>/tmp/trusted-extract-err.txt; then
+            echo "Extracted trusted redact-secrets.py from origin/${BASE_REF}."
+          else
+            echo "::warning::scripts/redact-secrets.py was not found on origin/${BASE_REF} — this must be its first introduction. Falling back to this PR's own copy for THIS RUN ONLY. Every subsequent PR, once this one merges, extracts from the base branch instead."
+            cat /tmp/trusted-extract-err.txt
+            cp "$GITHUB_WORKSPACE/scripts/redact-secrets.py" "$RUNNER_TEMP/trusted/redact-secrets.py"
+          fi
+          chmod 444 "$RUNNER_TEMP/trusted/redact-secrets.py"
+
       - name: Write ChatGPT-subscription auth
         if: steps.has-key.outputs.mode == 'auth-json'
         env:
@@ -182,9 +215,9 @@ jobs:
           # the fix was applied to one copy and not the other). One
           # implementation, reused here and by any future workflow that
           # needs the same redaction.
-          python3 "$GITHUB_WORKSPACE/scripts/redact-secrets.py" \
+          python3 "$RUNNER_TEMP/trusted/redact-secrets.py" \
             /tmp/codex-review-raw.txt /tmp/codex-review-output.txt
-          python3 "$GITHUB_WORKSPACE/scripts/redact-secrets.py" \
+          python3 "$RUNNER_TEMP/trusted/redact-secrets.py" \
             /tmp/codex-review-err.txt /tmp/codex-review-err-redacted.txt
 
           if [ "$exit_code" -ne 0 ]; then
@@ -209,20 +242,40 @@ jobs:
       # Skipped for fork-originated PRs: their default GITHUB_TOKEN is
       # read-only regardless of whether Codex credentials were available, so
       # this call would fail there every time.
+      # Selects the comment body by review_failed/has-key STATUS explicitly,
+      # not by which temp file happens to exist. An earlier version checked
+      # file existence only: since redaction unconditionally creates
+      # /tmp/codex-review-output.txt (even on a crash, where it holds
+      # whatever partial/empty text codex wrote to stdout before dying),
+      # that version could post a crashed run's leftover output as if it
+      # were a completed, clean review instead of clearly reporting failure.
       - name: Post review as PR comment
         if: always() && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          HAS_KEY: ${{ steps.has-key.outputs.present }}
+          REVIEW_FAILED: ${{ steps.review.outputs.review_failed }}
         uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
+            const hasKey = process.env.HAS_KEY === 'true';
+            const reviewFailed = process.env.REVIEW_FAILED === 'true';
+
             let body;
-            if (fs.existsSync('/tmp/codex-review-output.txt')) {
+            if (!hasKey) {
+              body = fs.existsSync('/tmp/codex-review-status.txt')
+                ? fs.readFileSync('/tmp/codex-review-status.txt', 'utf8')
+                : 'No Codex credentials secret is configured. Codex review did not run for this PR.';
+            } else if (reviewFailed) {
+              body = '**Review did not complete successfully** (command failed, crashed, or timed out — see job logs). This is not a passing review; no findings below should be read as "nothing found."';
+            } else if (fs.existsSync('/tmp/codex-review-output.txt')) {
               body = fs.readFileSync('/tmp/codex-review-output.txt', 'utf8');
-            } else if (fs.existsSync('/tmp/codex-review-status.txt')) {
-              body = fs.readFileSync('/tmp/codex-review-status.txt', 'utf8');
             } else {
-              body = 'Codex review did not produce output (command failed or timed out — see job logs).';
+              // Should not happen given the states above, but never claim a
+              // review happened without an output file to back it up.
+              body = 'Codex review status is unknown — no output file was produced and no failure was recorded. Treat as unreviewed.';
             }
+
             if (body.length > 60000) {
               body = body.slice(0, 60000) + '\n\n...(truncated)';
             }
