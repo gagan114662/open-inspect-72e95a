@@ -52,6 +52,21 @@ parse_findings_mod = _load_sibling_module("parse_review_findings", "parse-review
 detect_mod = _load_sibling_module("detect_recurring_pattern", "detect-recurring-pattern.py")
 
 
+COMPLETED_MARKER = "<!-- codex-review-status: completed -->"
+STATUS_MARKER_PREFIX = "<!-- codex-review-status:"
+
+
+def review_status(comment_text: str) -> str | None:
+    """The workflow's own verdict on whether the review ran to completion:
+    'completed', another status it stamped, or None for a comment that
+    carries no stamp (reviews posted before the stamp existed)."""
+    for line in comment_text.splitlines():
+        line = line.strip()
+        if line.startswith(STATUS_MARKER_PREFIX) and line.endswith("-->"):
+            return line[len(STATUS_MARKER_PREFIX) : -3].strip()
+    return None
+
+
 def already_processed(archive_entries: list[dict], source_sha: str) -> bool:
     return any(entry.get("source_sha") == source_sha for entry in archive_entries)
 
@@ -105,11 +120,41 @@ def main(argv: list[str]) -> int:
     with open(args.review_comment_path) as f:
         comment_text = f.read()
     findings = parse_findings_mod.parse_findings(comment_text)
+    status = review_status(comment_text)
 
     # A clean review is still a completed round under the current policy:
     # dropping it would mean a policy that eliminates findings can never
     # accumulate the rounds needed to be judged (Codex review of PR #10,
-    # round 32).
+    # round 32). But only a review the workflow stamped as completed counts:
+    # a crash, timeout or missing-credentials comment also has no findings,
+    # must not consume the round's SHA (a retry's findings would then be
+    # dropped as already processed) and must not advance a policy's
+    # evaluation period (round 33).
+    if status is not None and status != "completed":
+        print(
+            json.dumps(
+                {
+                    "already_processed": False,
+                    "round": None,
+                    "newly_crossed": [],
+                    "skipped": f"review status {status!r}",
+                }
+            )
+        )
+        return 0
+    if not findings and status != "completed":
+        print(
+            json.dumps(
+                {
+                    "already_processed": False,
+                    "round": None,
+                    "newly_crossed": [],
+                    "skipped": "no findings and no completion stamp",
+                }
+            )
+        )
+        return 0
+
     newly_crossed = analyze_mod.find_newly_crossed_topics(archive_entries, findings, threshold)
     entry = build_round_entry(archive_entries, findings, args.source_sha, args.target)
     append_entry(args.archive_path, entry)

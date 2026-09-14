@@ -1036,3 +1036,33 @@ def test_candidate_anchor_reaches_an_older_definition_of_a_reused_name():
     }
     assert revise.candidate_anchor(current, new_policy) == {"archive-branch": 1}
     assert revise.candidate_anchor(current, old_policy) == {"archive-branch": 4}
+
+
+def test_candidate_anchor_never_borrows_a_count_from_another_definition():
+    # The current policy uses the OLD definition, so its measured anchor is
+    # the old count (4). A candidate that re-defines the name must be judged
+    # on the evidence searched with its own words (1), not on the current
+    # policy's count overlaid onto the plain name (Codex, round 33).
+    old_policy = policy_mod.builtin_policy()
+    old_policy["topics"]["archive-branch"] = {"keywords": ["archive", "branch"], "weight": 1.0}
+    new_policy = policy_mod.builtin_policy()
+    new_policy["topics"]["archive-branch"] = {"keywords": ["archive", "commit"], "weight": 1.0}
+    unrelated = policy_mod.builtin_policy()
+    unrelated["topics"]["archive-branch"] = {"keywords": ["never", "searched"], "weight": 1.0}
+    current = {
+        "anchor": {"archive-branch": 4},
+        "anchor_evidence": {"archive-branch": 1, "archive-branch@old": 4, "retired-topic": 2},
+        "anchor_definitions": {
+            "archive-branch": ["archive", "commit"],
+            "archive-branch@old": ["archive", "branch"],
+            "retired-topic": ["retired"],
+        },
+    }
+    assert revise.candidate_anchor(current, old_policy)["archive-branch"] == 4
+    assert revise.candidate_anchor(current, new_policy)["archive-branch"] == 1
+    assert revise.candidate_anchor(current, unrelated)["archive-branch"] is None
+    # Evidence for a topic no candidate defines is still carried, so it can
+    # block re-mining; variant keys are not exposed as topics.
+    result = revise.candidate_anchor(current, new_policy)
+    assert result["retired-topic"] == 2
+    assert "archive-branch@old" not in result

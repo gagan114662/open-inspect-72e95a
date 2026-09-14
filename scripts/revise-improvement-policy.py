@@ -419,33 +419,42 @@ def weight_repair(
 
 
 def candidate_anchor(current: dict, policy: dict) -> dict | None:
-    """Anchor counts for judging a specific policy: the measured topics plus
-    every other topic the evidence searched, but only where the evidence's
-    recorded keyword definition matches this policy's keywords. A topic
-    re-mined with different keywords is unknown until the evidence is
-    refreshed (Codex review of PR #10, rounds 9 and 12)."""
+    """Anchor counts for judging a specific policy: every topic the evidence
+    searched, with each of this policy's topics resolved to the evidence
+    searched under exactly its own keyword definition (plain name or a
+    `name@tag` variant kept for an older definition). A topic whose
+    definition was never searched is unknown, never borrowed from another
+    definition of the same name (Codex review of PR #10, rounds 9, 12, 18,
+    32 and 33)."""
     anchor = current.get("anchor")
     if anchor is None:
         return None
-    # Start from the evidence-wide counts and overlay only the current
-    # policy's KNOWN counts: a None caused by the current policy's own
-    # definition mismatch must not erase a count an ancestor with the
-    # matching definition is entitled to (Codex review of PR #10, round 18).
-    merged = dict(current.get("anchor_evidence") or {})
-    for topic, count in anchor.items():
-        if count is not None or topic not in merged:
-            merged[topic] = count
+    evidence = current.get("anchor_evidence")
     definitions = current.get("anchor_definitions") or {}
     keywords = policy_mod.topic_keywords(policy)
+    if evidence is None:
+        # A measurement without evidence-wide counts (older format): only
+        # the measured topics are known, and only where definitions match.
+        return {
+            topic: (
+                count
+                if topic not in keywords
+                or list(definitions.get(topic, [])) == list(keywords[topic])
+                else None
+            )
+            for topic, count in anchor.items()
+        }
     result: dict[str, int | None] = {}
-    for topic, count in merged.items():
-        if "@" in topic:
-            continue  # older definitions are reached through resolve_evidence_key
-        if topic in keywords and list(definitions.get(topic, [])) != list(keywords[topic]):
-            key = measure_mod.resolve_evidence_key(definitions, topic, list(keywords[topic]))
-            result[topic] = merged.get(key) if key else None
-        else:
-            result[topic] = count
+    for topic, count in evidence.items():
+        if "@" in topic or topic in keywords:
+            continue
+        result[topic] = count  # a topic this policy does not define keeps its evidence
+    searched_names = {key.split("@")[0] for key in evidence}
+    for topic, words in keywords.items():
+        if topic not in searched_names:
+            continue  # never searched under any definition: not part of the anchor
+        key = measure_mod.resolve_evidence_key(definitions, topic, list(words))
+        result[topic] = evidence.get(key) if key is not None else None
     return result
 
 
