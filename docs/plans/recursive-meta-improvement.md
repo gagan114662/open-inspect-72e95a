@@ -87,12 +87,16 @@ should fail the suite, not wait for a reviewer.
    undated traces in historical epochs are _unknown_, never zero.
 3. **Evidence outlives the topic.** Refreshes keep searching every topic any recorded policy version
    ever had, and candidates are judged against the evidence-wide counts, so a rolled-back topic
-   keeps the adverse evidence that stops it being re-mined on the same archive and snapshot.
+   keeps the adverse evidence that stops it being re-mined on the same archive and snapshot. A name
+   reused with different keywords keeps every definition (older ones under `name@tag` keys), and
+   each policy version is judged on the evidence searched with its own keywords.
 4. **Measurements are pinned.** A decision refuses a measurement whose policy hash or archive digest
    differs from what it is deciding on; topic order is part of the hash.
 5. **Rounds are stamped.** Each archived round records the policy version and hash that decided it;
    a revision is judged only on rounds stamped with its own version and hash, and no further
-   revision is layered on one that has not yet run for `MIN_ROUNDS_TO_JUDGE` rounds.
+   revision is layered on one that has not yet run for `MIN_ROUNDS_TO_JUDGE` rounds. Clean reviews
+   are archived as rounds with no findings, so a policy that eliminates findings still accumulates
+   the rounds needed to judge it.
 6. **Ancestry is followed through rollbacks.** Rollback compares the current policy with every
    unjudged ancestor, following a rollback to the ancestry of the version it restored, and rolls
    back to the best-scoring ancestor; the recorded coverage is the restored policy's own.
