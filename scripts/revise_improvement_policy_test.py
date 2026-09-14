@@ -600,6 +600,72 @@ def test_out_json_may_not_target_a_protected_or_input_file(tmp_path):
             )
 
 
+def test_mined_topic_names_never_collide_with_existing_topics():
+    keywords = {
+        **policy_mod.topic_keywords(policy_mod.builtin_policy()),
+        "archive-concurrency": ["zzz"],
+        "archive-concurrency-2": ["yyy"],
+    }
+    unclassified = [
+        {"round": 1, "finding": "Archive queue drops rounds under concurrency."},
+        {"round": 2, "finding": "Concurrency group cancels the archive run."},
+    ]
+    mined = revise.mine_topics(unclassified, keywords)
+    assert mined and mined[0]["name"] not in keywords
+    assert mined[0]["name"] == "archive-concurrency-3"
+
+
+def test_late_evidence_rolls_back_past_an_unjudged_parent_to_the_better_ancestor():
+    v1 = _four_topic_policy([1, 1, 1, 1])
+    v2 = policy_mod.new_version(
+        v1,
+        topics=_four_topic_policy([0.25, 1, 1, 1])["topics"],
+        threshold=3,
+        origin="revision",
+        rationale="bad weights, no anchor at the time",
+        created_at="2026-09-14T13:00:00Z",
+    )
+    v3 = policy_mod.new_version(
+        v2,
+        topics={**v2["topics"], "archive-ops": {"keywords": ["archive"], "weight": 1.0}},
+        threshold=3,
+        origin="revision",
+        rationale="coverage repair",
+        created_at="2026-09-14T13:30:00Z",
+    )
+    history = [
+        {"version": 1, "policy": v1},
+        {
+            "version": 2,
+            "parent": 1,
+            "origin": "revision",
+            "coverage_before": 1.0,
+            "validity_before": None,
+            "policy": v2,
+        },
+        {
+            "version": 3,
+            "parent": 2,
+            "origin": "revision",
+            "coverage_before": 1.0,
+            "validity_before": None,
+            "policy": v3,
+        },
+    ]
+    evidence = _four_topic_evidence(
+        [3, 1, 2, 0]
+    )  # the field strongly supports credential-redaction
+    stamped = [
+        {**e, "policy_hash": policy_mod.policy_hash(v3), "policy_version": 3}
+        for e in _four_topic_archive()
+    ]
+    measurement = measure.measure(stamped, v3, evidence)
+    decision = revise.decide(stamped, v3, history, measurement, NOW)
+    assert decision["action"] == "rollback"
+    assert "against v1" in decision["reason"]
+    assert decision["policy"]["topics"]["credential-redaction"]["weight"] == 1.0
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))

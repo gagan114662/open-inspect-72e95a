@@ -271,9 +271,15 @@ def mine_topics(
         ]
         if len(covering) < MIN_FINDINGS_PER_TOPIC:
             break
-        name = "-".join(topic_keywords[:2]) if companions else head
-        if name in keywords or any(m["name"] == name for m in mined):
-            name = f"{name}-{len(mined) + 1}"
+        base = "-".join(topic_keywords[:2]) if companions else head
+        taken_names = set(keywords) | {m["name"] for m in mined}
+        name = base
+        suffix = 1
+        while name in taken_names:
+            # Never reuse a name: an overwritten topic would silently drop
+            # its classifications (Codex review of PR #10, round 14).
+            suffix += 1
+            name = f"{base}-{suffix}"
         mined.append(
             {
                 "name": name,
@@ -420,6 +426,27 @@ def rejected_configuration(candidate: dict, history: list[dict], measurement: di
     return None
 
 
+def unjudged_ancestors(policy: dict, history: list[dict]) -> list[dict]:
+    """Snapshots of the revisions this policy descends from, nearest first,
+    up to and including the first ancestor that is not itself a revision.
+    Later evidence must be able to expose a harmful ancestor that a newer
+    revision was layered on before validity could be measured (Codex review
+    of PR #10, round 14)."""
+    chain: list[dict] = []
+    version = policy.get("parent")
+    seen: set[int] = set()
+    while isinstance(version, int) and version not in seen:
+        seen.add(version)
+        snapshot = snapshot_for_version(version, history)
+        if snapshot is None:
+            break
+        chain.append(snapshot)
+        if snapshot.get("origin") != "revision":
+            break
+        version = snapshot.get("parent")
+    return chain
+
+
 def rounds_under(entries: list[dict], policy: dict) -> int:
     """Rounds decided under this exact policy: archive-round.py stamps each
     round with the policy hash in force when it was archived. Rounds from
@@ -490,37 +517,47 @@ def decide(
                 # PR #10, round 7).
                 covered = entries_covered_by_evidence(entries, measurement)
                 child_validity = validity_under(policy, covered, candidate_anchor(current, policy))
-                parent_validity = validity_under(parent, covered, candidate_anchor(current, parent))
                 worse_coverage = parent_now is not None and coverage < parent_now
-                worse_validity = parent_validity is not None and (
-                    child_validity is None or child_validity < parent_validity
+                # Compare against every ancestor in the unjudged chain, not
+                # only the parent: the best-scoring ancestor is the rollback
+                # target when the current policy is worse than any of them.
+                best: dict | None = None
+                best_validity: float | None = None
+                for ancestor in unjudged_ancestors(policy, history):
+                    v = validity_under(ancestor, covered, candidate_anchor(current, ancestor))
+                    if v is not None and (best_validity is None or v > best_validity):
+                        best, best_validity = ancestor, v
+                worse_validity = best_validity is not None and (
+                    child_validity is None or child_validity < best_validity
                 )
                 if worse_coverage or worse_validity:
+                    target = parent if worse_coverage else best
+                    assert target is not None
                     what = (
                         f"coverage {coverage} vs {parent_now}"
                         if worse_coverage
-                        else f"validity {child_validity} vs {parent_validity}"
+                        else f"validity {child_validity} vs {best_validity}"
                     )
                     return {
                         "action": "rollback",
                         "reason": (
                             f"on the same {current['findings_total']} findings and anchor, "
-                            f"v{policy['version']} scores {what} against its parent v{policy['parent']}"
+                            f"v{policy['version']} scores {what} against v{target['version']}"
                         ),
                         "policy": policy_mod.new_version(
                             policy,
-                            topics=parent["topics"],
-                            threshold=parent["threshold"],
+                            topics=target["topics"],
+                            threshold=target["threshold"],
                             origin="rollback",
-                            rationale=f"Rollback to v{policy['parent']}: revision v{policy['version']} scored worse ({what}).",
+                            rationale=f"Rollback to v{target['version']}: revision v{policy['version']} scored worse ({what}).",
                             created_at=now,
                         ),
                         "coverage_before": coverage,
-                        "coverage_after": parent_now,
+                        "coverage_after": parent_now if worse_coverage else coverage,
                         "validity_before": child_validity,
-                        "validity_after": parent_validity,
+                        "validity_after": best_validity if not worse_coverage else None,
                         "changes": [
-                            f"restored taxonomy, weights and threshold of v{policy['parent']}"
+                            f"restored taxonomy, weights and threshold of v{target['version']}"
                         ],
                     }
 
@@ -631,6 +668,13 @@ def decide(
             "rejected_changes": changes,
         }
     after = measure_mod.measure(entries, revised, None)["current"]
+    if coverage is not None and after["coverage"] is not None and after["coverage"] < coverage:
+        return {
+            "action": "none",
+            "reason": f"candidate revision would lower coverage {coverage} -> {after['coverage']}; refused",
+            "triggers": triggers,
+            "rejected_changes": changes,
+        }
     return {
         "action": "revise",
         "reason": "; ".join(triggers),
