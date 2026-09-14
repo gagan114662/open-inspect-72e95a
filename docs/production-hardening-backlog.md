@@ -701,6 +701,14 @@ authorize infrastructure changes on the account owner's behalf.
       recurrence threshold — deliberately limited to that one action; it never merges, deploys, or
       touches secrets). `CODEX_AUTH_JSON` is already configured as a repo secret, so this activates
       on this exact PR — the first review this workflow runs unattended, with no manual invocation.
+- [ ] Evidence sources broadened beyond PR diffs: `scripts/analyze-traces.py`
+      ([PR #7](https://github.com/gagan114662/open-inspect-72e95a/pull/7)) searches actual agent
+      session traces (via traces.com) for the same recurring-topic taxonomy, catching struggles a
+      clean final diff never shows. Git hooks (`traces setup git`) and agent hooks
+      (`traces setup agents --hooks`) installed locally so future sessions/commits in this repo
+      auto-publish and link traces via git notes. `TRACES_API_KEY` (scope `traces:read`) added as a
+      repo secret. CI wiring (reading git-notes-linked traces per PR, feeding results into the
+      archive) not yet built — local tooling only so far.
 
 ### Capabilities
 
