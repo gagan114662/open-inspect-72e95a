@@ -163,6 +163,7 @@ def new_version(
     origin: str,
     rationale: str,
     created_at: str | None = None,
+    restored_version: int | None = None,
 ) -> dict:
     if origin not in {"revision", "rollback"}:
         raise ValueError("origin must be 'revision' or 'rollback'")
@@ -175,6 +176,10 @@ def new_version(
         "topics": topics,
         "rationale": rationale,
     }
+    if origin == "rollback":
+        # Which version's configuration this restores, so ancestry checks can
+        # continue through it (Codex review of PR #10, round 17).
+        policy["restored_version"] = restored_version
     validate_policy(policy)
     return policy
 

@@ -352,14 +352,17 @@ def render(
         for finding in rnd["findings"]:
             t1 = policy_mod.classify_finding(finding, kw_v1)
             t2 = policy_mod.classify_finding(finding, kw_now)
-            hits = 0
-            if evidence and t2:
-                hits = len(evidence.get("topics", {}).get(t2, []))
+            # Validated counts only: definition mismatches, truncation and
+            # unsearched topics read as n/a, never as zero (Codex review of
+            # PR #10, round 17).
+            hits: object = "n/a"
+            if t2 and cur["anchor"] is not None and cur["anchor"].get(t2) is not None:
+                hits = cur["anchor"][t2]
             newly = t1 is None and t2 is not None
             cls = ' class="newly"' if newly else ""
             rows_findings.append(
                 f"<tr{cls}><td>r{rnd['round']}</td><td>{esc(finding[:140])}</td><td>{esc(t1 or '— (blind spot)')}</td>"
-                f"<td>{esc(t2 or '— (blind spot)')}</td><td>{hits}</td></tr>"
+                f"<td>{esc(t2 or '— (blind spot)')}</td><td>{esc(hits)}</td></tr>"
             )
 
     rows_topics = []

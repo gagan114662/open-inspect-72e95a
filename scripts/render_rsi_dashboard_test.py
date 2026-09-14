@@ -79,6 +79,7 @@ def test_renders_every_section_from_real_shapes(tmp_path):
             {
                 "source": "traces",
                 "agents": ["claude-code"],
+                "definitions": {"archive-ops": ["archive"]},
                 "topics": {"archive-ops": [{"id": "t1", "agentId": "claude-code", "timestamp": 1}]},
             }
         )
@@ -104,6 +105,9 @@ def test_renders_every_section_from_real_shapes(tmp_path):
         == 0
     )
     page = out.read_text()
+    # Field-trace column shows validated counts; the archive-ops topic was searched (1 trace),
+    # credential-redaction was not searched in this evidence file, so it reads n/a.
+    assert "<td>1</td></tr>" in page and "<td>n/a</td></tr>" in page
     for needle in (
         "Level 5: recursive meta-improvement",
         "Autonomy matrix",

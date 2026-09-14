@@ -427,24 +427,40 @@ def rejected_configuration(candidate: dict, history: list[dict], measurement: di
 
 
 def unjudged_ancestors(policy: dict, history: list[dict]) -> list[dict]:
-    """Snapshots of the revisions this policy descends from, nearest first,
-    up to and including the first ancestor that is not itself a revision.
-    Later evidence must be able to expose a harmful ancestor that a newer
-    revision was layered on before validity could be measured (Codex review
-    of PR #10, round 14)."""
+    """Snapshots this policy descends from, nearest first, following a
+    rollback through to the ancestry of the configuration it restored, up to
+    and including the first non-revision ancestor. Later evidence must be
+    able to expose a harmful ancestor that a newer revision or a rollback
+    was layered on before validity could be measured (Codex review of
+    PR #10, rounds 14 and 17)."""
     chain: list[dict] = []
-    version = policy.get("parent")
     seen: set[int] = set()
+    version = judged_from(policy, history)
     while isinstance(version, int) and version not in seen:
         seen.add(version)
         snapshot = snapshot_for_version(version, history)
         if snapshot is None:
             break
         chain.append(snapshot)
+        if snapshot.get("origin") == "rollback":
+            version = judged_from(snapshot, history)
+            continue
         if snapshot.get("origin") != "revision":
             break
         version = snapshot.get("parent")
     return chain
+
+
+def judged_from(policy: dict, history: list[dict]) -> int | None:
+    """Version whose ancestry a policy continues: the parent for a revision;
+    for a rollback, the parent of the restored version."""
+    if policy.get("origin") == "rollback":
+        restored = policy.get("restored_version")
+        snapshot = snapshot_for_version(restored, history) if isinstance(restored, int) else None
+        if snapshot is None:
+            return None
+        return snapshot.get("parent")
+    return policy.get("parent")
 
 
 def rounds_under(entries: list[dict], policy: dict) -> int:
@@ -505,10 +521,11 @@ def decide(
     #    the parent's historical number would punish a revision merely for
     #    being alive when unfamiliar findings arrived (Codex review of
     #    PR #10, finding 1).
-    if policy.get("origin") == "revision" and policy.get("parent") is not None:
+    base_version = judged_from(policy, history)
+    if policy.get("origin") in {"revision", "rollback"} and base_version is not None:
         adopted = adoption_entry(policy["version"], history)
         if adopted is not None and rounds_under(entries, policy) >= MIN_ROUNDS_TO_JUDGE:
-            parent = snapshot_for_version(policy["parent"], history)
+            parent = snapshot_for_version(base_version, history)
             if parent is not None and coverage is not None:
                 parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
                 # Validity is judged only on rounds the evidence snapshot could
@@ -554,8 +571,9 @@ def decide(
                             topics=target["topics"],
                             threshold=target["threshold"],
                             origin="rollback",
-                            rationale=f"Rollback to v{target['version']}: revision v{policy['version']} scored worse ({what}).",
+                            rationale=f"Rollback to v{target['version']}: v{policy['version']} scored worse ({what}).",
                             created_at=now,
+                            restored_version=target["version"],
                         ),
                         "coverage_before": coverage,
                         "coverage_after": target_coverage,
@@ -571,7 +589,7 @@ def decide(
     # introduced against ITS parent could never be rolled back (Codex review
     # of PR #10, round 6). Wait until MIN_ROUNDS_TO_JUDGE rounds have run
     # under it; the rollback check above already covered the judged case.
-    if policy.get("origin") == "revision" and policy.get("parent") is not None:
+    if policy.get("origin") in {"revision", "rollback"} and base_version is not None:
         under = rounds_under(entries, policy)
         if under < MIN_ROUNDS_TO_JUDGE:
             return {

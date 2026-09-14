@@ -696,6 +696,58 @@ def test_report_outputs_may_not_overwrite_canonical_evidence(tmp_path):
     policy_mod.assert_safe_output(canonical, kind="evidence")
 
 
+def test_ancestry_continues_through_a_rollback():
+    v1 = _four_topic_policy([1, 1, 1, 1])
+    v2 = policy_mod.new_version(
+        v1,
+        topics=_four_topic_policy([0.25, 1, 1, 1])["topics"],
+        threshold=3,
+        origin="revision",
+        rationale="bad weights",
+        created_at="2026-09-14T13:00:00Z",
+    )
+    v3 = policy_mod.new_version(
+        v2,
+        topics={**v2["topics"], "archive-ops": {"keywords": ["archive"], "weight": 1.0}},
+        threshold=3,
+        origin="revision",
+        rationale="add topic",
+        created_at="2026-09-14T13:30:00Z",
+    )
+    v4 = policy_mod.new_version(
+        v3,
+        topics=v2["topics"],
+        threshold=3,
+        origin="rollback",
+        rationale="undo v3",
+        created_at="2026-09-14T13:45:00Z",
+        restored_version=2,
+    )
+    history = [
+        {"version": 1, "policy": v1},
+        {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": v2},
+        {"version": 3, "parent": 2, "origin": "revision", "coverage_before": 1.0, "policy": v3},
+        {
+            "version": 4,
+            "parent": 3,
+            "origin": "rollback",
+            "coverage_before": 1.0,
+            "replaced_policy_hash": policy_mod.policy_hash(v3),
+            "policy": v4,
+        },
+    ]
+    assert [a["version"] for a in revise.unjudged_ancestors(v4, history)] == [1]
+    evidence = _four_topic_evidence([3, 1, 2, 0])
+    stamped = [
+        {**e, "policy_hash": policy_mod.policy_hash(v4), "policy_version": 4}
+        for e in _four_topic_archive()
+    ]
+    decision = revise.decide(stamped, v4, history, measure.measure(stamped, v4, evidence), NOW)
+    assert decision["action"] == "rollback"
+    assert "against v1" in decision["reason"]
+    assert decision["policy"]["restored_version"] == 1
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))
