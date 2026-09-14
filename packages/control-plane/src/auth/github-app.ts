@@ -111,6 +111,65 @@ const installationTokenResponseSchema = z
 /** GitHub installation token response. */
 type InstallationTokenResponse = z.infer<typeof installationTokenResponseSchema>;
 
+/**
+ * Response schema for a *scoped* mint — additionally captures the
+ * `permissions`/`repositories` GitHub actually granted, so the caller can
+ * verify it never exceeds what was requested (see
+ * {@link assertGrantNotBroaderThanRequested}). GitHub is expected to echo
+ * these back whenever the request itself included them.
+ */
+const scopedInstallationTokenResponseSchema = z
+  .object({
+    token: z.string(),
+    expires_at: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+    permissions: z.record(z.string(), z.string()),
+    repositories: z.array(z.object({ name: z.string() })),
+  })
+  .transform(({ token, expires_at, permissions, repositories }) => ({
+    token,
+    expiresAtEpochMs: Date.parse(expires_at),
+    permissions,
+    repositoryNames: repositories.map((r) => r.name),
+  }));
+
+/**
+ * Defense in depth against a GitHub API bug or behavior change silently
+ * handing back a broader grant than was requested: a scoped mint's response
+ * must name exactly the requested permission keys/values and exactly the
+ * requested repositories — nothing extra, nothing missing. This never
+ * triggers under GitHub's documented, correct behavior; it exists to fail
+ * loudly rather than silently widen a sandbox-bound credential if that
+ * assumption is ever wrong.
+ */
+function assertGrantNotBroaderThanRequested(
+  granted: { permissions: Record<string, string>; repositoryNames: string[] },
+  requested: { permissions: Record<string, string>; repositories: string[] }
+): void {
+  const grantedPermEntries = Object.entries(granted.permissions);
+  const requestedPermEntries = Object.entries(requested.permissions);
+  const permissionsMatch =
+    grantedPermEntries.length === requestedPermEntries.length &&
+    grantedPermEntries.every(([key, value]) => requested.permissions[key] === value);
+  if (!permissionsMatch) {
+    throw new Error(
+      `Scoped installation token grant does not match the requested permissions: ` +
+        `requested ${JSON.stringify(requested.permissions)}, granted ${JSON.stringify(granted.permissions)}`
+    );
+  }
+
+  const grantedRepos = new Set(granted.repositoryNames);
+  const requestedRepos = new Set(requested.repositories);
+  const reposMatch =
+    grantedRepos.size === requestedRepos.size &&
+    [...requestedRepos].every((name) => grantedRepos.has(name));
+  if (!reposMatch) {
+    throw new Error(
+      `Scoped installation token grant does not match the requested repositories: ` +
+        `requested [${requested.repositories.join(", ")}], granted [${granted.repositoryNames.join(", ")}]`
+    );
+  }
+}
+
 const installationRepositorySchema = z.object({
   id: z.number(),
   name: z.string(),
@@ -285,6 +344,106 @@ async function getInstallationTokenWithMetadata(
     throw new Error("Failed to get installation token: invalid response");
   }
   return parsed.data;
+}
+
+/**
+ * Exchange JWT for an installation access token narrowed to a set of
+ * repositories and a minimal permission set.
+ *
+ * Used exclusively for credentials that reach a sandbox (git credential
+ * helper, gh CLI wrapper, image-build clone) — never for the control
+ * plane's own server-side GitHub API calls (PR creation, labeling, review
+ * submission), which legitimately need the App's full grant and keep using
+ * {@link getCachedInstallationToken}.
+ */
+async function getScopedInstallationTokenWithMetadata(
+  jwt: string,
+  installationId: string,
+  userAgent: string,
+  repositories: string[],
+  permissions: Record<string, string>
+): Promise<InstallationTokenResponse> {
+  const url = `https://api.github.com/app/installations/${installationId}/access_tokens`;
+
+  const response = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": userAgent,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ repositories, permissions }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw Object.assign(
+      new Error(`Failed to get scoped installation token: ${response.status} ${error}`),
+      { status: response.status }
+    );
+  }
+
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new Error("Failed to get scoped installation token: invalid response");
+  }
+
+  const parsed = scopedInstallationTokenResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error("Failed to get scoped installation token: invalid response");
+  }
+  assertGrantNotBroaderThanRequested(parsed.data, { permissions, repositories });
+  return { token: parsed.data.token, expiresAtEpochMs: parsed.data.expiresAtEpochMs };
+}
+
+/** Default permission set for sandbox-reachable credentials: git push only. */
+export const SANDBOX_SCOPED_PERMISSIONS: Record<string, string> = {
+  contents: "write",
+  metadata: "read",
+};
+
+/**
+ * Mint a fresh installation token scoped to a set of repositories and a
+ * minimal permission set (default: `contents:write` + `metadata:read` —
+ * enough for git clone/fetch/push, nothing else).
+ *
+ * Intentionally uncached and never falls back to the full-grant token on
+ * failure: a rejected narrowing request must propagate as an error so the
+ * caller denies the credential rather than silently widening its scope.
+ * Every mint hits GitHub fresh, trading a small amount of latency for the
+ * guarantee that a scoped-credential caller can never receive a broader
+ * grant than requested.
+ *
+ * Fails closed on malformed input rather than silently minting a broader
+ * grant: an empty `repoNames` array, or an empty `permissions` object,
+ * would each cause GitHub's API to omit the corresponding narrowing field
+ * and return the installation's full, unnarrowed permission set — so both
+ * are rejected here before any request is made.
+ */
+export async function getScopedInstallationTokenWithExpiry(
+  config: GitHubAppConfig,
+  repoNames: string[],
+  env?: InstallationTokenCacheBindings,
+  permissions: Record<string, string> = SANDBOX_SCOPED_PERMISSIONS
+): Promise<{ token: string; expiresAtEpochMs: number }> {
+  if (repoNames.length === 0) {
+    throw new Error("Cannot mint a scoped installation token with no repositories");
+  }
+  if (Object.keys(permissions).length === 0) {
+    throw new Error("Cannot mint a scoped installation token with no permissions");
+  }
+  const jwt = await generateAppJwt(config.appId, config.privateKey);
+  return getScopedInstallationTokenWithMetadata(
+    jwt,
+    config.installationId,
+    resolveUserAgent(env),
+    repoNames,
+    permissions
+  );
 }
 
 function getInstallationTokenCacheKey(config: GitHubAppConfig): string {

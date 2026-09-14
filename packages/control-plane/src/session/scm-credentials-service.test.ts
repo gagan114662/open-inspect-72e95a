@@ -36,7 +36,9 @@ describe("ScmCredentialsService", () => {
       }),
     });
 
-    const result = await new ScmCredentialsService(provider, createTestLogger()).getCredentials();
+    const result = await new ScmCredentialsService(provider, createTestLogger()).getCredentials([
+      { owner: "acme", name: "repo" },
+    ]);
 
     expect(result).toEqual({
       ok: true,
@@ -56,7 +58,9 @@ describe("ScmCredentialsService", () => {
       }),
     });
 
-    const result = await new ScmCredentialsService(provider, log).getCredentials();
+    const result = await new ScmCredentialsService(provider, log).getCredentials([
+      { owner: "acme", name: "repo" },
+    ]);
 
     expect(result).toEqual({
       ok: false,
@@ -78,7 +82,9 @@ describe("ScmCredentialsService", () => {
       }),
     });
 
-    const result = await new ScmCredentialsService(provider, createTestLogger()).getCredentials();
+    const result = await new ScmCredentialsService(provider, createTestLogger()).getCredentials([
+      { owner: "acme", name: "repo" },
+    ]);
 
     expect(result).toEqual({
       ok: false,
@@ -96,7 +102,9 @@ describe("ScmCredentialsService", () => {
         .mockRejectedValue(new SourceControlProviderError("App not configured", "permanent")),
     });
 
-    const result = await new ScmCredentialsService(provider, log).getCredentials();
+    const result = await new ScmCredentialsService(provider, log).getCredentials([
+      { owner: "acme", name: "repo" },
+    ]);
 
     expect(result).toEqual({
       ok: false,
@@ -120,7 +128,9 @@ describe("ScmCredentialsService", () => {
         .mockRejectedValue(new SourceControlProviderError("GitHub API unavailable", "transient")),
     });
 
-    const result = await new ScmCredentialsService(provider, createTestLogger()).getCredentials();
+    const result = await new ScmCredentialsService(provider, createTestLogger()).getCredentials([
+      { owner: "acme", name: "repo" },
+    ]);
 
     expect(result).toEqual({ ok: false, status: 502, error: "GitHub API unavailable" });
   });
@@ -131,7 +141,9 @@ describe("ScmCredentialsService", () => {
       generateCredentialHelperAuth: vi.fn().mockRejectedValue(new Error("network blew up")),
     });
 
-    const result = await new ScmCredentialsService(provider, log).getCredentials();
+    const result = await new ScmCredentialsService(provider, log).getCredentials([
+      { owner: "acme", name: "repo" },
+    ]);
 
     expect(result).toEqual({
       ok: false,

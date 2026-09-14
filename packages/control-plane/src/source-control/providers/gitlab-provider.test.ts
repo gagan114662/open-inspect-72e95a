@@ -879,7 +879,7 @@ describe("GitLabSourceControlProvider", () => {
       try {
         const provider = new GitLabSourceControlProvider({ accessToken: "glpat-abc123" });
 
-        const auth = await provider.generateCredentialHelperAuth();
+        const auth = await provider.generateCredentialHelperAuth([{ owner: "acme", name: "web" }]);
 
         expect(auth).toEqual({
           username: "oauth2",

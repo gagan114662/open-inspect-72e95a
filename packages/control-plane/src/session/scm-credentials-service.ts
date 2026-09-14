@@ -25,9 +25,11 @@ export class ScmCredentialsService {
     private readonly log: Logger
   ) {}
 
-  async getCredentials(): Promise<ScmCredentialsResult> {
+  async getCredentials(
+    repos: Array<{ owner: string; name: string }>
+  ): Promise<ScmCredentialsResult> {
     try {
-      const auth = await this.provider.generateCredentialHelperAuth();
+      const auth = await this.provider.generateCredentialHelperAuth(repos);
       if (
         !auth.username.trim() ||
         !auth.password.trim() ||

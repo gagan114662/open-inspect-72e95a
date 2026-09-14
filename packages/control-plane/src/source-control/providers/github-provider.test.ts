@@ -6,6 +6,7 @@ import { SourceControlProviderError } from "../errors";
 vi.mock("../../auth/github-app", () => ({
   getCachedInstallationToken: vi.fn(),
   getCachedInstallationTokenWithExpiry: vi.fn(),
+  getScopedInstallationTokenWithExpiry: vi.fn(),
   getInstallationRepository: vi.fn(),
   listInstallationRepositories: vi.fn(),
   fetchWithTimeout: vi.fn(),
@@ -15,6 +16,7 @@ import {
   fetchWithTimeout,
   getCachedInstallationToken,
   getCachedInstallationTokenWithExpiry,
+  getScopedInstallationTokenWithExpiry,
   getInstallationRepository,
   listInstallationRepositories,
 } from "../../auth/github-app";
@@ -22,6 +24,7 @@ import {
 const mockGetInstallationRepository = vi.mocked(getInstallationRepository);
 const mockListInstallationRepositories = vi.mocked(listInstallationRepositories);
 const mockGetCachedInstallationTokenWithExpiry = vi.mocked(getCachedInstallationTokenWithExpiry);
+const mockGetScopedInstallationTokenWithExpiry = vi.mocked(getScopedInstallationTokenWithExpiry);
 const mockGetCachedInstallationToken = vi.mocked(getCachedInstallationToken);
 const mockFetchWithTimeout = vi.mocked(fetchWithTimeout);
 
@@ -459,52 +462,105 @@ describe("GitHubSourceControlProvider", () => {
   describe("generateCredentialHelperAuth", () => {
     it("throws a permanent error when the App is not configured", async () => {
       const provider = new GitHubSourceControlProvider();
-      const err = await provider.generateCredentialHelperAuth().catch((e: unknown) => e);
+      const err = await provider
+        .generateCredentialHelperAuth([{ owner: "acme", name: "web" }])
+        .catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(SourceControlProviderError);
       expect((err as SourceControlProviderError).errorType).toBe("permanent");
       expect((err as SourceControlProviderError).message).toMatch(/not configured/i);
     });
 
-    it("forwards a fresh installation token with its expiry and x-access-token username", async () => {
+    it("throws a permanent error when no repository is given", async () => {
+      const provider = new GitHubSourceControlProvider({ appConfig: fakeAppConfig });
+      const err = await provider.generateCredentialHelperAuth([]).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(SourceControlProviderError);
+      expect((err as SourceControlProviderError).errorType).toBe("permanent");
+      expect((err as SourceControlProviderError).message).toMatch(/without a repository/i);
+      expect(mockGetScopedInstallationTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
+    it("throws a permanent error when every given repository name is blank", async () => {
+      const provider = new GitHubSourceControlProvider({ appConfig: fakeAppConfig });
+      const err = await provider
+        .generateCredentialHelperAuth([{ owner: "acme", name: "" }])
+        .catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(SourceControlProviderError);
+      expect((err as SourceControlProviderError).message).toMatch(/without a repository/i);
+      expect(mockGetScopedInstallationTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
+    it("forwards a fresh, repo-scoped installation token with its expiry and x-access-token username", async () => {
       const expiresAtEpochMs = Date.now() + 60 * 60 * 1000;
-      mockGetCachedInstallationTokenWithExpiry.mockResolvedValueOnce({
-        token: "ghs_fresh",
+      mockGetScopedInstallationTokenWithExpiry.mockResolvedValueOnce({
+        token: "ghs_scoped",
         expiresAtEpochMs,
       });
 
       const provider = new GitHubSourceControlProvider({ appConfig: fakeAppConfig });
-      const auth = await provider.generateCredentialHelperAuth();
+      const auth = await provider.generateCredentialHelperAuth([{ owner: "acme", name: "web" }]);
 
       expect(auth).toEqual({
         username: "x-access-token",
-        password: "ghs_fresh",
+        password: "ghs_scoped",
         expiresAtEpochMs,
       });
-      expect(mockGetCachedInstallationTokenWithExpiry).toHaveBeenCalledWith(
+      expect(mockGetScopedInstallationTokenWithExpiry).toHaveBeenCalledWith(
         fakeAppConfig,
+        ["web"],
+        expect.objectContaining({ userAgent: expect.any(String) })
+      );
+      // Never falls back to the unnarrowed, full-grant mint.
+      expect(mockGetCachedInstallationTokenWithExpiry).not.toHaveBeenCalled();
+    });
+
+    it("scopes the token to every distinct repository a multi-repo session needs", async () => {
+      const expiresAtEpochMs = Date.now() + 60 * 60 * 1000;
+      mockGetScopedInstallationTokenWithExpiry.mockResolvedValueOnce({
+        token: "ghs_scoped",
+        expiresAtEpochMs,
+      });
+
+      const provider = new GitHubSourceControlProvider({ appConfig: fakeAppConfig });
+      await provider.generateCredentialHelperAuth([
+        { owner: "acme", name: "web" },
+        { owner: "acme", name: "shared-lib" },
+        { owner: "acme", name: "web" }, // duplicate — must be deduped, not sent twice
+      ]);
+
+      expect(mockGetScopedInstallationTokenWithExpiry).toHaveBeenCalledWith(
+        fakeAppConfig,
+        ["web", "shared-lib"],
         expect.objectContaining({ userAgent: expect.any(String) })
       );
     });
 
-    it("wraps upstream errors as SourceControlProviderError", async () => {
-      mockGetCachedInstallationTokenWithExpiry.mockRejectedValueOnce(new Error("GitHub 500"));
+    it("wraps upstream errors as SourceControlProviderError without falling back to the full-grant token", async () => {
+      mockGetScopedInstallationTokenWithExpiry.mockRejectedValueOnce(new Error("GitHub 500"));
 
       const provider = new GitHubSourceControlProvider({ appConfig: fakeAppConfig });
-      const err = await provider.generateCredentialHelperAuth().catch((e: unknown) => e);
+      const err = await provider
+        .generateCredentialHelperAuth([{ owner: "acme", name: "web" }])
+        .catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(SourceControlProviderError);
       expect((err as SourceControlProviderError).message).toContain("GitHub 500");
+      expect(mockGetCachedInstallationTokenWithExpiry).not.toHaveBeenCalled();
     });
 
     it("classifies an upstream 5xx (with .status) as transient", async () => {
-      const httpError = Object.assign(new Error("Failed to get installation token: 500 down"), {
-        status: 500,
-      });
-      mockGetCachedInstallationTokenWithExpiry.mockRejectedValueOnce(httpError);
+      const httpError = Object.assign(
+        new Error("Failed to get scoped installation token: 500 down"),
+        { status: 500 }
+      );
+      mockGetScopedInstallationTokenWithExpiry.mockRejectedValueOnce(httpError);
 
       const provider = new GitHubSourceControlProvider({ appConfig: fakeAppConfig });
-      const err = await provider.generateCredentialHelperAuth().catch((e: unknown) => e);
+      const err = await provider
+        .generateCredentialHelperAuth([{ owner: "acme", name: "web" }])
+        .catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(SourceControlProviderError);
       // Transient → the service maps this to 502, not 500.
