@@ -162,6 +162,22 @@ def topic_pattern(keywords: list[str]) -> str:
     return "|".join(re.escape(k) for k in keywords)
 
 
+def historical_definitions(
+    history: list[dict], keywords: dict[str, list[str]]
+) -> dict[str, list[str]]:
+    """Keyword definitions of every topic any recorded policy version ever
+    had, beyond the current policy's own. A refresh must keep searching
+    them, or a rolled-back topic loses the adverse evidence that stops it
+    being re-mined on the same archive (Codex review of PR #10, round 21)."""
+    extra: dict[str, list[str]] = {}
+    for entry in history:
+        snapshot = entry.get("policy") or {}
+        for name, spec in (snapshot.get("topics") or {}).items():
+            if name not in keywords and isinstance(spec.get("keywords"), list) and spec["keywords"]:
+                extra[name] = list(spec["keywords"])
+    return extra
+
+
 def collect_trace_evidence(
     traces_bin: str,
     repo_dir: str,
@@ -449,6 +465,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--anchor-agents", default=",".join(DEFAULT_ANCHOR_AGENTS))
     parser.add_argument("--traces-bin", default="traces")
     parser.add_argument(
+        "--history",
+        default=str(policy_mod.HISTORY_PATH),
+        help="Policy history; topics from earlier versions are searched too so evidence outlives a rollback",
+    )
+    parser.add_argument(
         "--out-json",
         default=None,
         help="Also write the JSON result to this path (machine-readable output kept apart from the report)",
@@ -484,9 +505,13 @@ def main(argv: list[str]) -> int:
             if args.anchor_agents.strip() == "all"
             else [a.strip() for a in args.anchor_agents.split(",") if a.strip()]
         )
+        search_keywords = dict(policy_mod.topic_keywords(policy))
+        search_keywords.update(
+            historical_definitions(policy_mod.load_history(args.history), search_keywords)
+        )
         try:
             evidence = collect_trace_evidence(
-                args.traces_bin, args.repo_dir, policy_mod.topic_keywords(policy), agents
+                args.traces_bin, args.repo_dir, search_keywords, agents
             )
         except TracesCliError as exc:
             print(f"::error::{exc}", file=sys.stderr)

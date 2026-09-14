@@ -294,3 +294,16 @@ def test_epoch_without_a_timestamp_has_unknown_evidence_not_all_of_it():
     assert first["validity"] is None
     # The current (non-historical) measurement still uses the whole snapshot.
     assert result["current"]["anchor"]["shell-semantics"] == 2
+
+
+def test_evidence_refresh_keeps_searching_topics_from_earlier_policy_versions():
+    current = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    v2 = policy_mod.builtin_policy()
+    v2["topics"]["archive-branch"] = {"keywords": ["archive", "branch"], "weight": 1.0}
+    history = [
+        {"version": 2, "policy": v2},
+        {"version": 3, "origin": "rollback", "policy": policy_mod.builtin_policy()},
+    ]
+    extra = measure.historical_definitions(history, current)
+    assert extra == {"archive-branch": ["archive", "branch"]}
+    assert "credential-redaction" not in extra
