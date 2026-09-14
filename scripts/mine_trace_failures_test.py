@@ -332,3 +332,49 @@ def test_zero_failed_is_not_a_test_failure():
         "output": "Exit code 1\n2 failed, 8 passed",
     }
     assert mine.failure_kind(failing) == "test-failure"
+
+
+def test_retired_topics_count_as_evidence_but_do_not_hide_blind_spots(
+    tmp_path, monkeypatch, capsys
+):
+    # v2 had a "pytest-runs" topic that classified the pytest failure; v3
+    # rolled it back. The failure is fresh field evidence for the retired
+    # definition (so re-mining it is judged on real counts) AND a blind spot
+    # of the current policy (so it can be mined again) (Codex, round 34).
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": _events()}))
+    current = policy_mod.builtin_policy()
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(current))
+    v2 = policy_mod.builtin_policy()
+    v2["topics"]["pytest-runs"] = {"keywords": ["failed"], "weight": 1.0}
+    history = tmp_path / "h.jsonl"
+    history.write_text(
+        json.dumps({"version": 2, "policy": v2})
+        + "\n"
+        + json.dumps({"version": 3, "origin": "rollback", "policy": current})
+        + "\n"
+    )
+    out = tmp_path / "failures.json"
+    evidence = tmp_path / "evidence.json"
+    code = mine.main(
+        [
+            "m",
+            "--repo-dir",
+            "/repo",
+            "--policy",
+            str(policy),
+            "--history",
+            str(history),
+            "--out-json",
+            str(out),
+            "--save-evidence",
+            str(evidence),
+        ]
+    )
+    assert code == 0
+    saved = json.loads(evidence.read_text())
+    assert saved["definitions"]["pytest-runs"] == ["failed"]
+    assert [t["id"] for t in saved["topics"]["pytest-runs"]] == ["t1"]
+    report = json.loads(out.read_text())
+    assert "pytest-runs" not in report["by_topic"]
+    assert any("failed" in b["excerpt"] for b in report["blind_spots"])

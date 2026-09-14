@@ -358,9 +358,15 @@ def main(argv: list[str]) -> int:
         print("::error::--out-json and --save-evidence must be different files", file=sys.stderr)
         return 1
 
-    keywords = dict(policy_mod.topic_keywords(policy))
-    keywords.update(
-        measure_mod.historical_definitions(policy_mod.load_history(args.history), keywords)
+    # Two keyword sets with two jobs: blind spots are what the CURRENT policy
+    # cannot classify (a retired topic must not keep hiding fresh failures
+    # from mining), while evidence keeps counting every definition any
+    # policy version ever had, so a rolled-back topic retains the adverse
+    # evidence that blocks re-mining it (Codex review of PR #10, round 34).
+    current_keywords = dict(policy_mod.topic_keywords(policy))
+    search_keywords = dict(current_keywords)
+    search_keywords.update(
+        measure_mod.historical_definitions(policy_mod.load_history(args.history), current_keywords)
     )
     agents = (
         None
@@ -383,7 +389,7 @@ def main(argv: list[str]) -> int:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
 
-    lines, summary = report(failures, keywords)
+    lines, summary = report(failures, current_keywords)
     summary["traces_scanned"] = len(traces)
     summary["listing_complete"] = complete
     summary["repo_dir"] = args.repo_dir
@@ -392,7 +398,7 @@ def main(argv: list[str]) -> int:
     if args.save_evidence:
         Path(args.save_evidence).write_text(
             json.dumps(
-                build_evidence(failures, keywords, args.repo_dir, agents, complete), indent=2
+                build_evidence(failures, search_keywords, args.repo_dir, agents, complete), indent=2
             )
             + "\n"
         )

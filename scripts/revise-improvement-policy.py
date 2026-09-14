@@ -572,14 +572,23 @@ def field_blind_spots(field_failures: dict | None, keywords: dict[str, list[str]
         # repository names that would name topics after folders. Classify
         # the excerpt alone: a kind label such as "tool-error" would match
         # keywords like "-e" (Codex review of PR #10, round 32).
+        # Mining sees the excerpt alone, too: a synthetic label shared by every
+        # failure would otherwise be the most frequent token and name a topic
+        # that classifies no real failure text (round 34). The kind travels
+        # as metadata.
         excerpt = str(failure.get("excerpt", "")).strip()
-        text = f"{failure.get('kind', '')} {excerpt}".strip()
-        if not excerpt or text in seen:
+        if not excerpt or excerpt in seen:
             continue
         if policy_mod.classify_finding(excerpt, keywords) is not None:
             continue
-        seen.add(text)
-        items.append({"round": f"field:{str(failure.get('trace_id', ''))[:8]}", "finding": text})
+        seen.add(excerpt)
+        items.append(
+            {
+                "round": f"field:{str(failure.get('trace_id', ''))[:8]}",
+                "finding": excerpt,
+                "kind": str(failure.get("kind", "")),
+            }
+        )
     return items
 
 

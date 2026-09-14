@@ -1018,7 +1018,8 @@ def test_failure_kind_labels_do_not_hide_field_blind_spots():
         {"kind": "tool-error", "excerpt": ""},
     ]
     spots = revise.field_blind_spots({"blind_spots": failures}, keywords)
-    assert [s["finding"] for s in spots] == ["tool-error ModuleNotFoundError: No module named yaml"]
+    assert [s["finding"] for s in spots] == ["ModuleNotFoundError: No module named yaml"]
+    assert spots[0]["kind"] == "tool-error"
 
 
 def test_candidate_anchor_reaches_an_older_definition_of_a_reused_name():
@@ -1066,3 +1067,23 @@ def test_candidate_anchor_never_borrows_a_count_from_another_definition():
     result = revise.candidate_anchor(current, new_policy)
     assert result["retired-topic"] == 2
     assert "archive-branch@old" not in result
+
+
+def test_failure_kind_labels_cannot_become_a_mined_topic():
+    # Five unrelated failures share only the synthetic label "tool-error".
+    # Mining over "kind excerpt" text accepted a topic whose one keyword was
+    # the label and which classified no real failure (Codex, round 34).
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    excerpts = [
+        "ModuleNotFoundError: No module named yaml",
+        "disk quota exceeded while writing cache",
+        "segmentation fault (core dumped)",
+        "certificate verify chain broken",
+        "address already in use: port 3000",
+    ]
+    failures = [{"kind": "tool-error", "excerpt": e} for e in excerpts]
+    spots = revise.field_blind_spots({"blind_spots": failures}, keywords)
+    assert len(spots) == 5
+    mined = revise.mine_topics(spots, keywords)
+    assert all("tool" not in m["keywords"] and "error" not in m["keywords"] for m in mined)
+    assert mined == []
