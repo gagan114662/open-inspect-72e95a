@@ -304,6 +304,22 @@ def validity_under(policy: dict, entries: list[dict], anchor: dict | None) -> fl
     )
 
 
+def entries_covered_by_evidence(entries: list[dict], measurement: dict) -> list[dict]:
+    """Archive entries from rounds no later than the evidence snapshot's
+    collection time. Without a collection time, all entries."""
+    collected_ms = measure_mod.parse_timestamp_ms(
+        (measurement.get("anchor") or {}).get("collected_at")
+    )
+    if collected_ms is None:
+        return entries
+    covered_rounds = {
+        r["round"]
+        for r in measure_mod.rounds_in_order(entries)
+        if r["timestamp_ms"] is not None and r["timestamp_ms"] <= collected_ms
+    }
+    return [e for e in entries if e.get("round") in covered_rounds]
+
+
 def validity_regressed(before: float | None, after: float | None) -> bool:
     """A candidate may not lower a defined validity, and may not turn a
     defined validity into an undefined one (a constant weighted signal has
@@ -371,11 +387,17 @@ def rounds_under(entries: list[dict], policy: dict) -> int:
     before a revision was merged never count toward judging it, however
     long its pull request sat open (Codex review of PR #10, round 4)."""
     wanted = policy_mod.policy_hash(policy)
+    version = policy["version"]
+    # Version AND hash: a later revision that recreates an earlier
+    # configuration must not inherit that configuration's old rounds
+    # (Codex review of PR #10, round 7).
     return len(
         {
             e["round"]
             for e in entries
-            if e.get("policy_hash") == wanted and isinstance(e.get("round"), int)
+            if e.get("policy_hash") == wanted
+            and e.get("policy_version") == version
+            and isinstance(e.get("round"), int)
         }
     )
 
@@ -424,8 +446,13 @@ def decide(
             if parent is not None and coverage is not None:
                 parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
                 anchor = current.get("anchor")
-                child_validity = validity_under(policy, entries, anchor)
-                parent_validity = validity_under(parent, entries, anchor)
+                # Validity is judged only on rounds the evidence snapshot could
+                # have seen; rounds archived after collection would make an
+                # unchanged field look like a regression (Codex review of
+                # PR #10, round 7).
+                covered = entries_covered_by_evidence(entries, measurement)
+                child_validity = validity_under(policy, covered, anchor)
+                parent_validity = validity_under(parent, covered, anchor)
                 worse_coverage = parent_now is not None and coverage < parent_now
                 worse_validity = parent_validity is not None and (
                     child_validity is None or child_validity < parent_validity

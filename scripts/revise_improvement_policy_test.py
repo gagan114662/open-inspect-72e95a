@@ -124,7 +124,10 @@ def test_rollback_when_an_adopted_revision_is_worse_than_its_parent():
         {"version": 1, "policy": parent},
         {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": bad},
     ]
-    stamped = [{**e, "policy_hash": policy_mod.policy_hash(bad)} for e in _archive()]
+    stamped = [
+        {**e, "policy_hash": policy_mod.policy_hash(bad), "policy_version": bad["version"]}
+        for e in _archive()
+    ]
     measurement = measure.measure(stamped, bad, None)
     decision = revise.decide(stamped, bad, history, measurement, NOW)
     assert decision["action"] == "rollback"
@@ -302,7 +305,10 @@ def test_rollback_on_validity_regression_with_same_coverage():
         {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": child},
     ]
     evidence = _four_topic_evidence([3, 1, 2, 0])  # the field supports credential-redaction
-    stamped = [{**e, "policy_hash": policy_mod.policy_hash(child)} for e in _four_topic_archive()]
+    stamped = [
+        {**e, "policy_hash": policy_mod.policy_hash(child), "policy_version": child["version"]}
+        for e in _four_topic_archive()
+    ]
     measurement = measure.measure(stamped, child, evidence)
     decision = revise.decide(stamped, child, history, measurement, NOW)
     assert decision["action"] == "rollback"
@@ -355,13 +361,22 @@ def test_rollback_waits_for_rounds_decided_under_the_revision():
     ]
     # Rounds after the proposal's timestamp but stamped with the PARENT's hash
     # (the PR was still open) do not count toward judging the revision.
-    under_parent = [{**e, "policy_hash": policy_mod.policy_hash(parent)} for e in _archive()]
+    under_parent = [
+        {**e, "policy_hash": policy_mod.policy_hash(parent), "policy_version": parent["version"]}
+        for e in _archive()
+    ]
     decision = revise.decide(
         under_parent, bad, history, measure.measure(under_parent, bad, None), NOW
     )
     assert decision["action"] != "rollback"
     assert revise.rounds_under(under_parent, bad) == 0
-    one_under = under_parent[:-1] + [{**_archive()[-1], "policy_hash": policy_mod.policy_hash(bad)}]
+    one_under = under_parent[:-1] + [
+        {
+            **_archive()[-1],
+            "policy_hash": policy_mod.policy_hash(bad),
+            "policy_version": bad["version"],
+        }
+    ]
     assert revise.rounds_under(one_under, bad) == 1
     decision = revise.decide(one_under, bad, history, measure.measure(one_under, bad, None), NOW)
     assert decision["action"] != "rollback"
@@ -381,7 +396,13 @@ def test_no_new_revision_until_the_current_one_has_been_judged():
         {"version": 1, "policy": parent},
         {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 0.5, "policy": child},
     ]
-    one_under = _archive()[:-1] + [{**_archive()[-1], "policy_hash": policy_mod.policy_hash(child)}]
+    one_under = _archive()[:-1] + [
+        {
+            **_archive()[-1],
+            "policy_hash": policy_mod.policy_hash(child),
+            "policy_version": child["version"],
+        }
+    ]
     measurement = measure.measure(one_under, child, None)
     assert (
         measurement["current"]["coverage"] < revise.MIN_COVERAGE
@@ -400,6 +421,52 @@ def test_discounts_wait_for_fresh_evidence():
     decision = revise.decide(_four_topic_archive(), policy, [], measurement, NOW)
     assert decision["action"] == "none"
     assert all(spec.get("weight", 1.0) == 1.0 for spec in policy["topics"].values())
+
+
+def test_rounds_under_requires_matching_version_not_just_contents():
+    parent = policy_mod.builtin_policy()
+    same_contents_later = policy_mod.new_version(
+        parent,
+        topics=parent["topics"],
+        threshold=parent["threshold"],
+        origin="revision",
+        rationale="recreated",
+        created_at="2026-09-14T18:00:00Z",
+    )
+    assert policy_mod.policy_hash(same_contents_later) == policy_mod.policy_hash(parent)
+    stamped_under_v1 = [
+        {**e, "policy_hash": policy_mod.policy_hash(parent), "policy_version": 1}
+        for e in _archive()
+    ]
+    assert revise.rounds_under(stamped_under_v1, parent) == 3
+    assert revise.rounds_under(stamped_under_v1, same_contents_later) == 0
+
+
+def test_validity_rollback_ignores_rounds_newer_than_the_evidence():
+    parent = _four_topic_policy([1, 1, 1, 1])
+    child = policy_mod.new_version(
+        parent,
+        topics=_four_topic_policy([0.25, 1, 1, 1])["topics"],
+        threshold=3,
+        origin="revision",
+        rationale="d",
+        created_at="2026-09-14T14:00:00Z",
+    )
+    history = [
+        {"version": 1, "policy": parent},
+        {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": child},
+    ]
+    evidence = _four_topic_evidence([3, 1, 2, 0])
+    evidence["collected_at"] = "2026-09-14T14:30:00Z"  # before every round in the archive
+    stamped = [
+        {**e, "policy_hash": policy_mod.policy_hash(child), "policy_version": 2}
+        for e in _four_topic_archive()
+    ]
+    measurement = measure.measure(stamped, child, evidence)
+    decision = revise.decide(stamped, child, history, measurement, NOW)
+    # With no covered rounds there is no validity to compare, so no validity rollback.
+    assert not (decision["action"] == "rollback" and "validity" in decision["reason"])
+    assert revise.entries_covered_by_evidence(stamped, measurement) == []
 
 
 def test_accepted_revision_never_regresses_validity():
