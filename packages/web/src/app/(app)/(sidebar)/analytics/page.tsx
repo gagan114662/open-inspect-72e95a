@@ -81,9 +81,12 @@ export default function AnalyticsPage() {
                 <div>
                   <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">Analytics</h1>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                    Usage metrics across sessions, repositories, and users. PR counts currently
-                    reflect pull requests created through the platform&apos;s built-in flow, and
-                    legacy sessions may show zero cost, PR, or duration values.
+                    Usage metrics across sessions, repositories, and users. &quot;PRs Created&quot;
+                    and its related metrics (Acceptance Rate, Avg Time to Merge, Open PRs, Cost /
+                    Merged PR) only reflect pull requests created through the platform&apos;s
+                    built-in flow — reviewing a pull request opened some other way counts under
+                    &quot;PR Reviews&quot; instead, not here. Legacy sessions may show zero cost,
+                    PR, or duration values.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -28,13 +28,16 @@ async function seedSession(input: {
   spawnSource: SpawnSource;
   totalCost: number;
   createdAt: number;
+  title?: string;
+  repoOwner?: string;
+  repoName?: string;
 }): Promise<void> {
   const store = new SessionIndexStore(env.DB);
   await store.create({
     id: input.id,
-    title: input.id,
-    repoOwner: "acme",
-    repoName: "web",
+    title: input.title ?? input.id,
+    repoOwner: input.repoOwner ?? "acme",
+    repoName: input.repoName ?? "web",
     model: "anthropic/claude-haiku-4-5",
     reasoningEffort: null,
     baseBranch: "main",
@@ -208,6 +211,9 @@ describe("GET /analytics/pull-requests", () => {
       },
     ]);
 
+    // No review-titled sessions were seeded in this scenario.
+    expect(body.reviewSessions).toEqual({ total: 0, repos: [] });
+
     // Automation-spawned output is visible — source is a dimension, not a filter.
     expect(body.sources).toEqual([
       { source: "user", created: 3, merged: 2 },
@@ -250,11 +256,87 @@ describe("GET /analytics/pull-requests", () => {
       timeseries: [],
       repos: [],
       sources: [],
+      reviewSessions: { total: 0, repos: [] },
     });
   });
 
   it("rejects an invalid days parameter", async () => {
     const response = await serviceFetch("https://test.local/analytics/pull-requests?days=13");
     expect(response.status).toBe(400);
+  });
+
+  describe("reviewSessions", () => {
+    it("counts review and re-review session titles, grouped by repo, and excludes plain comments", async () => {
+      const now = Date.now();
+      const inWindow = now - 3 * DAY_MS;
+
+      // Real title shapes github-bot's handlers.ts actually produces.
+      await seedSession({
+        id: "r1",
+        spawnSource: "github-bot",
+        totalCost: 0.1,
+        createdAt: inWindow,
+        title: "GitHub: Review PR #18",
+        repoOwner: "acme",
+        repoName: "sandbox",
+      });
+      await seedSession({
+        id: "r2",
+        spawnSource: "github-bot",
+        totalCost: 0.1,
+        createdAt: inWindow,
+        title: "GitHub: PR #19 re-review",
+        repoOwner: "acme",
+        repoName: "sandbox",
+      });
+      await seedSession({
+        id: "r3",
+        spawnSource: "github-bot",
+        totalCost: 0.1,
+        createdAt: inWindow,
+        title: "GitHub: Review PR #5",
+        repoOwner: "acme",
+        repoName: "web",
+      });
+      // A plain comment-reply session — NOT a review, must be excluded even
+      // though it shares the "GitHub: PR #<n>" prefix.
+      await seedSession({
+        id: "r4",
+        spawnSource: "github-bot",
+        totalCost: 0.1,
+        createdAt: inWindow,
+        title: "GitHub: PR #20 comment",
+        repoOwner: "acme",
+        repoName: "sandbox",
+      });
+      // Outside the 7d window — must not be counted.
+      await seedSession({
+        id: "r5",
+        spawnSource: "github-bot",
+        totalCost: 0.1,
+        createdAt: now - 30 * DAY_MS,
+        title: "GitHub: Review PR #1",
+        repoOwner: "acme",
+        repoName: "sandbox",
+      });
+
+      const response = await serviceFetch("https://test.local/analytics/pull-requests?days=7");
+      expect(response.status).toBe(200);
+      const body = await response.json<AnalyticsPullRequestsResponse>();
+
+      expect(body.reviewSessions).toEqual({
+        total: 3,
+        repos: [
+          { key: "acme/sandbox", reviews: 2 },
+          { key: "acme/web", reviews: 1 },
+        ],
+      });
+
+      // Review sessions never created a PR themselves, so the PR-creation
+      // metrics stay untouched by this activity — confirms the two are
+      // genuinely independent, not double-counted into each other.
+      expect(body.funnel.created).toBe(0);
+      expect(body.repos).toEqual([]);
+    });
   });
 });

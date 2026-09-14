@@ -203,6 +203,7 @@ describe("analytics utilities", () => {
       timeseries: [],
       repos: [],
       sources: [],
+      reviewSessions: { total: 0, repos: [] },
     };
 
     expect(getCostPerMergedPullRequest(base)).toBe(1.5);
