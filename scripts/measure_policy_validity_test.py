@@ -164,6 +164,21 @@ def test_truncated_searches_are_unknown_not_absolute():
     assert current["anchor"]["credential-redaction"] == 1
 
 
+def test_findings_newer_than_the_evidence_do_not_mark_topics_dev_only():
+    evidence = _evidence()
+    evidence["topics"]["credential-redaction"] = []
+    evidence["collected_at"] = "2026-09-14T15:30:00Z"  # after round 1 only
+    result = measure.measure(_archive(), policy_mod.builtin_policy(), evidence)
+    current = result["current"]
+    assert current["rounds_after_evidence"] == 2
+    # credential-redaction recurs in rounds 1-3 but only round 1 predates the snapshot.
+    assert current["dev_only_topics"] == []
+    fresh = dict(evidence, collected_at="2026-09-14T18:00:00Z")
+    assert measure.measure(_archive(), policy_mod.builtin_policy(), fresh)["current"][
+        "dev_only_topics"
+    ] == ["credential-redaction"]
+
+
 def test_empty_anchor_is_treated_as_no_anchor():
     evidence = {
         "source": "traces",

@@ -367,6 +367,41 @@ def test_rollback_waits_for_rounds_decided_under_the_revision():
     assert decision["action"] != "rollback"
 
 
+def test_no_new_revision_until_the_current_one_has_been_judged():
+    parent = policy_mod.builtin_policy()
+    child = policy_mod.new_version(
+        parent,
+        topics=parent["topics"],
+        threshold=3,
+        origin="revision",
+        rationale="x",
+        created_at="2026-09-14T14:00:00Z",
+    )
+    history = [
+        {"version": 1, "policy": parent},
+        {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 0.5, "policy": child},
+    ]
+    one_under = _archive()[:-1] + [{**_archive()[-1], "policy_hash": policy_mod.policy_hash(child)}]
+    measurement = measure.measure(one_under, child, None)
+    assert (
+        measurement["current"]["coverage"] < revise.MIN_COVERAGE
+    )  # would otherwise trigger mining
+    decision = revise.decide(one_under, child, history, measurement, NOW)
+    assert decision["action"] == "none"
+    assert "waiting for" in decision["reason"]
+
+
+def test_discounts_wait_for_fresh_evidence():
+    policy = _four_topic_policy([1, 1, 1, 1])
+    evidence = _four_topic_evidence([0, 1, 2, 2])
+    evidence["collected_at"] = "2026-09-14T15:30:00Z"  # rounds 2 and 3 are newer
+    measurement = measure.measure(_four_topic_archive(), policy, evidence)
+    assert measurement["current"]["rounds_after_evidence"] == 2
+    decision = revise.decide(_four_topic_archive(), policy, [], measurement, NOW)
+    assert decision["action"] == "none"
+    assert all(spec.get("weight", 1.0) == 1.0 for spec in policy["topics"].values())
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))

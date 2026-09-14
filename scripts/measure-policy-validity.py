@@ -366,6 +366,26 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
         epoch.pop("unclassified_findings")
         epochs.append(epoch)
     current = measure_epoch(rounds, keywords, weights, evidence, None)
+    # Evidence is a snapshot: findings archived after it was collected come
+    # from sessions it never searched, so they must not mark a topic as
+    # "credited by reviews, never seen in the field" (Codex review of
+    # PR #10, round 6). Weight-relevant fields are recomputed over the
+    # rounds the snapshot could have seen; the count of newer rounds is
+    # reported so a caller can insist on fresh evidence.
+    rounds_after_evidence = 0
+    if evidence is not None:
+        collected_ms = parse_timestamp_ms(evidence.get("collected_at"))
+        if collected_ms is not None:
+            seen_rounds = [
+                r
+                for r in rounds
+                if r["timestamp_ms"] is not None and r["timestamp_ms"] <= collected_ms
+            ]
+            rounds_after_evidence = len(rounds) - len(seen_rounds)
+            aligned = measure_epoch(seen_rounds, keywords, weights, evidence, None)
+            current["dev_only_topics"] = aligned["dev_only_topics"]
+            current["anchor_only_topics"] = aligned["anchor_only_topics"]
+    current["rounds_after_evidence"] = rounds_after_evidence
     return {
         "policy_version": policy["version"],
         "policy_hash": policy_mod.policy_hash(policy),

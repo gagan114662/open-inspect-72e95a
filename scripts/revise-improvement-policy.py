@@ -333,6 +333,11 @@ def weight_repair(
         return policy["topics"], []
     topics = dict(policy["topics"])
     changes: list[str] = []
+    if discount and current.get("rounds_after_evidence", 0) > 0:
+        changes.append(
+            f"skipped discounts: {current['rounds_after_evidence']} round(s) are newer than the evidence snapshot; refresh it first"
+        )
+        discount = False
     if discount:
         for topic in current.get("dev_only_topics", []):
             old_w = weights[topic]
@@ -454,6 +459,22 @@ def decide(
                         ],
                     }
 
+    # A revision that has not yet been judged must not be built on: a
+    # successor would only ever be compared with it, so a regression it
+    # introduced against ITS parent could never be rolled back (Codex review
+    # of PR #10, round 6). Wait until MIN_ROUNDS_TO_JUDGE rounds have run
+    # under it; the rollback check above already covered the judged case.
+    if policy.get("origin") == "revision" and policy.get("parent") is not None:
+        under = rounds_under(entries, policy)
+        if under < MIN_ROUNDS_TO_JUDGE:
+            return {
+                "action": "none",
+                "reason": (
+                    f"v{policy['version']} has run under {under} round(s); waiting for "
+                    f"{MIN_ROUNDS_TO_JUDGE} before judging it or layering another revision"
+                ),
+            }
+
     triggers = []
     if coverage is not None and coverage < MIN_COVERAGE:
         triggers.append(f"coverage {coverage} < {MIN_COVERAGE}")
@@ -498,7 +519,9 @@ def decide(
     if not triggers:
         triggers.append("field evidence corroborates a discounted topic")
 
-    if not changes or all(c.startswith("kept weights unchanged") for c in changes):
+    if not changes or all(
+        c.startswith("kept weights unchanged") or c.startswith("skipped discounts") for c in changes
+    ):
         return {
             "action": "none",
             "reason": "triggered ("
