@@ -683,23 +683,21 @@ def decide(
     if validity is not None and validity < MIN_VALIDITY:
         triggers.append(f"validity {validity} < {MIN_VALIDITY}")
     blind = field_blind_spots(field_failures, keywords)
-    if len(blind) >= MIN_FIELD_BLIND_SPOTS:
-        triggers.append(f"{len(blind)} field failures match no topic")
+    coverage_trigger = coverage is not None and coverage < MIN_COVERAGE
+    field_trigger = len(blind) >= MIN_FIELD_BLIND_SPOTS
+    if field_trigger:
+        triggers.append(f"field: {len(blind)} failures match no topic")
 
     changes: list[str] = []
     new_topics = dict(policy["topics"])
 
     # 2. Coverage repair: mine the blind spots.
+    # Explicit booleans, not string prefixes, decide what gets mined
+    # (Codex review of PR #10, round 28).
     mining_input = list(current.get("unclassified_findings", []))
-    if any(t.startswith("field") for t in triggers) or (
-        coverage is not None and coverage < MIN_COVERAGE
-    ):
+    if field_trigger or coverage_trigger:
         mining_input.extend(blind)
-    mined = (
-        mine_topics(mining_input, keywords)
-        if any(t.startswith("coverage") or t.startswith("field") for t in triggers)
-        else []
-    )
+    mined = mine_topics(mining_input, keywords) if (coverage_trigger or field_trigger) else []
     for topic in mined:
         new_topics[topic["name"]] = {
             "keywords": topic["keywords"],

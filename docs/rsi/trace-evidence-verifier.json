@@ -1,6 +1,6 @@
 {
   "source": "trace-failures",
-  "collected_at": "2026-09-14T22:39:28Z",
+  "collected_at": "2026-09-14T22:45:41Z",
   "repo_dir": "/Users/gaganarora/workplace/open-inspect-72e95a",
   "agents": ["all"],
   "event_types": "tool_result(status=error) or failure-shaped output",
@@ -13,18 +13,7 @@
     "archive-branch": ["archive", "branch", "commit", "create", "creation"]
   },
   "topics": {
-    "credential-redaction": [
-      {
-        "id": "01a09724-57f6-7c30-8144-8d05f8245670",
-        "agentId": "codex",
-        "timestamp": 1789242150697
-      },
-      {
-        "id": "01a0973d-4d37-7c20-84d7-0107f071310f",
-        "agentId": "codex",
-        "timestamp": 1789243794642
-      }
-    ],
+    "credential-redaction": [],
     "shell-semantics": [],
     "env-var-precedence": [],
     "fork-pr-permissions": [],
@@ -33,5 +22,5 @@
   },
   "truncated": [],
   "listing_complete": true,
-  "failure_count": 3
+  "failure_count": 0
 }

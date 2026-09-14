@@ -1,6 +1,6 @@
 {
   "source": "trace-failures",
-  "collected_at": "2026-09-14T22:39:26Z",
+  "collected_at": "2026-09-14T22:45:39Z",
   "repo_dir": "/Users/gaganarora/Desktop/my projects/background agents",
   "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
   "event_types": "tool_result(status=error) or failure-shaped output",
@@ -18,16 +18,6 @@
         "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
         "agentId": "claude-code",
         "timestamp": 1789220862989
-      },
-      {
-        "id": "dbdc7f1d-23a9-57e2-a9cd-42d43a2c40a7",
-        "agentId": "claude-code",
-        "timestamp": 1789244561654
-      },
-      {
-        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
-        "agentId": "claude-code",
-        "timestamp": 1789423511799
       }
     ],
     "shell-semantics": [
@@ -39,7 +29,7 @@
       {
         "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
         "agentId": "claude-code",
-        "timestamp": 1789411081354
+        "timestamp": 1789411887600
       }
     ],
     "env-var-precedence": [],
@@ -48,12 +38,7 @@
       {
         "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
         "agentId": "claude-code",
-        "timestamp": 1789236199880
-      },
-      {
-        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
-        "agentId": "claude-code",
-        "timestamp": 1789423511799
+        "timestamp": 1789400745754
       }
     ],
     "archive-branch": [
@@ -71,5 +56,5 @@
   },
   "truncated": [],
   "listing_complete": true,
-  "failure_count": 184
+  "failure_count": 96
 }

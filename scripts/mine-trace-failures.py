@@ -175,14 +175,22 @@ def is_command_tool(tool: str) -> bool:
 
 
 def failure_kind(event: dict) -> str | None:
+    """A failure is an execution that went wrong: the tool reported an
+    error, or a command tool reported a non-zero exit. Output that merely
+    contains failure-shaped text (a file displayed with `cat`, a quoted
+    finding) is content, not a failure (Codex review of PR #10, rounds 27
+    and 28). The failure shape then only names the kind."""
     output = str(event.get("output") or event.get("text") or "")
-    if is_command_tool(str(event.get("toolName") or "")):
-        for name, pattern in FAILURE_PATTERNS.items():
-            if pattern.search(output):
-                return name
-    if event.get("status") == "error":
-        return "tool-error"
-    return None
+    errored = event.get("status") == "error"
+    nonzero = is_command_tool(str(event.get("toolName") or "")) and bool(
+        FAILURE_PATTERNS["nonzero-exit"].search(output)
+    )
+    if not (errored or nonzero):
+        return None
+    for name, pattern in FAILURE_PATTERNS.items():
+        if name != "nonzero-exit" and pattern.search(output):
+            return name
+    return "nonzero-exit" if nonzero else "tool-error"
 
 
 def excerpt_for(kind: str, output: str) -> str:
@@ -222,7 +230,10 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
         args = call.get("args") or {}
         command = str(args.get("command") or args.get("file_path") or args.get("pattern") or "")
         excerpt = excerpt_for(kind, output)
-        key = (tool, excerpt)
+        # The command is part of identity: two commands with the same output
+        # are two failures, and classification reads the command
+        # (Codex review of PR #10, round 28).
+        key = (tool, " ".join(command.split())[:EXCERPT_CHARS], excerpt)
         if key in failures:
             failures[key]["count"] += 1
             continue

@@ -48,7 +48,7 @@ def _events():
             "callId": "c2",
             "toolName": "Bash",
             "status": "success",
-            "output": "! [rejected] main -> main (non-fast-forward)",
+            "output": "Exit code 1\n! [rejected] main -> main (non-fast-forward)",
             "timestamp": 6,
             "eventNumber": 5,
         },
@@ -214,10 +214,19 @@ def test_line_numbers_and_file_contents_are_not_failures():
     real_auth = {
         "type": "tool_result",
         "toolName": "Bash",
-        "status": "success",
+        "status": "error",
         "output": "HTTP 401 Unauthorized",
     }
     assert mine.failure_kind(real_auth) == "auth"
+    displayed = {
+        "type": "tool_result",
+        "toolName": "Bash",
+        "status": "success",
+        "output": "HTTP 401 Unauthorized token expired\nTraceback (most recent call last)",
+    }
+    assert mine.failure_kind(displayed) is None, (
+        "a successful cat of a file is content, not a failure"
+    )
     bare_number = {
         "type": "tool_result",
         "toolName": "Bash",
@@ -229,7 +238,7 @@ def test_line_numbers_and_file_contents_are_not_failures():
 
 def test_capped_listing_marks_every_topic_unknown(monkeypatch):
     monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": _events(), "t2": _events()}))
-    traces, complete = mine.list_traces("traces", "/repo", ["claude-code"], 2)
+    _traces, complete = mine.list_traces("traces", "/repo", ["claude-code"], 2)
     assert not complete
     keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
     evidence = mine.build_evidence([], keywords, "/repo", ["claude-code"], complete)
@@ -254,3 +263,48 @@ def test_evidence_matches_every_topic_independently_of_order():
         == [t["id"] for t in evidence_2["topics"]["b"]]
         == ["t1"]
     )
+
+
+def test_same_output_from_different_commands_are_distinct_failures(monkeypatch):
+    events = [
+        {
+            "type": "tool_call",
+            "callId": "a",
+            "toolName": "Bash",
+            "args": {"command": "git push archive-branch"},
+            "eventNumber": 1,
+        },
+        {
+            "type": "tool_result",
+            "callId": "a",
+            "toolName": "Bash",
+            "status": "error",
+            "output": "Permission denied",
+            "timestamp": 1,
+            "eventNumber": 2,
+        },
+        {
+            "type": "tool_call",
+            "callId": "b",
+            "toolName": "Bash",
+            "args": {"command": "cat secret.txt"},
+            "eventNumber": 3,
+        },
+        {
+            "type": "tool_result",
+            "callId": "b",
+            "toolName": "Bash",
+            "status": "error",
+            "output": "Permission denied",
+            "timestamp": 2,
+            "eventNumber": 4,
+        },
+    ]
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    assert len(failures) == 2
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    keywords["archive-branch"] = ["archive", "branch"]
+    evidence = mine.build_evidence(failures, keywords, "/repo", None)
+    assert [t["id"] for t in evidence["topics"]["archive-branch"]] == ["t1"]
+    assert [t["id"] for t in evidence["topics"]["credential-redaction"]] == ["t1"]

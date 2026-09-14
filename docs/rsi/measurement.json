@@ -6,8 +6,8 @@
     "source": "trace-failures",
     "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
     "event_types": "tool_result(status=error) or failure-shaped output",
-    "collected_at": "2026-09-14T22:39:26Z",
-    "traces_considered": 3
+    "collected_at": "2026-09-14T22:45:39Z",
+    "traces_considered": 2
   },
   "epochs": [
     {
@@ -33,7 +33,7 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -41,7 +41,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.6708,
+      "validity": 0.5,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -68,7 +68,7 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -76,7 +76,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.4167,
+      "validity": 0.1118,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -103,7 +103,7 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -111,7 +111,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.4919,
+      "validity": 0.22,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -138,7 +138,7 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -146,7 +146,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.4919,
+      "validity": 0.22,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -173,7 +173,7 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -181,7 +181,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.4919,
+      "validity": 0.22,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -208,7 +208,7 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -216,7 +216,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.4919,
+      "validity": 0.22,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -243,7 +243,7 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -251,7 +251,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.4919,
+      "validity": 0.22,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -278,7 +278,7 @@
         "archive-branch": 1.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -286,7 +286,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.6356,
+      "validity": 0.4264,
       "dev_only_topics": [],
       "anchor_only_topics": ["auth-lifecycle"]
     },
@@ -313,7 +313,7 @@
         "archive-branch": 2.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -321,7 +321,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.7151,
+      "validity": 0.533,
       "dev_only_topics": [],
       "anchor_only_topics": ["auth-lifecycle"]
     },
@@ -348,7 +348,7 @@
         "archive-branch": 3.0
       },
       "anchor": {
-        "credential-redaction": 2,
+        "credential-redaction": 1,
         "shell-semantics": 1,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
@@ -356,7 +356,7 @@
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.7045,
+      "validity": 0.5251,
       "dev_only_topics": [],
       "anchor_only_topics": ["auth-lifecycle"]
     }
@@ -384,15 +384,15 @@
       "archive-branch": 3.0
     },
     "anchor": {
-      "credential-redaction": 3,
+      "credential-redaction": 1,
       "shell-semantics": 2,
       "env-var-precedence": 0,
       "fork-pr-permissions": 0,
-      "auth-lifecycle": 2,
+      "auth-lifecycle": 1,
       "archive-branch": 2
     },
     "anchor_unknown_topics": [],
-    "validity": 0.7045,
+    "validity": 0.5457,
     "unclassified_findings": [
       {
         "round": 1,
@@ -409,7 +409,7 @@
     ],
     "dev_only_topics": [],
     "anchor_only_topics": ["auth-lifecycle"],
-    "validity_all_rounds": 0.7045,
+    "validity_all_rounds": 0.5457,
     "rounds_after_evidence": 0,
     "anchor_definitions": {
       "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
@@ -420,11 +420,11 @@
       "archive-branch": ["archive", "branch", "commit", "create", "creation"]
     },
     "anchor_evidence": {
-      "credential-redaction": 3,
+      "credential-redaction": 1,
       "shell-semantics": 2,
       "env-var-precedence": 0,
       "fork-pr-permissions": 0,
-      "auth-lifecycle": 2,
+      "auth-lifecycle": 1,
       "archive-branch": 2
     }
   }
