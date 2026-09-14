@@ -63,6 +63,23 @@ const sourceRowSchema = z.object({
   merged: z.number(),
 });
 
+const reviewRepoRowSchema = z.object({
+  key: z.string(),
+  reviews: z.number(),
+});
+
+/**
+ * Matches the two review-session title shapes github-bot's handlers.ts
+ * actually produces (`GitHub: Review PR #<n>` and `GitHub: PR #<n>
+ * re-review`) and excludes the sibling `GitHub: PR #<n> comment` shape,
+ * which is a plain comment reply, not a review. Title matching (rather than
+ * a structured column) is deliberate: these sessions never create a PR
+ * themselves, so there is no session_pull_requests row to key off of, and
+ * adding a new schema column/table for this is a larger change than the gap
+ * being closed here warrants.
+ */
+const REVIEW_SESSION_TITLE_FILTER = `(title LIKE 'GitHub: Review PR #%' OR title LIKE 'GitHub: PR #%re-review')`;
+
 /**
  * When a PR entered the world, for windowing and cycle time. The row's own
  * created_at is the fallback for rows that predate the provider_created_at
@@ -183,6 +200,19 @@ export class PullRequestAnalyticsStore {
              ORDER BY created DESC, source ASC`
         )
         .bind(...cohortBinds),
+      this.db
+        .prepare(
+          `SELECT
+               repo_owner || '/' || repo_name AS key,
+               COUNT(*) AS reviews
+             FROM sessions
+             WHERE created_at >= ? AND created_at < ?
+               AND repo_owner IS NOT NULL AND repo_name IS NOT NULL
+               AND ${REVIEW_SESSION_TITLE_FILTER}
+             GROUP BY key
+             ORDER BY reviews DESC, key ASC`
+        )
+        .bind(filters.startAt, filters.endAt),
     ];
   }
 
@@ -196,6 +226,7 @@ export class PullRequestAnalyticsStore {
       mergedResult,
       reposResult,
       sourcesResult,
+      reviewReposResult,
     ] = results;
 
     const funnel = parseOptionalRow(funnelResult.results?.[0], funnelRowSchema, "PR funnel row");
@@ -250,6 +281,17 @@ export class PullRequestAnalyticsStore {
         created: row.created,
         merged: row.merged,
       })),
+      reviewSessions: (() => {
+        const reviewRepos = parseRows(
+          reviewReposResult.results,
+          reviewRepoRowSchema,
+          "PR review repo row"
+        ).map((row) => ({ key: row.key, reviews: row.reviews }));
+        return {
+          total: reviewRepos.reduce((sum, row) => sum + row.reviews, 0),
+          repos: reviewRepos,
+        };
+      })(),
     };
   }
 }

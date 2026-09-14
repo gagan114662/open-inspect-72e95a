@@ -20,8 +20,8 @@ interface PullRequestCardsProps {
 export function AnalyticsPullRequestCards({ days, pullRequests, loading }: PullRequestCardsProps) {
   if (loading && !pullRequests) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, index) => (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, index) => (
           <div
             key={index}
             className="rounded-md border border-border-muted bg-card p-4 animate-pulse"
@@ -42,11 +42,16 @@ export function AnalyticsPullRequestCards({ days, pullRequests, loading }: PullR
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <SummaryCard
           label="PRs Created"
           value={formatAnalyticsCount(funnel.created)}
           hint={`Opened in the last ${days} days`}
+        />
+        <SummaryCard
+          label="PR Reviews"
+          value={formatAnalyticsCount(pullRequests.reviewSessions.total)}
+          hint="Review/re-review sessions, any PR source"
         />
         <SummaryCard
           label="Acceptance Rate"
@@ -77,6 +82,34 @@ export function AnalyticsPullRequestCards({ days, pullRequests, loading }: PullR
           hint="Cost of PR-producing sessions"
         />
       </div>
+
+      {pullRequests.reviewSessions.repos.length > 0 ? (
+        <div className="rounded-md border border-border-muted bg-card px-4 py-3">
+          <div className="text-xs uppercase tracking-wider text-secondary-foreground">
+            PR Reviews by Repository
+          </div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            Sessions that reviewed a pull request, regardless of who or what opened it — a
+            repository where the bot is only ever asked to review (never create) PRs shows its
+            activity here, not above.
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {pullRequests.reviewSessions.repos.map((entry) => (
+              <div
+                key={entry.key}
+                className="rounded-md border border-border-muted bg-background px-3 py-3"
+              >
+                <div className="text-xs uppercase tracking-wider text-secondary-foreground">
+                  {entry.key}
+                </div>
+                <div className="mt-2 text-lg font-semibold text-foreground">
+                  {formatAnalyticsCount(entry.reviews)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {pullRequests.sources.length > 0 ? (
         <div className="rounded-md border border-border-muted bg-card px-4 py-3">

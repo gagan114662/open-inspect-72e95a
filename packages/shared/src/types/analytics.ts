@@ -93,6 +93,13 @@ export interface AnalyticsPullRequestSourceEntry {
   merged: number;
 }
 
+export interface AnalyticsPullRequestReviewRepoEntry {
+  /** owner/name of the repository the reviewed PR lives in. */
+  key: string;
+  /** Count of review/re-review sessions in the window, by session title pattern. */
+  reviews: number;
+}
+
 export interface AnalyticsPullRequestsResponse {
   funnel: AnalyticsPullRequestFunnel;
   /**
@@ -113,6 +120,19 @@ export interface AnalyticsPullRequestsResponse {
   timeseries: AnalyticsPullRequestTimeseriesPoint[];
   repos: AnalyticsPullRequestRepoEntry[];
   sources: AnalyticsPullRequestSourceEntry[];
+  /**
+   * Sessions where the GitHub bot reviewed a pull request rather than
+   * created one — counted from session titles, not session_pull_requests,
+   * because a reviewed-but-not-created PR never gets a session_pull_requests
+   * row (repos/sources/funnel above only ever reflect PRs this platform's
+   * own broker opened). Without this, a repository where the bot is only
+   * ever asked to review externally-opened PRs shows zero PR activity here
+   * even when review sessions are most of what's actually happening in it.
+   */
+  reviewSessions: {
+    total: number;
+    repos: AnalyticsPullRequestReviewRepoEntry[];
+  };
 }
 
 /** One coherently-windowed analytics dashboard snapshot. */

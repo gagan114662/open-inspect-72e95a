@@ -29,6 +29,7 @@ describe("PullRequestAnalyticsStore row decoding", () => {
         result([{ day_index: 2, count: 2 }]),
         result([{ key: "acme/app", created: 5, merged: 1, closed: 1, avg_time_to_merge_ms: null }]),
         result([{ source: "automation", created: 3, merged: 1 }]),
+        result([{ key: "acme/sandbox", reviews: 7 }]),
       ])
     ).toEqual({
       funnel: { created: 5, open: 2, draft: 1, merged: 1, closed: 1 },
@@ -42,6 +43,7 @@ describe("PullRequestAnalyticsStore row decoding", () => {
       ],
       repos: [{ key: "acme/app", created: 5, merged: 1, closed: 1, avgTimeToMergeMs: null }],
       sources: [{ source: "automation", created: 3, merged: 1 }],
+      reviewSessions: { total: 7, repos: [{ key: "acme/sandbox", reviews: 7 }] },
     });
   });
 
@@ -56,7 +58,47 @@ describe("PullRequestAnalyticsStore row decoding", () => {
         result([]),
         result([]),
         result([]),
+        result([]),
       ])
     ).toThrow("Invalid PR funnel row");
+  });
+
+  it("sums review counts across repos into the total, and handles zero review sessions", () => {
+    const decoded = store().decode([
+      result([{ created: 0, open: 0, draft: 0, merged: 0, closed: 0 }]),
+      result([{ cost: 0 }]),
+      result([{ merged: 0, avg_time_to_merge_ms: null }]),
+      result([{ total: 0, avg_age_ms: null }]),
+      result([]),
+      result([]),
+      result([]),
+      result([]),
+      result([
+        { key: "acme/app", reviews: 3 },
+        { key: "acme/sandbox", reviews: 41 },
+      ]),
+    ]);
+    expect(decoded.reviewSessions).toEqual({
+      total: 44,
+      repos: [
+        { key: "acme/app", reviews: 3 },
+        { key: "acme/sandbox", reviews: 41 },
+      ],
+    });
+  });
+
+  it("defaults reviewSessions to an empty, zeroed shape when no review sessions exist", () => {
+    const decoded = store().decode([
+      result([{ created: 0, open: 0, draft: 0, merged: 0, closed: 0 }]),
+      result([{ cost: 0 }]),
+      result([{ merged: 0, avg_time_to_merge_ms: null }]),
+      result([{ total: 0, avg_age_ms: null }]),
+      result([]),
+      result([]),
+      result([]),
+      result([]),
+      result([]),
+    ]);
+    expect(decoded.reviewSessions).toEqual({ total: 0, repos: [] });
   });
 });
