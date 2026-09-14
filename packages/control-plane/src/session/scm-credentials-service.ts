@@ -46,6 +46,11 @@ export class ScmCredentialsService {
         };
       }
 
+      this.log.info("SCM credential helper auth issued", {
+        scm_provider: this.provider.name,
+        repos: repos.map((r) => `${r.owner}/${r.name}`),
+        expires_at_epoch_ms: auth.expiresAtEpochMs,
+      });
       return {
         ok: true,
         username: auth.username,
