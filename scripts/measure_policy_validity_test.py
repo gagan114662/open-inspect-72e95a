@@ -155,6 +155,15 @@ def test_measurement_is_bound_to_the_archive_contents():
     assert measure.archive_digest(_archive()) == a
 
 
+def test_truncated_searches_are_unknown_not_absolute():
+    evidence = _evidence()
+    evidence["truncated"] = ["shell-semantics"]
+    current = measure.measure(_archive(), policy_mod.builtin_policy(), evidence)["current"]
+    assert current["anchor"]["shell-semantics"] is None
+    assert "shell-semantics" in current["anchor_unknown_topics"]
+    assert current["anchor"]["credential-redaction"] == 1
+
+
 def test_empty_anchor_is_treated_as_no_anchor():
     evidence = {
         "source": "traces",

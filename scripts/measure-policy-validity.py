@@ -66,6 +66,7 @@ policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
 DEFAULT_ANCHOR_AGENTS = ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"]
 VERIFIER_AGENT = "codex"
 MIN_TOPICS_FOR_VALIDITY = 3
+SEARCH_RESULT_LIMIT = 500
 
 
 class TracesCliError(RuntimeError):
@@ -171,6 +172,7 @@ def collect_trace_evidence(
     (unless 'all') to non-verifier agents. Stores only ids, agents and
     timestamps -- enough to replay the anchor per epoch, no transcript text."""
     topics: dict[str, list[dict]] = {}
+    truncated: list[str] = []
     for topic, words in keywords.items():
         matches: dict[str, dict] = {}
         agent_filters: list[list[str]] = (
@@ -188,10 +190,16 @@ def collect_trace_evidence(
                     "--result-level",
                     "trace",
                     "--limit",
-                    "100",
+                    str(SEARCH_RESULT_LIMIT),
                 ],
             )
-            for trace in data.get("traces", []):
+            found = data.get("traces", [])
+            if len(found) >= SEARCH_RESULT_LIMIT and topic not in truncated:
+                # A capped result is a lower bound, not a count; recording it
+                # as absolute would flatten frequent topics into identical
+                # numbers (Codex review of PR #10, round 5).
+                truncated.append(topic)
+            for trace in found:
                 matches[trace["id"]] = {
                     "id": trace["id"],
                     "agentId": trace.get("agentId"),
@@ -204,6 +212,7 @@ def collect_trace_evidence(
         "repo_dir": repo_dir,
         "agents": anchor_agents or ["all"],
         "topics": topics,
+        "truncated": truncated,
     }
 
 
@@ -217,9 +226,10 @@ def anchor_counts_at(
     if evidence is None:
         return None
     searched = evidence.get("topics", {})
+    truncated = set(evidence.get("truncated", []))
     counts: dict[str, int | None] = {}
     for topic in topics:
-        if topic not in searched:
+        if topic not in searched or topic in truncated:
             counts[topic] = None
             continue
         traces = searched[topic]

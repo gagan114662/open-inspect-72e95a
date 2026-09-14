@@ -152,6 +152,23 @@ def load_evidence(path: str | None) -> dict | None:
 # --- svg -------------------------------------------------------------------
 
 
+def marker_epoch_index(epochs: list[dict], created_at: str | None) -> int:
+    """Index of the last epoch that existed when a policy version was
+    created, so a revision is drawn where it happened rather than at the
+    newest round (Codex review of PR #10, round 5)."""
+    if not epochs:
+        return 0
+    created_ms = measure_mod.parse_timestamp_ms(created_at)
+    if created_ms is None:
+        return len(epochs) - 1
+    index = 0
+    for i, epoch in enumerate(epochs):
+        ts = epoch.get("timestamp_ms")
+        if ts is not None and ts <= created_ms:
+            index = i
+    return index
+
+
 def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage: float) -> str:
     epochs_b = before["epochs"]
     epochs_a = after["epochs"]
@@ -197,16 +214,19 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
             parts.append(
                 f'<rect x="{xs[i] - 3:.1f}" y="{y(max(0, e["validity"])) - 3:.1f}" width="6" height="6" fill="{NAVY}"/>'
             )
-    # revision / rollback markers at the last epoch they were proposed after
+    # revision / rollback markers at the epoch they were created after
+    marker_n = 0
     for v in versions:
         if v.get("origin") in {"revision", "rollback"}:
             color = RED if v["origin"] == "rollback" else GREEN
-            x = xs[-1]
+            x = xs[marker_epoch_index(epochs_b, v.get("created_at"))]
+            label_y = pad_t + 12 + 14 * (marker_n % 4)
+            marker_n += 1
             parts.append(
                 f'<line x1="{x:.1f}" y1="{pad_t}" x2="{x:.1f}" y2="{h - pad_b}" stroke="{color}" stroke-width="2" stroke-dasharray="3 3"/>'
             )
             parts.append(
-                f'<text x="{x - 6:.1f}" y="{pad_t + 12}" font-size="11" text-anchor="end" fill="{color}">v{v["version"]} {v["origin"]}</text>'
+                f'<text x="{x - 6:.1f}" y="{label_y}" font-size="11" text-anchor="end" fill="{color}">v{v["version"]} {v["origin"]}</text>'
             )
     parts.append(
         f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">grey: coverage under v1 · orange: coverage under v{after["policy_version"]} · navy squares: validity vs field anchor</text>'

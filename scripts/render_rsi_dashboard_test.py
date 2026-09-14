@@ -121,3 +121,16 @@ def test_renders_every_section_from_real_shapes(tmp_path):
         assert needle in page, needle
     assert "<script" not in page
     assert "http" not in page.split("<footer>")[0].replace("http://www.w3.org", "")
+
+
+def test_revision_markers_sit_at_the_epoch_they_were_created_after():
+    epochs = [
+        {"round": 1, "timestamp_ms": 1000},
+        {"round": 2, "timestamp_ms": 2000},
+        {"round": 3, "timestamp_ms": 3000},
+    ]
+    assert render.marker_epoch_index(epochs, "1970-01-01T00:00:02.500Z") == 1
+    assert render.marker_epoch_index(epochs, "1970-01-01T00:00:00.500Z") == 0
+    assert render.marker_epoch_index(epochs, "1970-01-01T00:00:09Z") == 2
+    assert render.marker_epoch_index(epochs, None) == 2
+    assert render.marker_epoch_index([], "1970-01-01T00:00:09Z") == 0

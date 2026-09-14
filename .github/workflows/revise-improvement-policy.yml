@@ -47,6 +47,10 @@ jobs:
       - name: Checkout (default branch — trusted)
         uses: actions/checkout@v4
         with:
+          # Always the default branch, whatever ref a manual dispatch was
+          # started from, so a proposal never carries an unrelated feature
+          # branch's commits (Codex review of PR #10, round 5).
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -120,25 +124,26 @@ jobs:
             exit 0
           fi
           version=$(python3 -c 'import json; print(json.load(open("docs/improvement-policy.json"))["version"])')
-          branch="improvement-policy-v${version}-${GITHUB_SHA:0:12}"
-          existing_pr=$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')
-          if [ -n "$existing_pr" ]; then
-            echo "PR #$existing_pr already proposes this revision — skipping."
-            exit 0
-          fi
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          # One standing proposal branch: a newer archive round supersedes an
+          # open proposal instead of opening a competing one with the same
+          # version and parent (Codex review of PR #10, round 5).
+          branch="improvement-policy-proposal"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            echo "Remote branch $branch exists with no open PR — retrying PR creation only."
-          else
-            git checkout -b "$branch"
-            git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/
-            git commit -m "chore(rsi): ${ACTION} of the improvement policy (v${version})"
-            git push origin "$branch"
+          git checkout -b "$branch"
+          git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/
+          git commit -m "chore(rsi): ${ACTION} of the improvement policy (v${version})"
+          git push --force origin "$branch"
+          existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing_pr" ]; then
+            gh pr comment "$existing_pr" --body "Superseded by a newer archive round at \`${GITHUB_SHA}\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version})."
+            echo "Updated the open proposal PR #$existing_pr in place."
+            exit 0
           fi
           gh pr create \
             --title "chore(rsi): ${ACTION} of the improvement policy (v${version})" \
             --body "Automatically proposed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) after the archive changed at \`${GITHUB_SHA}\`. Action: **${ACTION}**. See \`docs/improvement-policy-history.jsonl\` for the evidence and \`docs/rsi/dashboard.html\` for the rendered state. This changes only the AI-owned policy files; a human merges it, same as every other change in this repo." \
             --label "self-improvement-archive" \
-            --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)" \
+            --base "$default_branch" \
             --head "$branch"
