@@ -176,3 +176,15 @@ def test_overlapping_secrets_both_present_independently_still_work():
     secrets = {"short-secret", "short-secret-but-longer-variant"}
     out = redact_secrets.redact("only the short one: short-secret here", secrets)
     assert out == "only the short one: [REDACTED] here"
+
+
+def test_redacts_traces_api_key():
+    """scripts/sync-pr-traces.py's CI wiring exports TRACES_API_KEY, whose
+    content could theoretically end up echoed if a synced trace's own text
+    happens to contain it (e.g. a past session pasting it while debugging).
+    Must be covered the same as the other opaque API-key secrets."""
+    secrets = redact_secrets.collect_secrets_from_env(
+        {"TRACES_API_KEY": "trk_abcdefgh12345678"}
+    )
+    out = redact_secrets.redact("key is trk_abcdefgh12345678 here", secrets)
+    assert out == "key is [REDACTED] here"

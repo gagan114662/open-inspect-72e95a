@@ -15,8 +15,9 @@ appear in a process list. CODEX_AUTH_JSON is treated as a JSON document and
 every string value inside it (regardless of key name) is redacted
 independently — an individual field (e.g. a bare access token) echoed on its
 own would survive redaction if only the whole serialized blob were matched.
-CODEX_API_KEY / OPENAI_API_KEY are treated as opaque whole-value secrets.
-If CODEX_HOME is set and a readable auth.json exists under it, that file's
+CODEX_API_KEY / OPENAI_API_KEY / TRACES_API_KEY are treated as opaque
+whole-value secrets. If CODEX_HOME is set and a readable auth.json exists
+under it, that file's
 *current* contents are collected too, on top of CODEX_AUTH_JSON's original
 value — codex can rotate its own refresh token mid-run and write the new
 value to that file; redacting only the value captured at the start of the
@@ -25,10 +26,10 @@ run would miss a rotated token that later appears in output.
 Usage:
     python3 redact-secrets.py <src> <dst>
 
-Reads CODEX_AUTH_JSON, CODEX_API_KEY, OPENAI_API_KEY, CODEX_HOME from the
-environment. Writes <dst> with every occurrence of every collected secret
-value replaced by [REDACTED]. If no secret is configured, copies <src> to
-<dst> unchanged.
+Reads CODEX_AUTH_JSON, CODEX_API_KEY, OPENAI_API_KEY, TRACES_API_KEY, and
+CODEX_HOME from the environment. Writes <dst> with every occurrence of
+every collected secret value replaced by [REDACTED]. If no secret is
+configured, copies <src> to <dst> unchanged.
 """
 
 from __future__ import annotations
@@ -84,7 +85,7 @@ def collect_secrets_from_env(env: dict[str, str]) -> set[str]:
         # CODEX_AUTH_JSON env var was captured, mid-run.
         collect_secrets_from_auth_json_text(current_auth_json, secrets)
 
-    for key in ("CODEX_API_KEY", "OPENAI_API_KEY"):
+    for key in ("CODEX_API_KEY", "OPENAI_API_KEY", "TRACES_API_KEY"):
         value = env.get(key, "")
         if value:
             secrets.add(value)

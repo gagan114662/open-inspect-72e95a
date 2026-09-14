@@ -1,0 +1,174 @@
+name: Analyze PR Traces
+
+# Runs scripts/sync-pr-traces.py against this PR's commits: for each commit
+# linked to a traces.com trace via git notes (written by `traces setup
+# git`'s post-commit hook once installed locally -- see
+# docs/production-hardening-backlog.md item #4's trace-analysis note),
+# syncs that trace from the Traces API using a namespace-scoped read-only
+# key and searches it for the same recurring-topic taxonomy
+# detect-recurring-pattern.py already tracks.
+#
+# This is a genuinely different evidence source from Codex's PR-diff
+# review (.github/workflows/codex-review.yml): it sees the actual agent
+# session that produced the diff, not just the diff itself, so it can
+# catch a recurring struggle a clean final diff never shows. A session
+# that fumbled the same class of mistake three times before landing a
+# clean commit looks identical to one that got it right immediately, in
+# the diff-review signal alone.
+#
+# Advisory only: posts a PR comment, never fails the check. A PR whose
+# commits have no linked traces (no one had the git/agent hooks installed
+# locally when those commits were made -- the common case for any
+# contributor who hasn't run `traces setup git` / `traces setup agents
+# --hooks` in this repo yet) reports that plainly, not as an error.
+#
+# KNOWN RESIDUAL: git notes are just data -- anyone with push access to a
+# branch could, in principle, write an arbitrary commitRef->externalId
+# mapping pointing at any trace the configured key's namespace can read,
+# causing that trace's content to be synced and posted into a PR comment.
+# The API key is read-only (traces:read) and scoped to one namespace, so
+# this cannot expose the key itself or reach outside that namespace's own
+# data -- but it is a real, if low-severity, content-injection surface
+# worth naming rather than silently assuming away. Given every contributor
+# to this repo is presently the same account (`allowed_users` is a single
+# GitHub login elsewhere in this deployment), this residual is currently
+# theoretical, not exploitable by an outside party -- reassess if that
+# access model ever changes.
+#
+# Requires TRACES_API_KEY (scope traces:read) as a repo secret. Without
+# it, reports that plainly and exits -- never silently skips as if nothing
+# happened.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Per-PR, not repo-wide: overlapping runs on DIFFERENT PRs must never
+# cancel each other's queued run (the same real finding Codex's review of
+# archive-and-recommend.yml surfaced there applies equally here).
+concurrency:
+  group: analyze-pr-traces-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze linked agent traces
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch trace notes
+        # refs/notes/traces is a separate ref actions/checkout does not
+        # fetch by default. A repo with no such ref yet (no one has run
+        # `traces setup git` and committed since) is not an error.
+        run: |
+          git fetch origin "refs/notes/traces:refs/notes/traces" \
+            || echo "No refs/notes/traces on origin yet — no linked traces to find."
+
+      - name: Check for a Traces API key
+        id: has-key
+        env:
+          HAS_KEY: ${{ secrets.TRACES_API_KEY != '' }}
+        run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Report missing Traces API key
+        if: steps.has-key.outputs.present == 'false'
+        run: |
+          echo "::warning::No TRACES_API_KEY secret is configured — trace analysis did not run for this PR."
+
+      - name: Set up Python
+        if: steps.has-key.outputs.present == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Traces CLI
+        if: steps.has-key.outputs.present == 'true'
+        run: |
+          curl -fsSL https://www.traces.com/install | bash
+          echo "$HOME/.traces/bin" >> "$GITHUB_PATH"
+
+      - name: Run trace analysis
+        id: analyze
+        if: steps.has-key.outputs.present == 'true'
+        env:
+          TRACES_API_KEY: ${{ secrets.TRACES_API_KEY }}
+        run: |
+          if python3 scripts/sync-pr-traces.py \
+            "$GITHUB_WORKSPACE" \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            > "$RUNNER_TEMP/trace-analysis-raw.txt" 2>"$RUNNER_TEMP/trace-analysis-err-raw.txt"; then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+          # Redact unconditionally, on both the success and failure paths —
+          # codex-review.yml's round-5 finding was exactly a redaction call
+          # present on only one of two output paths.
+          python3 "$GITHUB_WORKSPACE/scripts/redact-secrets.py" \
+            "$RUNNER_TEMP/trace-analysis-raw.txt" "$RUNNER_TEMP/trace-analysis.txt"
+          python3 "$GITHUB_WORKSPACE/scripts/redact-secrets.py" \
+            "$RUNNER_TEMP/trace-analysis-err-raw.txt" "$RUNNER_TEMP/trace-analysis-err.txt"
+          cat "$RUNNER_TEMP/trace-analysis.txt"
+
+      - name: Post trace analysis as a PR comment
+        if: steps.has-key.outputs.present == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          ANALYSIS_FAILED: ${{ steps.analyze.outputs.failed }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const analysisFailed = process.env.ANALYSIS_FAILED === "true";
+
+            let body;
+            if (analysisFailed) {
+              const err = fs.existsSync(process.env.RUNNER_TEMP + "/trace-analysis-err.txt")
+                ? fs.readFileSync(process.env.RUNNER_TEMP + "/trace-analysis-err.txt", "utf8")
+                : "(no error output captured)";
+              body = [
+                "### Trace analysis",
+                "",
+                "Analysis did not complete successfully — treat as unreviewed, not as a clean result.",
+                "",
+                "```",
+                err.slice(0, 2000),
+                "```",
+              ].join("\n");
+            } else {
+              const raw = fs.readFileSync(process.env.RUNNER_TEMP + "/trace-analysis.txt", "utf8");
+              const humanPart = raw.split("---\n")[0].trim();
+              body = [
+                "### Trace analysis",
+                "",
+                humanPart || "No output.",
+                "",
+                "---",
+                "*Searches the actual agent session traces behind this PR's commits (via " +
+                  "[traces.com](https://traces.com)) for the same recurring-topic taxonomy the " +
+                  "review archive tracks — see " +
+                  "[docs/production-hardening-backlog.md](../blob/main/docs/production-hardening-backlog.md) " +
+                  "item #4. A PR with no linked traces means no one had the git/agent hooks " +
+                  "installed locally when its commits were made — run `traces setup git` and " +
+                  "`traces setup agents --hooks` once to opt in.*",
+              ].join("\n");
+            }
+
+            if (body.length > 60000) {
+              body = body.slice(0, 60000) + "\n\n...(truncated)";
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
