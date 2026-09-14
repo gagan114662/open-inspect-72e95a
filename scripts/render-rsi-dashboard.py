@@ -243,7 +243,7 @@ def loop_diagram(stats: dict) -> str:
         ("1. AI system", "this repository's review-and-fix loop", 20, 40),
         ("2. Improver", f"Claude Code rounds: {stats['rounds']}", 210, 40),
         ("3. Strategy", f"policy v{stats['policy_version']} · {stats['policy_hash']}", 400, 40),
-        ("4. Target", esc(stats["target"]), 590, 40),
+        ("4. Target", str(stats["target"]), 590, 40),
         ("5. Verifier", f"codex-review.yml · {stats['findings']} findings", 590, 170),
         ("6. Improvement", f"kept rounds: {stats['kept']} / {stats['rounds']}", 400, 170),
         ("7. Successor", f"main @ {stats['head']}", 210, 170),
@@ -259,8 +259,10 @@ def loop_diagram(stats: dict) -> str:
         parts.append(
             f'<text x="{x + 10}" y="{y + 26}" font-size="14" font-weight="700" fill="#fff">{esc(title)}</text>'
         )
+        # Every subtitle is escaped here, at the interpolation point: the
+        # foreignObject renders live markup (Codex review of PR #10, round 13).
         parts.append(
-            f'<foreignObject x="{x + 10}" y="{y + 34}" width="152" height="44"><div xmlns="http://www.w3.org/1999/xhtml" style="font:11px/1.3 system-ui;color:#dbe4f3">{sub}</div></foreignObject>'
+            f'<foreignObject x="{x + 10}" y="{y + 34}" width="152" height="44"><div xmlns="http://www.w3.org/1999/xhtml" style="font:11px/1.3 system-ui;color:#dbe4f3">{esc(sub)}</div></foreignObject>'
         )
     arrows = [
         (190, 80, 210, 80),
@@ -519,6 +521,16 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv[1:])
 
+    policy_mod.assert_safe_output(
+        args.out,
+        inputs=[
+            args.archive_path,
+            args.policy,
+            args.history,
+            args.trace_evidence,
+            args.verifier_evidence,
+        ],
+    )
     entries = measure_mod.load_archive(args.archive_path)
     policy = policy_mod.load_policy(args.policy)
     history = policy_mod.load_history(args.history)

@@ -182,3 +182,46 @@ def test_trigger_chart_plots_current_policy_validity():
     assert 'y="233.0" width="6" height="6"' in svg
     assert 'y="41.0" width="6" height="6"' not in svg
     assert "v2 validity" in svg
+
+
+def test_head_label_is_escaped_in_the_loop_diagram():
+    svg = render.loop_diagram(
+        {
+            "rounds": 1,
+            "findings": 1,
+            "kept": 1,
+            "target": "<b>t</b>",
+            "head": "<img src=x onerror=alert(1)>",
+            "policy_version": 1,
+            "policy_hash": "abc",
+        }
+    )
+    assert "<img src=x" not in svg and "<b>t</b>" not in svg
+    assert "&lt;img src=x onerror=alert(1)&gt;" in svg
+
+
+def test_out_may_not_overwrite_protected_or_input_files(tmp_path):
+    import pytest
+
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text(json.dumps(_archive()[0]) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    for bad in (
+        policy_mod.REPO_ROOT / "docs" / "self-improvement-archive.jsonl",
+        archive,
+        policy_path,
+    ):
+        with pytest.raises(PermissionError):
+            render.main(
+                [
+                    "r",
+                    str(archive),
+                    "--policy",
+                    str(policy_path),
+                    "--history",
+                    str(tmp_path / "h.jsonl"),
+                    "--out",
+                    str(bad),
+                ]
+            )
