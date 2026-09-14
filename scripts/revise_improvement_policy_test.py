@@ -748,6 +748,20 @@ def test_ancestry_continues_through_a_rollback():
     assert decision["policy"]["restored_version"] == 1
 
 
+def test_current_definition_mismatch_does_not_erase_an_ancestors_evidence():
+    current = {
+        "anchor": {"archive-ops": None},  # current policy's keywords differ from the snapshot
+        "anchor_evidence": {"archive-ops": 4},
+        "anchor_definitions": {"archive-ops": ["archive"]},
+    }
+    ancestor = policy_mod.builtin_policy()
+    ancestor["topics"]["archive-ops"] = {"keywords": ["archive"], "weight": 1.0}
+    assert revise.candidate_anchor(current, ancestor)["archive-ops"] == 4
+    changed = policy_mod.builtin_policy()
+    changed["topics"]["archive-ops"] = {"keywords": ["archive", "branch"], "weight": 1.0}
+    assert revise.candidate_anchor(current, changed)["archive-ops"] is None
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))

@@ -297,6 +297,8 @@ def measure_epoch(
     weights: dict[str, float],
     evidence: dict | None,
     until_ms: int | None,
+    *,
+    historical: bool = False,
 ) -> dict:
     topics = list(keywords)
     dev_rounds: dict[str, set[int]] = {t: set() for t in topics}
@@ -317,7 +319,13 @@ def measure_epoch(
     # measured on the same signal, or discounting a topic could never
     # change what is measured (Codex review of PR #10, finding 4).
     dev_weighted = {t: round(dev[t] * weights.get(t, 1.0), 4) for t in topics}
-    anchor = anchor_counts_at(evidence, topics, until_ms, keywords)
+    if historical and until_ms is None and evidence is not None:
+        # A historical epoch with no usable timestamp has no defensible
+        # evidence window: unknown, not "everything" (Codex review of
+        # PR #10, round 18).
+        anchor: dict[str, int | None] | None = dict.fromkeys(topics)
+    else:
+        anchor = anchor_counts_at(evidence, topics, until_ms, keywords)
     validity = None
     known = [t for t in topics if anchor is not None and anchor[t] is not None]
     if anchor is not None:
@@ -376,7 +384,7 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
     epochs = []
     for i in range(len(rounds)):
         epoch = measure_epoch(
-            rounds[: i + 1], keywords, weights, evidence, rounds[i]["timestamp_ms"]
+            rounds[: i + 1], keywords, weights, evidence, rounds[i]["timestamp_ms"], historical=True
         )
         epoch.pop("unclassified_findings")
         epochs.append(epoch)

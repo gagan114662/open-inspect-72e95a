@@ -283,3 +283,14 @@ def test_out_json_and_save_evidence_may_not_be_the_same_file(tmp_path, capsys):
     assert code == 1
     assert "must be different files" in capsys.readouterr().err
     assert not same.exists()
+
+
+def test_epoch_without_a_timestamp_has_unknown_evidence_not_all_of_it():
+    archive = [{"round": 1, "findings": ["[P1] Secret leaked."]}] + _archive()[1:]
+    result = measure.measure(archive, policy_mod.builtin_policy(), _evidence())
+    first = result["epochs"][0]
+    assert first["timestamp_ms"] is None
+    assert all(v is None for v in first["anchor"].values())
+    assert first["validity"] is None
+    # The current (non-historical) measurement still uses the whole snapshot.
+    assert result["current"]["anchor"]["shell-semantics"] == 2

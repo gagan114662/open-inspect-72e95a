@@ -397,8 +397,14 @@ def candidate_anchor(current: dict, policy: dict) -> dict | None:
     anchor = current.get("anchor")
     if anchor is None:
         return None
+    # Start from the evidence-wide counts and overlay only the current
+    # policy's KNOWN counts: a None caused by the current policy's own
+    # definition mismatch must not erase a count an ancestor with the
+    # matching definition is entitled to (Codex review of PR #10, round 18).
     merged = dict(current.get("anchor_evidence") or {})
-    merged.update(anchor)
+    for topic, count in anchor.items():
+        if count is not None or topic not in merged:
+            merged[topic] = count
     definitions = current.get("anchor_definitions") or {}
     keywords = policy_mod.topic_keywords(policy)
     result: dict[str, int | None] = {}
