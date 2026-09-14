@@ -304,6 +304,62 @@ def validity_under(policy: dict, entries: list[dict], anchor: dict | None) -> fl
     )
 
 
+def validity_regressed(before: float | None, after: float | None) -> bool:
+    """A candidate may not lower a defined validity, and may not turn a
+    defined validity into an undefined one (a constant weighted signal has
+    no rank agreement to measure, which would silence every later trigger —
+    Codex review of PR #10, round 3, finding 1)."""
+    if before is None:
+        return False
+    return after is None or after < before
+
+
+def weight_repair(
+    policy: dict,
+    current: dict,
+    entries: list[dict],
+    *,
+    discount: bool,
+) -> tuple[dict, list[str]]:
+    """Propose weight changes against the measured anchor: restore credit to
+    topics the field now corroborates (always considered, so a discounted
+    topic is not stranded below the threshold once evidence arrives — Codex
+    review of PR #10, round 3, finding 2), and discount topics the field
+    never shows (only when the validity trigger fired). The whole proposal
+    is kept only if it does not regress validity on the same anchor."""
+    anchor = current.get("anchor")
+    weights = policy_mod.topic_weights(policy)
+    if anchor is None:
+        return policy["topics"], []
+    topics = dict(policy["topics"])
+    changes: list[str] = []
+    if discount:
+        for topic in current.get("dev_only_topics", []):
+            old_w = weights[topic]
+            new_w = max(MIN_WEIGHT, round(old_w * WEIGHT_DISCOUNT, 3))
+            if new_w < old_w:
+                topics[topic] = {**topics[topic], "weight": new_w}
+                changes.append(
+                    f"discounted {topic} weight {old_w} -> {new_w}: credited in {current['dev'][topic]} round(s), 0 field traces"
+                )
+    for topic, count in anchor.items():
+        if count is not None and count > 0 and weights.get(topic, 1.0) < 1.0:
+            restored = min(1.0, round(weights[topic] / WEIGHT_DISCOUNT, 3))
+            topics[topic] = {**topics[topic], "weight": restored}
+            changes.append(
+                f"restored {topic} weight {weights[topic]} -> {restored}: {count} field trace(s)"
+            )
+    if not changes:
+        return policy["topics"], []
+    before_v = validity_under(policy, entries, anchor)
+    after_v = validity_under({**policy, "topics": topics}, entries, anchor)
+    if validity_regressed(before_v, after_v):
+        return policy["topics"], [
+            f"kept weights unchanged: proposed reweighting would move validity {before_v} -> {after_v}"
+        ]
+    return topics, changes
+
+
 def rounds_since(entries: list[dict], created_at: str) -> int:
     adopted_ms = measure_mod.parse_timestamp_ms(created_at)
     if adopted_ms is None:
@@ -365,10 +421,8 @@ def decide(
                 child_validity = validity_under(policy, entries, anchor)
                 parent_validity = validity_under(parent, entries, anchor)
                 worse_coverage = parent_now is not None and coverage < parent_now
-                worse_validity = (
-                    child_validity is not None
-                    and parent_validity is not None
-                    and child_validity < parent_validity
+                worse_validity = parent_validity is not None and (
+                    child_validity is None or child_validity < parent_validity
                 )
                 if worse_coverage or worse_validity:
                     what = (
@@ -404,11 +458,6 @@ def decide(
         triggers.append(f"coverage {coverage} < {MIN_COVERAGE}")
     if validity is not None and validity < MIN_VALIDITY:
         triggers.append(f"validity {validity} < {MIN_VALIDITY}")
-    if not triggers:
-        return {
-            "action": "none",
-            "reason": "policy signal still predicts the field within thresholds",
-        }
 
     changes: list[str] = []
     new_topics = dict(policy["topics"])
@@ -429,40 +478,24 @@ def decide(
             f"added topic {topic['name']} (keywords {topic['keywords']}) covering {len(topic['evidence'])} unclassified finding(s)"
         )
 
-    # 3. Validity repair: stop crediting what the field never shows. A weight
-    #    change is kept only if the candidate scores at least the current
-    #    validity on the same anchor (Codex review of PR #10, round 2,
-    #    finding 1); otherwise it is dropped and recorded as such.
-    anchor = current.get("anchor")
-    if anchor is not None:
-        weight_topics = dict(new_topics)
-        weight_changes: list[str] = []
-        for topic in current.get("dev_only_topics", []):
-            old_w = weights[topic]
-            new_w = max(MIN_WEIGHT, round(old_w * WEIGHT_DISCOUNT, 3))
-            if new_w < old_w:
-                weight_topics[topic] = {**weight_topics[topic], "weight": new_w}
-                weight_changes.append(
-                    f"discounted {topic} weight {old_w} -> {new_w}: credited in {current['dev'][topic]} round(s), 0 field traces"
-                )
-        for topic, count in anchor.items():
-            if count is not None and count > 0 and weights.get(topic, 1.0) < 1.0:
-                restored = min(1.0, round(weights[topic] / WEIGHT_DISCOUNT, 3))
-                weight_topics[topic] = {**weight_topics[topic], "weight": restored}
-                weight_changes.append(
-                    f"restored {topic} weight {weights[topic]} -> {restored}: {count} field trace(s)"
-                )
-        if weight_changes:
-            candidate = {**policy, "topics": weight_topics}
-            before_v = validity_under(policy, entries, anchor)
-            after_v = validity_under(candidate, entries, anchor)
-            if before_v is not None and after_v is not None and after_v < before_v:
-                changes.append(
-                    f"kept weights unchanged: proposed reweighting would lower validity {before_v} -> {after_v}"
-                )
-            else:
-                new_topics = weight_topics
-                changes.extend(weight_changes)
+    # 3. Weight repair: restorations are always evaluated; discounts only
+    #    when validity actually failed.
+    weighted_topics, weight_changes = weight_repair(
+        {**policy, "topics": new_topics},
+        current,
+        entries,
+        discount=any(t.startswith("validity") for t in triggers),
+    )
+    new_topics = weighted_topics
+    changes.extend(weight_changes)
+
+    if not triggers and not any(c.startswith("restored") for c in changes):
+        return {
+            "action": "none",
+            "reason": "policy signal still predicts the field within thresholds",
+        }
+    if not triggers:
+        triggers.append("field evidence corroborates a discounted topic")
 
     if not changes or all(c.startswith("kept weights unchanged") for c in changes):
         return {

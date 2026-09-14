@@ -3,7 +3,7 @@ name: Revise Improvement Policy
 # The L5 step of docs/plans/recursive-meta-improvement.md, run automatically
 # but bounded exactly like archive-and-recommend.yml: it never pushes to the
 # default branch, never merges, never deploys, and requests no repository
-# secrets beyond an optional read-only Traces API key.
+# repository secrets at all.
 #
 # After every change to the review archive on main (an archive-round PR
 # merging), this workflow:
@@ -17,9 +17,11 @@ name: Revise Improvement Policy
 #   4. opens ONE pull request carrying the policy, its history entry, the
 #      measurement, and the dashboard. A human merges it, or closes it.
 #
-# Without TRACES_API_KEY the anchor is absent: coverage is still measured
-# and can still trigger a revision, validity is reported as null, and the
-# workflow says so in the PR body rather than pretending it was checked.
+# The field anchor (Traces evidence) is a committed snapshot refreshed on a
+# developer machine, because working-session traces are not on a runner.
+# Without a snapshot the anchor is absent: coverage is still measured and
+# can still trigger a revision, validity is reported as null, and the
+# workflow says so rather than pretending it was checked.
 
 on:
   push:
@@ -52,31 +54,25 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Check for a Traces API key
-        id: traces-key
-        env:
-          HAS_KEY: ${{ secrets.TRACES_API_KEY != '' }}
-        run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
-
-      - name: Install Traces CLI
-        if: steps.traces-key.outputs.present == 'true'
-        run: |
-          curl -fsSL https://traces.com/install.sh | sh
-          echo "$HOME/.traces/bin" >> "$GITHUB_PATH"
-
       - name: Measure policy validity
-        env:
-          TRACES_API_KEY: ${{ secrets.TRACES_API_KEY }}
+        # The field anchor is Traces evidence from WORKING sessions, which
+        # live on developers' machines, not on this runner: a fresh runner
+        # has an empty Traces database, so there is nothing here to search.
+        # The anchor is therefore a committed snapshot, refreshed locally with
+        #   python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+        #     --repo-dir . --save-evidence docs/rsi/trace-evidence.json
+        # This step reports the snapshot's age so a stale anchor is visible
+        # rather than silently reused (Codex review of PR #10, round 3).
         run: |
           set -euo pipefail
           mkdir -p docs/rsi
-          if [ -n "${TRACES_API_KEY:-}" ] && [ -f docs/rsi/trace-evidence.json ]; then
-            echo "Using the committed Traces evidence snapshot (docs/rsi/trace-evidence.json); refresh it locally with --repo-dir to update the anchor."
-          fi
           if [ -f docs/rsi/trace-evidence.json ]; then
+            collected=$(python3 -c 'import json; print(json.load(open("docs/rsi/trace-evidence.json")).get("collected_at", "unknown"))')
+            echo "::notice::Using the committed Traces evidence snapshot collected at ${collected}. Refresh it locally to update the field anchor."
             python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
               --trace-evidence docs/rsi/trace-evidence.json > measurement.txt
           else
+            echo "::notice::No Traces evidence snapshot committed; validity will be null and only coverage can trigger a revision."
             python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl > measurement.txt
           fi
           sed -n '1,/^---/p' measurement.txt

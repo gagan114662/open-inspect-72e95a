@@ -246,6 +246,46 @@ def test_weight_repair_is_dropped_when_it_would_lower_validity():
     assert restored < before
 
 
+def test_reweighting_that_undefines_validity_is_refused():
+    # Codex round-3 counterexample: discounting the only topic with a distinct
+    # weighted recurrence makes the weighted signal constant, so validity would
+    # go from a number to None. That must not pass as an improvement.
+    policy = _four_topic_policy([1, 1, 1, 1])
+    entries = _four_topic_archive()
+    anchor = {
+        "credential-redaction": 0,
+        "shell-semantics": 1,
+        "env-var-precedence": 2,
+        "fork-pr-permissions": 3,
+    }
+    before = revise.validity_under(policy, entries, anchor)
+    assert before is not None
+    assert revise.validity_regressed(before, None) is True
+    assert revise.validity_regressed(None, None) is False
+    assert revise.validity_regressed(0.2, 0.2) is False
+
+
+def test_corroborated_topic_regains_weight_even_when_scores_are_healthy():
+    policy = _four_topic_policy([0.5, 1, 1, 1])
+    evidence = _four_topic_evidence(
+        [3, 1, 3, 1]
+    )  # field strongly corroborates credential-redaction
+    measurement = measure.measure(_four_topic_archive(), policy, evidence)
+    assert measurement["current"]["coverage"] == 1.0
+    assert (
+        measurement["current"]["validity"] is not None
+        and measurement["current"]["validity"] >= revise.MIN_VALIDITY
+    )
+    decision = revise.decide(_four_topic_archive(), policy, [], measurement, NOW)
+    assert decision["action"] == "revise"
+    assert decision["policy"]["topics"]["credential-redaction"]["weight"] == 1.0
+    assert "corroborates" in decision["reason"]
+    assert (
+        decision["validity_after"] is not None
+        and decision["validity_after"] >= measurement["current"]["validity"]
+    )
+
+
 def test_rollback_on_validity_regression_with_same_coverage():
     parent = _four_topic_policy([1, 1, 1, 1])
     child = policy_mod.new_version(
