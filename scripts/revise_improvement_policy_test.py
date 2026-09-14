@@ -158,7 +158,8 @@ def test_no_rollback_when_unfamiliar_findings_lower_both_policies():
             "policy": child,
         }
     ]
-    noisy = _archive() + [
+    noisy = [
+        *_archive(),
         {
             "round": 4,
             "occurred_at": "2026-09-14T18:00:00Z",
@@ -372,12 +373,13 @@ def test_rollback_waits_for_rounds_decided_under_the_revision():
     )
     assert decision["action"] != "rollback"
     assert revise.rounds_under(under_parent, bad) == 0
-    one_under = under_parent[:-1] + [
+    one_under = [
+        *under_parent[:-1],
         {
             **_archive()[-1],
             "policy_hash": policy_mod.policy_hash(bad),
             "policy_version": bad["version"],
-        }
+        },
     ]
     assert revise.rounds_under(one_under, bad) == 1
     decision = revise.decide(one_under, bad, history, measure.measure(one_under, bad, None), NOW)
@@ -398,12 +400,13 @@ def test_no_new_revision_until_the_current_one_has_been_judged():
         {"version": 1, "policy": parent},
         {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 0.5, "policy": child},
     ]
-    one_under = _archive()[:-1] + [
+    one_under = [
+        *_archive()[:-1],
         {
             **_archive()[-1],
             "policy_hash": policy_mod.policy_hash(child),
             "policy_version": child["version"],
-        }
+        },
     ]
     measurement = measure.measure(one_under, child, None)
     assert (
@@ -515,12 +518,13 @@ def test_rolled_back_configuration_is_not_retried_on_the_same_evidence():
     assert again["action"] == "none"
     assert "rolled back" in again["reason"]
     # New archive content lifts the block.
-    grown = _archive() + [
+    grown = [
+        *_archive(),
         {
             "round": 4,
             "occurred_at": "2026-09-14T18:00:00Z",
             "findings": ["[P2] Archive queue overflow again."],
-        }
+        },
     ]
     retry = revise.decide(grown, current, history, measure.measure(grown, current, None), NOW)
     assert retry["action"] == "revise"
@@ -796,6 +800,32 @@ def test_out_policy_may_not_be_the_history_file(tmp_path, monkeypatch):
             ]
         )
     assert not history.exists()
+
+
+def test_rollback_judges_a_revision_only_on_its_own_rounds():
+    parent = _four_topic_policy([1, 1, 1, 1])
+    child = policy_mod.new_version(
+        parent,
+        topics=_four_topic_policy([0.25, 1, 1, 1])["topics"],
+        threshold=3,
+        origin="revision",
+        rationale="d",
+        created_at="2026-09-14T14:00:00Z",
+    )
+
+    def stamp(e, p):
+        return {**e, "policy_hash": policy_mod.policy_hash(p), "policy_version": p["version"]}
+
+    older = [stamp(e, parent) for e in _four_topic_archive()]
+    own = [
+        stamp(
+            {**e, "round": e["round"] + 10, "occurred_at": e["occurred_at"].replace("T1", "T2")},
+            child,
+        )
+        for e in _four_topic_archive()
+    ]
+    assert [e["round"] for e in revise.entries_under([*older, *own], child)] == [11, 12, 13]
+    assert revise.entries_under(older, child) == []
 
 
 def test_accepted_revision_never_regresses_validity():

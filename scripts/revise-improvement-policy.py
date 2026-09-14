@@ -469,6 +469,18 @@ def judged_from(policy: dict, history: list[dict]) -> int | None:
     return policy.get("parent")
 
 
+def entries_under(entries: list[dict], policy: dict) -> list[dict]:
+    """Archive entries from rounds stamped with this policy's version and
+    hash: the only rounds on which the policy can be judged (Codex review
+    of PR #10, round 25: older rounds decided by an ancestor must not enter
+    the comparison, or they can drown out the revision's own signal)."""
+    wanted = policy_mod.policy_hash(policy)
+    version = policy["version"]
+    return [
+        e for e in entries if e.get("policy_hash") == wanted and e.get("policy_version") == version
+    ]
+
+
 def rounds_under(entries: list[dict], policy: dict) -> int:
     """Rounds decided under this exact policy: archive-round.py stamps each
     round with the policy hash in force when it was archived. Rounds from
@@ -519,7 +531,6 @@ def decide(
     coverage = current.get("coverage")
     validity = current.get("validity")
     keywords = policy_mod.topic_keywords(policy)
-    weights = policy_mod.topic_weights(policy)
 
     # 1. Safe inheritance: a revision that made things worse gets rolled back
     #    before any new revision is layered on top of it. Both policies are
@@ -533,14 +544,21 @@ def decide(
         if adopted is not None and rounds_under(entries, policy) >= MIN_ROUNDS_TO_JUDGE:
             parent = snapshot_for_version(base_version, history)
             if parent is not None and coverage is not None:
-                parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
                 # Validity is judged only on rounds the evidence snapshot could
                 # have seen; rounds archived after collection would make an
                 # unchanged field look like a regression (Codex review of
                 # PR #10, round 7).
-                covered = entries_covered_by_evidence(entries, measurement)
+                covered = entries_covered_by_evidence(entries_under(entries, policy), measurement)
+                parent_now = measure_mod.measure(entries_under(entries, policy), parent, None)[
+                    "current"
+                ]["coverage"]
+                coverage = measure_mod.measure(entries_under(entries, policy), policy, None)[
+                    "current"
+                ]["coverage"]
                 child_validity = validity_under(policy, covered, candidate_anchor(current, policy))
-                worse_coverage = parent_now is not None and coverage < parent_now
+                worse_coverage = (
+                    parent_now is not None and coverage is not None and coverage < parent_now
+                )
                 # Compare against every ancestor in the unjudged chain, not
                 # only the parent: the best-scoring ancestor is the rollback
                 # target when the current policy is worse than any of them.

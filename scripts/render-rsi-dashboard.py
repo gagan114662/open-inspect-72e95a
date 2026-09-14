@@ -100,11 +100,15 @@ def esc(value: object) -> str:
 
 
 def fmt(value: object) -> str:
-    if value is None:
+    """Format a number for display. Anything that is not a number renders
+    as n/a, and the result is HTML-escaped, so a hostile history file
+    cannot smuggle markup through a coverage field (Codex review of PR #10,
+    round 25)."""
+    if value is None or isinstance(value, bool) or not isinstance(value, int | float):
         return "n/a"
     if isinstance(value, float):
         return f"{value:.2f}"
-    return str(value)
+    return esc(value)
 
 
 # --- data ------------------------------------------------------------------

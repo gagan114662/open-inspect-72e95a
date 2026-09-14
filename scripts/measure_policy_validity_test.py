@@ -138,7 +138,8 @@ def test_validity_uses_the_weighted_signal_the_detector_decides_on():
 
 
 def test_replay_orders_rounds_by_time_not_round_number():
-    archive = _archive() + [
+    archive = [
+        *_archive(),
         {"round": 9, "occurred_at": "2026-09-14T17:30:00Z", "findings": ["[P2] Nine first."]},
         {"round": 8, "occurred_at": "2026-09-14T18:00:00Z", "findings": ["[P2] Eight later."]},
     ]
@@ -286,7 +287,7 @@ def test_out_json_and_save_evidence_may_not_be_the_same_file(tmp_path, capsys):
 
 
 def test_epoch_without_a_timestamp_has_unknown_evidence_not_all_of_it():
-    archive = [{"round": 1, "findings": ["[P1] Secret leaked."]}] + _archive()[1:]
+    archive = [{"round": 1, "findings": ["[P1] Secret leaked."]}, *_archive()[1:]]
     result = measure.measure(archive, policy_mod.builtin_policy(), _evidence())
     first = result["epochs"][0]
     assert first["timestamp_ms"] is None
@@ -342,3 +343,20 @@ def test_history_path_counts_as_an_input_for_output_guards(tmp_path):
                 str(history),
             ]
         )
+
+
+def test_evidence_collection_counts_only_tool_results_and_errors(monkeypatch):
+    calls = []
+
+    def fake_run(_bin, args):
+        calls.append(args)
+        return {"traces": [{"id": "t1", "agentId": "claude-code", "timestamp": 1}]}
+
+    monkeypatch.setattr(measure, "run_traces_json", fake_run)
+    evidence = measure.collect_trace_evidence(
+        "traces", "/repo", {"credential-redaction": ["secret"]}, ["claude-code"]
+    )
+    assert evidence["event_types"] == "tool_result,error"
+    for args in calls:
+        assert args[args.index("--event-type") + 1] == "tool_result,error"
+    assert evidence["topics"]["credential-redaction"][0]["id"] == "t1"

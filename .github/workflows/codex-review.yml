@@ -56,7 +56,7 @@ jobs:
     # is why every earlier review reported its shell failing to start. 22.04
     # images predate the restriction, so the full sandbox starts unchanged.
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       # persist-credentials: false — this job's own GITHUB_TOKEN
       # (pull-requests: write) must not be left readable by the same agent
@@ -227,7 +227,10 @@ jobs:
           # workspace-write (still OS-sandboxed): read-only refused the writes
           # pytest needs, which is why every earlier review reported its shell
           # failing and stayed static.
-          if timeout 900 codex exec -s workspace-write - \
+          # The command timeout stays well inside the job's timeout-minutes so
+          # a stalled review hits this handler (redaction, failure status) and
+          # not the job's cancellation (Codex review of PR #10, round 25).
+          if timeout 720 codex exec -s workspace-write - \
             -c 'model_reasoning_effort="high"' \
             < $RUNNER_TEMP/codex-review-prompt.txt > $RUNNER_TEMP/codex-review-raw.txt 2>$RUNNER_TEMP/codex-review-err.txt
           then

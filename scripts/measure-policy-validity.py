@@ -64,6 +64,12 @@ def _load_sibling_module(name: str, filename: str):
 policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
 
 DEFAULT_ANCHOR_AGENTS = ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"]
+# Only the parts of a session where something actually happened count as
+# field evidence: command output and errors. Agent and user text is
+# narration — it repeats whatever people wrote about the review findings,
+# so counting it makes the anchor echo the development score instead of
+# checking it (see docs/plans/recursive-meta-improvement.md, invariants).
+DEFAULT_EVIDENCE_EVENT_TYPES = "tool_result,error"
 VERIFIER_AGENT = "codex"
 MIN_TOPICS_FOR_VALIDITY = 3
 SEARCH_RESULT_LIMIT = 500
@@ -183,6 +189,7 @@ def collect_trace_evidence(
     repo_dir: str,
     keywords: dict[str, list[str]],
     anchor_agents: list[str] | None,
+    event_types: str = DEFAULT_EVIDENCE_EVENT_TYPES,
 ) -> dict:
     """One Traces search per topic, scoped to the repository directory and
     (unless 'all') to non-verifier agents. Stores only ids, agents and
@@ -203,6 +210,8 @@ def collect_trace_evidence(
                     "--dir",
                     repo_dir,
                     *agent_args,
+                    "--event-type",
+                    event_types,
                     "--result-level",
                     "trace",
                     "--limit",
@@ -231,6 +240,7 @@ def collect_trace_evidence(
         "collected_at": policy_mod.utc_now_iso(),
         "repo_dir": repo_dir,
         "agents": anchor_agents or ["all"],
+        "event_types": event_types,
         "topics": topics,
         "truncated": truncated,
     }
@@ -393,6 +403,7 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
         anchor_meta = {
             "source": evidence.get("source", "traces"),
             "agents": evidence.get("agents", []),
+            "event_types": evidence.get("event_types"),
             "collected_at": evidence.get("collected_at"),
             "traces_considered": len(seen),
         }
@@ -468,6 +479,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--repo-dir", default=None)
     parser.add_argument("--save-evidence", default=None)
     parser.add_argument("--anchor-agents", default=",".join(DEFAULT_ANCHOR_AGENTS))
+    parser.add_argument(
+        "--evidence-events",
+        default=DEFAULT_EVIDENCE_EVENT_TYPES,
+        help="Trace event types that count as field evidence (never agent or user text)",
+    )
     parser.add_argument("--traces-bin", default="traces")
     parser.add_argument(
         "--history",
@@ -518,7 +534,7 @@ def main(argv: list[str]) -> int:
         )
         try:
             evidence = collect_trace_evidence(
-                args.traces_bin, args.repo_dir, search_keywords, agents
+                args.traces_bin, args.repo_dir, search_keywords, agents, args.evidence_events
             )
         except TracesCliError as exc:
             print(f"::error::{exc}", file=sys.stderr)
