@@ -72,6 +72,46 @@ archive:
 - `.github/workflows/revise-improvement-policy.yml` — runs after the archive changes on main and
   proposes the result as a pull request. Never pushes to main.
 
+## Invariants the meta-improver must hold
+
+Twenty-three rounds of independent Codex review on PR #10 converged on these. Every one is enforced
+in code and covered by a regression test in `scripts/*_test.py`; a future change that breaks one
+should fail the suite, not wait for a reviewer.
+
+1. **One evidence window.** Every validity comparison in a decision (candidate acceptance, weight
+   repair, rollback, the reported figure) uses the same rounds: those no later than the evidence
+   snapshot's `collected_at`. Rounds newer than the snapshot never mark a topic as "credited by
+   reviews, never seen in the field".
+2. **Evidence is bound to its definition.** A count is valid only for the topic name AND the keyword
+   list it was searched with. Renamed or re-mined topics, truncated searches, unsearched topics and
+   undated traces in historical epochs are _unknown_, never zero.
+3. **Evidence outlives the topic.** Refreshes keep searching every topic any recorded policy version
+   ever had, and candidates are judged against the evidence-wide counts, so a rolled-back topic
+   keeps the adverse evidence that stops it being re-mined on the same archive and snapshot.
+4. **Measurements are pinned.** A decision refuses a measurement whose policy hash or archive digest
+   differs from what it is deciding on; topic order is part of the hash.
+5. **Rounds are stamped.** Each archived round records the policy version and hash that decided it;
+   a revision is judged only on rounds stamped with its own version and hash, and no further
+   revision is layered on one that has not yet run for `MIN_ROUNDS_TO_JUDGE` rounds.
+6. **Ancestry is followed through rollbacks.** Rollback compares the current policy with every
+   unjudged ancestor, following a rollback to the ancestry of the version it restored, and rolls
+   back to the best-scoring ancestor; the recorded coverage is the restored policy's own.
+7. **No candidate regresses.** A revision is refused if it lowers coverage or validity against the
+   policy it replaces, or turns a defined validity into an undefined one; a rejected configuration
+   is not retried until the archive or the evidence has changed.
+8. **Bounded, unique mining.** At most two mined topics per revision, each backed by at least two
+   findings no other topic claims, keywords by document frequency, names never colliding with
+   existing topics, appended after existing topics so nothing already classified changes bucket.
+9. **Writes are role-specific and guarded.** The meta-improver writes only the policy and its
+   history, validates both destinations before writing either, refuses identical paths, and every
+   report/JSON side output refuses protected files, canonical evidence snapshots, and the run's own
+   inputs.
+10. **Rendered output is escaped.** Every string from the archive, history or evidence is
+    HTML-escaped at the point it enters the dashboard.
+11. **The workflow proposes, humans merge.** One superseding proposal branch, same-repository PRs
+    only, checkout pinned to the default branch, labelled with the commit actually measured,
+    machine-readable JSON written apart from the human report, re-measured after a decision.
+
 ## First real run
 
 Measured against the archive as of round 10 with policy v1: coverage 0.61, anchor empty (no working
