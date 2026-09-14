@@ -124,8 +124,9 @@ def test_rollback_when_an_adopted_revision_is_worse_than_its_parent():
         {"version": 1, "policy": parent},
         {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": bad},
     ]
-    measurement = _measurement(bad)
-    decision = revise.decide(_archive(), bad, history, measurement, NOW)
+    stamped = [{**e, "policy_hash": policy_mod.policy_hash(bad)} for e in _archive()]
+    measurement = measure.measure(stamped, bad, None)
+    decision = revise.decide(stamped, bad, history, measurement, NOW)
     assert decision["action"] == "rollback"
     assert decision["policy"]["origin"] == "rollback"
     assert decision["policy"]["version"] == 3
@@ -300,11 +301,10 @@ def test_rollback_on_validity_regression_with_same_coverage():
         {"version": 1, "policy": parent},
         {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": child},
     ]
-    evidence = _four_topic_evidence(
-        [3, 1, 2, 0]
-    )  # the field strongly supports credential-redaction
-    measurement = measure.measure(_four_topic_archive(), child, evidence)
-    decision = revise.decide(_four_topic_archive(), child, history, measurement, NOW)
+    evidence = _four_topic_evidence([3, 1, 2, 0])  # the field supports credential-redaction
+    stamped = [{**e, "policy_hash": policy_mod.policy_hash(child)} for e in _four_topic_archive()]
+    measurement = measure.measure(stamped, child, evidence)
+    decision = revise.decide(stamped, child, history, measurement, NOW)
     assert decision["action"] == "rollback"
     assert "validity" in decision["reason"]
 
@@ -337,21 +337,44 @@ def test_main_refuses_a_measurement_from_a_different_archive(tmp_path, capsys):
     assert "archive digest" in capsys.readouterr().err
 
 
-def test_rollback_waits_for_enough_rounds_to_judge():
+def test_rollback_waits_for_rounds_decided_under_the_revision():
     parent = policy_mod.builtin_policy()
+    parent["topics"]["archive-ops"] = {"keywords": ["archive"], "weight": 1.0}
+    bad_topics = {k: v for k, v in parent["topics"].items() if k != "archive-ops"}
     bad = policy_mod.new_version(
         parent,
-        topics=parent["topics"],
+        topics=bad_topics,
         threshold=3,
         origin="revision",
         rationale="x",
-        created_at="2026-09-14T16:30:00Z",
+        created_at="2026-09-14T14:00:00Z",
     )
     history = [
-        {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": bad}
+        {"version": 1, "policy": parent},
+        {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": bad},
     ]
-    decision = revise.decide(_archive(), bad, history, _measurement(bad), NOW)
+    # Rounds after the proposal's timestamp but stamped with the PARENT's hash
+    # (the PR was still open) do not count toward judging the revision.
+    under_parent = [{**e, "policy_hash": policy_mod.policy_hash(parent)} for e in _archive()]
+    decision = revise.decide(
+        under_parent, bad, history, measure.measure(under_parent, bad, None), NOW
+    )
     assert decision["action"] != "rollback"
+    assert revise.rounds_under(under_parent, bad) == 0
+    one_under = under_parent[:-1] + [{**_archive()[-1], "policy_hash": policy_mod.policy_hash(bad)}]
+    assert revise.rounds_under(one_under, bad) == 1
+    decision = revise.decide(one_under, bad, history, measure.measure(one_under, bad, None), NOW)
+    assert decision["action"] != "rollback"
+
+
+def test_accepted_revision_never_regresses_validity():
+    policy = _four_topic_policy([0.5, 1, 1, 1])
+    measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))
+    decision = revise.decide(_four_topic_archive(), policy, [], measurement, NOW)
+    assert decision["action"] == "revise"
+    assert not revise.validity_regressed(
+        measurement["current"]["validity"], decision["validity_after"]
+    )
 
 
 def test_main_refuses_a_measurement_taken_under_a_different_policy(tmp_path, capsys):

@@ -87,6 +87,19 @@ jobs:
           sed -n '1,/^---/p' revise.txt
           action=$(sed -n '/^---/,$p' revise.txt | tail -n +2 | python3 -c 'import json,sys; print(json.load(sys.stdin)["action"])')
           echo "action=$action" >> "$GITHUB_OUTPUT"
+          if [ "$action" != "none" ]; then
+            # The measurement that justified the decision is evidence; keep it.
+            # The live measurement must describe the policy now in force, or the
+            # next run's hash check would refuse it (Codex review of PR #10, round 4).
+            cp docs/rsi/measurement.json docs/rsi/measurement-decision.json
+            if [ -f docs/rsi/trace-evidence.json ]; then
+              python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+                --trace-evidence docs/rsi/trace-evidence.json > remeasure.txt
+            else
+              python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl > remeasure.txt
+            fi
+            sed -n '/^---/,$p' remeasure.txt | tail -n +2 > docs/rsi/measurement.json
+          fi
 
       - name: Re-render the dashboard
         run: |

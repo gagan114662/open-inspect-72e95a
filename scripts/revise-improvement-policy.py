@@ -360,14 +360,18 @@ def weight_repair(
     return topics, changes
 
 
-def rounds_since(entries: list[dict], created_at: str) -> int:
-    adopted_ms = measure_mod.parse_timestamp_ms(created_at)
-    if adopted_ms is None:
-        return 0
-    return sum(
-        1
-        for rnd in measure_mod.rounds_in_order(entries)
-        if rnd["timestamp_ms"] is not None and rnd["timestamp_ms"] > adopted_ms
+def rounds_under(entries: list[dict], policy: dict) -> int:
+    """Rounds decided under this exact policy: archive-round.py stamps each
+    round with the policy hash in force when it was archived. Rounds from
+    before a revision was merged never count toward judging it, however
+    long its pull request sat open (Codex review of PR #10, round 4)."""
+    wanted = policy_mod.policy_hash(policy)
+    return len(
+        {
+            e["round"]
+            for e in entries
+            if e.get("policy_hash") == wanted and isinstance(e.get("round"), int)
+        }
     )
 
 
@@ -410,10 +414,7 @@ def decide(
     #    PR #10, finding 1).
     if policy.get("origin") == "revision" and policy.get("parent") is not None:
         adopted = adoption_entry(policy["version"], history)
-        if (
-            adopted is not None
-            and rounds_since(entries, policy["created_at"]) >= MIN_ROUNDS_TO_JUDGE
-        ):
+        if adopted is not None and rounds_under(entries, policy) >= MIN_ROUNDS_TO_JUDGE:
             parent = snapshot_for_version(policy["parent"], history)
             if parent is not None and coverage is not None:
                 parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
@@ -514,6 +515,18 @@ def decide(
         rationale="Revised because " + "; ".join(triggers) + ". " + " ".join(changes),
         created_at=now,
     )
+    # The whole candidate, not just its weight changes, must not regress
+    # validity against the policy it replaces (Codex review of PR #10, round 4).
+    anchor = current.get("anchor")
+    v_before = validity_under(policy, entries, anchor)
+    v_after = validity_under(revised, entries, anchor)
+    if validity_regressed(v_before, v_after):
+        return {
+            "action": "none",
+            "reason": f"candidate revision would move validity {v_before} -> {v_after}; refused",
+            "triggers": triggers,
+            "rejected_changes": changes,
+        }
     after = measure_mod.measure(entries, revised, None)["current"]
     return {
         "action": "revise",
@@ -526,7 +539,7 @@ def decide(
         "validity_before": validity,
         # Same anchor counts, candidate weights; newly mined topics are
         # unknown to the anchor until evidence is re-collected.
-        "validity_after": validity_under(revised, entries, current.get("anchor")),
+        "validity_after": v_after,
     }
 
 

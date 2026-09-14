@@ -222,3 +222,10 @@ def append_history(
     # reclassify findings (Codex review of PR #10, finding 2).
     with open(path, "a") as f:
         f.write(json.dumps(entry) + "\n")
+
+
+# The checked-in policy, resolved once so every tool stamps and decides with
+# the same version and hash in one process.
+_CURRENT = load_policy_or_builtin()
+POLICY_VERSION: int = _CURRENT["version"]
+POLICY_HASH: str = policy_hash(_CURRENT)

@@ -47,6 +47,7 @@ def _load_sibling_module(name: str, filename: str):
 
 
 analyze_mod = _load_sibling_module("analyze_latest_review", "analyze-latest-review.py")
+policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
 parse_findings_mod = _load_sibling_module("parse_review_findings", "parse-review-findings.py")
 detect_mod = _load_sibling_module("detect_recurring_pattern", "detect-recurring-pattern.py")
 
@@ -66,6 +67,12 @@ def build_round_entry(
         "source_sha": source_sha,
         "kept": None,
         "occurred_at": datetime.now(UTC).isoformat(),
+        # Which improvement policy decided this round. revise-improvement-policy.py
+        # judges a revision only on rounds stamped with its own hash, so the
+        # waiting period counts rounds actually run under it, not rounds that
+        # happened while its PR was still open (Codex review of PR #10, round 4).
+        "policy_version": policy_mod.POLICY_VERSION,
+        "policy_hash": policy_mod.POLICY_HASH,
     }
 
 
