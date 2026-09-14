@@ -533,6 +533,11 @@ def decide(
                 if worse_coverage or worse_validity:
                     target = parent if worse_coverage else best
                     assert target is not None
+                    # Record what the restored policy actually scores, not the
+                    # current one's number (Codex review of PR #10, round 15).
+                    target_coverage = measure_mod.measure(entries, target, None)["current"][
+                        "coverage"
+                    ]
                     what = (
                         f"coverage {coverage} vs {parent_now}"
                         if worse_coverage
@@ -553,7 +558,7 @@ def decide(
                             created_at=now,
                         ),
                         "coverage_before": coverage,
-                        "coverage_after": parent_now if worse_coverage else coverage,
+                        "coverage_after": target_coverage,
                         "validity_before": child_validity,
                         "validity_after": best_validity if not worse_coverage else None,
                         "changes": [

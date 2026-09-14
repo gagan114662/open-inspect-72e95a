@@ -664,6 +664,36 @@ def test_late_evidence_rolls_back_past_an_unjudged_parent_to_the_better_ancestor
     assert decision["action"] == "rollback"
     assert "against v1" in decision["reason"]
     assert decision["policy"]["topics"]["credential-redaction"]["weight"] == 1.0
+    # v3 had an extra topic; the recorded coverage is the restored v1's own figure.
+    assert decision["coverage_after"] == measure.measure(stamped, v1, None)["current"]["coverage"]
+
+
+def test_report_outputs_may_not_overwrite_canonical_evidence(tmp_path):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(json.dumps(measure.measure(_archive(), policy_mod.builtin_policy(), None)))
+    canonical = str(policy_mod.REPO_ROOT / "docs" / "rsi" / "trace-evidence.json")
+    with pytest.raises(PermissionError, match="canonical evidence"):
+        revise.main(
+            [
+                "r",
+                str(archive),
+                "--measurement",
+                str(m_path),
+                "--policy",
+                str(policy_path),
+                "--history",
+                str(tmp_path / "h.jsonl"),
+                "--dry-run",
+                "--out-json",
+                canonical,
+            ]
+        )
+    # A deliberate evidence refresh is still allowed to target it.
+    policy_mod.assert_safe_output(canonical, kind="evidence")
 
 
 def test_accepted_revision_never_regresses_validity():

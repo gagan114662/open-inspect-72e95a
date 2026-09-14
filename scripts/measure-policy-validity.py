@@ -451,9 +451,10 @@ def main(argv: list[str]) -> int:
         policy_mod.load_policy(args.policy) if args.policy else policy_mod.load_policy_or_builtin()
     )
     inputs = [args.archive_path, args.policy, args.trace_evidence]
-    for out in (args.out_json, args.save_evidence):
-        if out:
-            policy_mod.assert_safe_output(out, inputs=inputs)
+    if args.out_json:
+        policy_mod.assert_safe_output(args.out_json, inputs=inputs)
+    if args.save_evidence:
+        policy_mod.assert_safe_output(args.save_evidence, inputs=inputs, kind="evidence")
     entries = load_archive(args.archive_path)
 
     evidence: dict | None = None

@@ -199,15 +199,28 @@ PROTECTED_OUTPUT_FILES: tuple[str, ...] = (
     "docs/improvement-policy.json",
     "docs/improvement-policy-history.jsonl",
 )
+# The committed field anchors: only a deliberate evidence refresh may write
+# them, never a report or decision output (Codex review of PR #10, round 15).
+CANONICAL_EVIDENCE_FILES: tuple[str, ...] = (
+    "docs/rsi/trace-evidence.json",
+    "docs/rsi/trace-evidence-verifier.json",
+)
 
 
-def assert_safe_output(path: Path | str, *, inputs: list[str | Path] = ()) -> None:
-    """Report/JSON side outputs may go anywhere EXCEPT the loop's own records,
-    its code, and the files the invocation is reading (Codex review of
-    PR #10, round 11)."""
+def assert_safe_output(
+    path: Path | str, *, inputs: list[str | Path] = (), kind: str = "report"
+) -> None:
+    """Side outputs may go anywhere EXCEPT the loop's own records, its code,
+    the files the invocation is reading, and (for anything but an evidence
+    refresh) the canonical evidence snapshots (Codex review of PR #10,
+    rounds 11 and 15)."""
     rel = relative_to_repo(path)
     if rel in PROTECTED_OUTPUT_FILES or any(rel.startswith(p) for p in PROTECTED_OUTPUT_PREFIXES):
         raise PermissionError(f"{rel} is a protected file; choose another output path")
+    if kind != "evidence" and rel in CANONICAL_EVIDENCE_FILES:
+        raise PermissionError(
+            f"{rel} is a canonical evidence snapshot; only --save-evidence may write it"
+        )
     for source in inputs:
         if source and Path(source).resolve() == Path(path).resolve():
             raise PermissionError(f"{rel} is an input of this run; choose another output path")
