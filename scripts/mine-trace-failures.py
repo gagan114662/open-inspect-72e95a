@@ -8,9 +8,11 @@ review findings — so the "field" merely echoed the reviews it was supposed
 to check. This tool reads the events of each working session directly
 through `traces show --json` and keeps only:
 
-  * tool results Traces itself marked `status: "error"`, and
-  * tool results whose output matches a failure shape (traceback, non-zero
-    exit, test failure, permission or auth error, git rejection, timeout).
+  * tool results Traces itself marked `status: "error"` — nothing else.
+    The failure shape of the output (traceback, non-zero exit, test
+    failure, permission or auth error, git rejection, timeout) only names
+    the kind; displayed text never turns a successful execution into a
+    failure.
 
 Each failure is paired with the command that produced it, deduplicated per
 session, classified with the current improvement policy, and written out
@@ -79,12 +81,6 @@ FAILURE_PATTERNS: dict[str, re.Pattern[str]] = {
     "timeout": re.compile(r"timed out|timeout of \d+|ETIMEDOUT|TLS handshake timeout", re.I),
     "not-found": re.compile(r"No such file or directory|command not found|ENOENT", re.I),
 }
-
-# Failure shapes are only looked for in the output of tools that run
-# commands; a file read that happens to contain the word "Traceback" is
-# content, not a failure. Other tools count only when Traces marked the
-# result as an error.
-COMMAND_TOOL_HINTS = ("bash", "shell", "command", "exec", "terminal", "run")
 
 
 class TracesCliError(RuntimeError):
@@ -170,28 +166,22 @@ def iter_events(traces_bin: str, trace_id: str):
         offset += len(events)
 
 
-def is_command_tool(tool: str) -> bool:
-    lowered = tool.lower()
-    return any(hint in lowered for hint in COMMAND_TOOL_HINTS)
-
-
 def failure_kind(event: dict) -> str | None:
-    """A failure is an execution that went wrong: the tool reported an
-    error, or a command tool reported a non-zero exit. Output that merely
-    contains failure-shaped text (a file displayed with `cat`, a quoted
-    finding) is content, not a failure (Codex review of PR #10, rounds 27
-    and 28). The failure shape then only names the kind."""
-    output = str(event.get("output") or event.get("text") or "")
-    errored = event.get("status") == "error"
-    nonzero = is_command_tool(str(event.get("toolName") or "")) and bool(
-        FAILURE_PATTERNS["nonzero-exit"].search(output)
-    )
-    if not (errored or nonzero):
+    """A failure is an execution the tool itself reported as an error
+    (`status: "error"`). Output text never decides whether something
+    failed — a displayed transcript can contain "Exit code 1" or "HTTP 401"
+    verbatim (Codex review of PR #10, rounds 27-30). The failure shape only
+    names the kind once the status says it failed."""
+    if event.get("status") != "error":
         return None
+    output = str(event.get("output") or event.get("text") or "")
+    # Most specific shape first; a bare non-zero exit is the fallback name.
     for name, pattern in FAILURE_PATTERNS.items():
         if name != "nonzero-exit" and pattern.search(output):
             return name
-    return "nonzero-exit" if nonzero else "tool-error"
+    if FAILURE_PATTERNS["nonzero-exit"].search(output):
+        return "nonzero-exit"
+    return "tool-error"
 
 
 def excerpt_for(kind: str, output: str) -> str:

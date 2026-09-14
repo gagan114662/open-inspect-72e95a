@@ -1,6 +1,6 @@
 {
   "source": "trace-failures",
-  "collected_at": "2026-09-14T22:45:41Z",
+  "collected_at": "2026-09-14T22:57:49Z",
   "repo_dir": "/Users/gaganarora/workplace/open-inspect-72e95a",
   "agents": ["all"],
   "event_types": "tool_result(status=error) or failure-shaped output",

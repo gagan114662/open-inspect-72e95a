@@ -27,11 +27,10 @@ when a revision would have fired, not just where things stand now.
 
 Usage:
     python3 measure-policy-validity.py <archive.jsonl>
-        [--policy PATH] [--trace-evidence EVIDENCE.json]
-        [--repo-dir DIR [--save-evidence EVIDENCE.json] [--anchor-agents a,b|all]]
-        [--traces-bin PATH]
+        [--policy PATH] [--trace-evidence EVIDENCE.json] [--out-json PATH]
 
-Without --trace-evidence or --repo-dir the anchor is absent: coverage is
+Evidence comes from `mine-trace-failures.py --repo-dir DIR --save-evidence
+EVIDENCE.json`. Without --trace-evidence the anchor is absent: coverage is
 still measured, validity is reported as null, and the JSON says so plainly.
 Prints human-readable lines, then a `---` separator, then a JSON object.
 """
@@ -42,8 +41,6 @@ import argparse
 import hashlib
 import importlib.util
 import json
-import re
-import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,19 +61,7 @@ def _load_sibling_module(name: str, filename: str):
 policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
 
 DEFAULT_ANCHOR_AGENTS = ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"]
-# Only the parts of a session where something actually happened count as
-# field evidence: command output and errors. Agent and user text is
-# narration — it repeats whatever people wrote about the review findings,
-# so counting it makes the anchor echo the development score instead of
-# checking it (see docs/plans/recursive-meta-improvement.md, invariants).
-DEFAULT_EVIDENCE_EVENT_TYPES = "tool_result,error"
-VERIFIER_AGENT = "codex"
 MIN_TOPICS_FOR_VALIDITY = 3
-SEARCH_RESULT_LIMIT = 500
-
-
-class TracesCliError(RuntimeError):
-    pass
 
 
 # --- archive replay ---------------------------------------------------------
@@ -144,28 +129,11 @@ def rounds_in_order(entries: list[dict]) -> list[dict]:
 
 
 # --- anchor evidence ---------------------------------------------------------
-
-
-def run_traces_json(traces_bin: str, args: list[str]) -> dict:
-    try:
-        result = subprocess.run(
-            [traces_bin, *args, "--json"], capture_output=True, text=True, timeout=60
-        )
-    except OSError as exc:
-        raise TracesCliError(f"Could not run `{traces_bin}`: {exc}") from exc
-    if result.returncode != 0:
-        raise TracesCliError(f"`{traces_bin} {' '.join(args)}` failed: {result.stderr.strip()}")
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise TracesCliError(f"Non-JSON output from `{traces_bin} {' '.join(args)}`") from exc
-    if not payload.get("ok"):
-        raise TracesCliError(f"`{traces_bin} {' '.join(args)}` reported failure: {payload}")
-    return payload["data"]
-
-
-def topic_pattern(keywords: list[str]) -> str:
-    return "|".join(re.escape(k) for k in keywords)
+#
+# Evidence is produced by scripts/mine-trace-failures.py --save-evidence and
+# consumed here. This script no longer collects evidence itself: keyword
+# searches over transcript text matched narration and successful file reads,
+# which made the anchor echo the reviews (Codex review of PR #10, round 30).
 
 
 def historical_definitions(
@@ -182,68 +150,6 @@ def historical_definitions(
             if name not in keywords and isinstance(spec.get("keywords"), list) and spec["keywords"]:
                 extra[name] = list(spec["keywords"])
     return extra
-
-
-def collect_trace_evidence(
-    traces_bin: str,
-    repo_dir: str,
-    keywords: dict[str, list[str]],
-    anchor_agents: list[str] | None,
-    event_types: str = DEFAULT_EVIDENCE_EVENT_TYPES,
-) -> dict:
-    """One Traces search per topic, scoped to the repository directory and
-    (unless 'all') to non-verifier agents. Stores only ids, agents and
-    timestamps -- enough to replay the anchor per epoch, no transcript text."""
-    topics: dict[str, list[dict]] = {}
-    truncated: list[str] = []
-    for topic, words in keywords.items():
-        matches: dict[str, dict] = {}
-        agent_filters: list[list[str]] = (
-            [["--agent", agent] for agent in anchor_agents] if anchor_agents else [[]]
-        )
-        for agent_args in agent_filters:
-            data = run_traces_json(
-                traces_bin,
-                [
-                    "search",
-                    topic_pattern(words),
-                    "--dir",
-                    repo_dir,
-                    *agent_args,
-                    "--event-type",
-                    event_types,
-                    "--result-level",
-                    "trace",
-                    "--limit",
-                    str(SEARCH_RESULT_LIMIT),
-                ],
-            )
-            found = data.get("traces", [])
-            if len(found) >= SEARCH_RESULT_LIMIT and topic not in truncated:
-                # A capped result is a lower bound, not a count; recording it
-                # as absolute would flatten frequent topics into identical
-                # numbers (Codex review of PR #10, round 5).
-                truncated.append(topic)
-            for trace in found:
-                matches[trace["id"]] = {
-                    "id": trace["id"],
-                    "agentId": trace.get("agentId"),
-                    "timestamp": trace.get("timestamp"),
-                }
-        topics[topic] = sorted(matches.values(), key=lambda t: (t["timestamp"] or 0, t["id"]))
-    return {
-        # The keyword definition each topic was searched with: a topic whose
-        # keywords change keeps its name but not its counts (Codex review of
-        # PR #10, round 11).
-        "definitions": {topic: list(words) for topic, words in keywords.items()},
-        "source": "traces",
-        "collected_at": policy_mod.utc_now_iso(),
-        "repo_dir": repo_dir,
-        "agents": anchor_agents or ["all"],
-        "event_types": event_types,
-        "topics": topics,
-        "truncated": truncated,
-    }
 
 
 def anchor_counts_at(
@@ -475,16 +381,11 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("archive_path")
     parser.add_argument("--policy", default=None)
-    parser.add_argument("--trace-evidence", default=None)
-    parser.add_argument("--repo-dir", default=None)
-    parser.add_argument("--save-evidence", default=None)
-    parser.add_argument("--anchor-agents", default=",".join(DEFAULT_ANCHOR_AGENTS))
     parser.add_argument(
-        "--evidence-events",
-        default=DEFAULT_EVIDENCE_EVENT_TYPES,
-        help="Trace event types that count as field evidence (never agent or user text)",
+        "--trace-evidence",
+        default=None,
+        help="Evidence file written by mine-trace-failures.py --save-evidence",
     )
-    parser.add_argument("--traces-bin", default="traces")
     parser.add_argument(
         "--history",
         default=str(policy_mod.HISTORY_PATH),
@@ -505,42 +406,12 @@ def main(argv: list[str]) -> int:
     inputs = [args.archive_path, args.policy, args.trace_evidence, args.history]
     if args.out_json:
         policy_mod.assert_safe_output(args.out_json, inputs=inputs)
-    if args.save_evidence:
-        policy_mod.assert_safe_output(args.save_evidence, inputs=inputs, kind="evidence")
-    if (
-        args.out_json
-        and args.save_evidence
-        and Path(args.out_json).resolve() == Path(args.save_evidence).resolve()
-    ):
-        # The measurement would overwrite the evidence it just collected
-        # (Codex review of PR #10, round 16).
-        print("::error::--out-json and --save-evidence must be different files", file=sys.stderr)
-        return 1
     entries = load_archive(args.archive_path)
 
     evidence: dict | None = None
     if args.trace_evidence:
         with open(args.trace_evidence) as f:
             evidence = json.load(f)
-    elif args.repo_dir:
-        agents = (
-            None
-            if args.anchor_agents.strip() == "all"
-            else [a.strip() for a in args.anchor_agents.split(",") if a.strip()]
-        )
-        search_keywords = dict(policy_mod.topic_keywords(policy))
-        search_keywords.update(
-            historical_definitions(policy_mod.load_history(args.history), search_keywords)
-        )
-        try:
-            evidence = collect_trace_evidence(
-                args.traces_bin, args.repo_dir, search_keywords, agents, args.evidence_events
-            )
-        except TracesCliError as exc:
-            print(f"::error::{exc}", file=sys.stderr)
-            return 1
-        if args.save_evidence:
-            Path(args.save_evidence).write_text(json.dumps(evidence, indent=2) + "\n")
 
     result = measure(entries, policy, evidence)
     current = result["current"]

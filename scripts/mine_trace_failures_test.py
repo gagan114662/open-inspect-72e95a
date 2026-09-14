@@ -47,7 +47,7 @@ def _events():
             "type": "tool_result",
             "callId": "c2",
             "toolName": "Bash",
-            "status": "success",
+            "status": "error",
             "output": "Exit code 1\n! [rejected] main -> main (non-fast-forward)",
             "timestamp": 6,
             "eventNumber": 5,
@@ -234,6 +234,13 @@ def test_line_numbers_and_file_contents_are_not_failures():
         "output": "line 401 of 900",
     }
     assert mine.failure_kind(bare_number) is None
+    shown_transcript = {
+        "type": "tool_result",
+        "toolName": "Bash",
+        "status": "success",
+        "output": "Exit code 1\nHTTP 401 Unauthorized",
+    }
+    assert mine.failure_kind(shown_transcript) is None, "status decides, output only names the kind"
 
 
 def test_capped_listing_marks_every_topic_unknown(monkeypatch):

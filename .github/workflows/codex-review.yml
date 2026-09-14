@@ -115,7 +115,11 @@ jobs:
 
       - name: Install pytest and ruff for the reviewer
         if: steps.has-key.outputs.present == 'true'
-        run: python3 -m pip install --quiet pytest ruff
+        # -I (isolated) and a trusted working directory: run from the checkout,
+        # `python3 -m pip` would import a PR-supplied `pip.py` from the repo
+        # root before the real module (Codex review of PR #10, round 30).
+        working-directory: ${{ runner.temp }}
+        run: python3 -I -m pip install --quiet pytest ruff
 
       # Extracts redact-secrets.py from the BASE branch, not the PR's own
       # checked-out HEAD. Without this, a same-repository PR could modify
@@ -256,9 +260,9 @@ jobs:
           # the fix was applied to one copy and not the other). One
           # implementation, reused here and by any future workflow that
           # needs the same redaction.
-          python3 "$RUNNER_TEMP/trusted/redact-secrets.py" \
+          python3 -I "$RUNNER_TEMP/trusted/redact-secrets.py" \
             $RUNNER_TEMP/codex-review-raw.txt $RUNNER_TEMP/codex-review-output.txt
-          python3 "$RUNNER_TEMP/trusted/redact-secrets.py" \
+          python3 -I "$RUNNER_TEMP/trusted/redact-secrets.py" \
             $RUNNER_TEMP/codex-review-err.txt $RUNNER_TEMP/codex-review-err-redacted.txt
 
           if [ "$exit_code" -ne 0 ]; then

@@ -72,8 +72,8 @@ jobs:
         # live on developers' machines, not on this runner: a fresh runner
         # has an empty Traces database, so there is nothing here to search.
         # The anchor is therefore a committed snapshot, refreshed locally with
-        #   python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
-        #     --repo-dir . --save-evidence docs/rsi/trace-evidence.json
+        #   python3 scripts/mine-trace-failures.py --repo-dir <folder with the working sessions> \
+        #     --save-evidence docs/rsi/trace-evidence.json
         # This step reports the snapshot's age so a stale anchor is visible
         # rather than silently reused (Codex review of PR #10, round 3).
         run: |

@@ -143,7 +143,7 @@ them.
 Reproduce:
 
 ```bash
-python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl --repo-dir . --save-evidence docs/rsi/trace-evidence.json
+python3 scripts/mine-trace-failures.py --repo-dir . --save-evidence docs/rsi/trace-evidence.json
 sed -n '/^---/,$p' <(python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl --trace-evidence docs/rsi/trace-evidence.json) | tail -n +2 > docs/rsi/measurement.json
 python3 scripts/revise-improvement-policy.py docs/self-improvement-archive.jsonl --measurement docs/rsi/measurement.json --dry-run
 python3 scripts/render-rsi-dashboard.py docs/self-improvement-archive.jsonl --trace-evidence docs/rsi/trace-evidence.json --out docs/rsi/dashboard.html
