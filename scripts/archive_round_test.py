@@ -40,6 +40,46 @@ def test_appends_new_round_and_tags_it_with_source_sha(tmp_path):
     assert new_entry["findings"] == ["**[P1]** A brand new finding."]
 
 
+def test_target_reflects_the_passed_argument_not_a_hardcoded_file(tmp_path):
+    """Real bug found while proving the mechanism end-to-end by hand: the
+    first version of build_round_entry() hardcoded target to
+    '.github/workflows/codex-review.yml' regardless of what was actually
+    reviewed -- so a round produced from reviewing a completely different
+    file (e.g. archive-and-recommend.yml itself) was recorded with the
+    wrong target. The workflow always reviews a PR's full diff, not one
+    fixed file, so this must come from an argument, not a constant."""
+    archive_path = tmp_path / "archive.jsonl"
+    _write_archive(archive_path, [])
+
+    review_path = tmp_path / "review.txt"
+    review_path.write_text("1. **[P1]** A finding about a totally different file.\n")
+
+    archive_round.main(
+        [
+            "archive-round.py",
+            str(archive_path),
+            str(review_path),
+            "sha-target-test",
+            "--target",
+            "PR #42 diff",
+        ]
+    )
+    entry = json.loads(archive_path.read_text().strip().splitlines()[-1])
+    assert entry["target"] == "PR #42 diff"
+
+
+def test_target_defaults_to_something_generic_when_not_passed(tmp_path):
+    archive_path = tmp_path / "archive.jsonl"
+    _write_archive(archive_path, [])
+    review_path = tmp_path / "review.txt"
+    review_path.write_text("1. **[P1]** A finding.\n")
+
+    archive_round.main(["archive-round.py", str(archive_path), str(review_path), "sha-default"])
+    entry = json.loads(archive_path.read_text().strip().splitlines()[-1])
+    assert entry["target"] != ".github/workflows/codex-review.yml"
+    assert entry["target"]  # non-empty
+
+
 def test_rerunning_with_same_source_sha_does_not_duplicate(tmp_path):
     """Idempotency: the specific bug Codex's review flagged as a race-prone
     replay risk -- reprocessing the same review comment (same SHA) must be

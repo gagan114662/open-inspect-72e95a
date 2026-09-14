@@ -55,10 +55,12 @@ def already_processed(archive_entries: list[dict], source_sha: str) -> bool:
     return any(entry.get("source_sha") == source_sha for entry in archive_entries)
 
 
-def build_round_entry(archive_entries: list[dict], findings: list[str], source_sha: str) -> dict:
+def build_round_entry(
+    archive_entries: list[dict], findings: list[str], source_sha: str, target: str
+) -> dict:
     return {
         "round": analyze_mod.next_round_number(archive_entries),
-        "target": ".github/workflows/codex-review.yml",
+        "target": target,
         "proposed_by": "codex (automated review, archived by archive-and-recommend.yml)",
         "findings": findings,
         "source_sha": source_sha,
@@ -77,6 +79,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("archive_path")
     parser.add_argument("review_comment_path")
     parser.add_argument("source_sha")
+    parser.add_argument(
+        "--target",
+        default="PR diff (see source_sha)",
+        help="Human-readable description of what was reviewed, e.g. 'PR #12 diff'.",
+    )
     parser.add_argument("--threshold", type=int, default=None)
     args = parser.parse_args(argv[1:])
 
@@ -97,7 +104,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     newly_crossed = analyze_mod.find_newly_crossed_topics(archive_entries, findings, threshold)
-    entry = build_round_entry(archive_entries, findings, args.source_sha)
+    entry = build_round_entry(archive_entries, findings, args.source_sha, args.target)
     append_entry(args.archive_path, entry)
 
     print(

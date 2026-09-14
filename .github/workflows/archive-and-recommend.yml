@@ -41,29 +41,49 @@ name: Archive and Recommend
 # workflow has no PR-authored-script trust boundary to manage. It requests
 # no secrets: everything it reads (the posted review comment, the archive
 # file) is already-redacted, already-public PR content.
+# Second real finding from that same Codex review, on a live re-review of
+# this file: each run only compares the archive against ITS OWN new round.
+# If two separate PRs are each mid-flight proposing an archive-round PR
+# (neither merged yet), each run sees only its own addition and neither
+# reports a crossing — even if merging both together would cross it. The
+# `push` trigger below closes that: once any archive-round PR actually
+# merges into main, this re-evaluates the FULL merged archive from
+# scratch and opens an issue for any topic at/above threshold that
+# doesn't already have one open. It reuses the same open-issue dedup by
+# title, so this is not a second, different mechanism -- it's the same
+# check, run again with fresher data, exactly the "next cycle sees the
+# prior cycle's persisted decision" property this file exists to prove.
 on:
   workflow_run:
     workflows: ["Codex Review"]
     types: [completed]
+  push:
+    branches: [main]
+    paths: ["docs/self-improvement-archive.jsonl"]
 
 permissions:
   contents: write
   issues: write
   pull-requests: write
 
-# Repo-wide singleton, not per-run: overlapping "Codex Review" completions
-# (e.g. rapid pushes to the same or different PRs) must not race each other
-# past the open-issue dedup check or the archive-PR dedup check, or both
-# can pass simultaneously and create duplicate issues / duplicate PRs.
-concurrency:
-  group: archive-and-recommend
-  cancel-in-progress: false
-
 jobs:
   analyze:
     name: Analyze review for recurring patterns
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.pull_requests[0] != null
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0] != null
+    # Real finding from a second Codex review: a single repo-wide
+    # concurrency group meant that if PR-A's review run was in progress
+    # and PR-B's review run was already queued behind it, PR-C's review
+    # completing would cancel PR-B's still-pending run outright (GitHub
+    # Actions keeps only the newest pending run per group when
+    # cancel-in-progress is false) -- silently dropping PR-B's round
+    # instead of ever archiving it. Scoping the group per PR keeps
+    # same-PR reruns serialized (the original purpose: don't let two runs
+    # for the same PR review race past the dedup checks) without
+    # different PRs' runs ever cancelling each other's queue slot.
+    concurrency:
+      group: archive-and-recommend-analyze-${{ github.event.workflow_run.pull_requests[0].number || github.run_id }}
+      cancel-in-progress: false
     steps:
       - name: Checkout (default branch — trusted)
         uses: actions/checkout@v4
@@ -134,6 +154,7 @@ jobs:
             docs/self-improvement-archive.jsonl \
             "$RUNNER_TEMP/review-comment.txt" \
             "${{ steps.fetch-comment.outputs.head-sha }}" \
+            --target "PR #${{ steps.fetch-comment.outputs.pr-number }} diff" \
             > "$RUNNER_TEMP/archive-result.json"
           cat "$RUNNER_TEMP/archive-result.json"
 
@@ -161,16 +182,35 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add docs/self-improvement-archive.jsonl
-          git commit -m "chore: archive round from PR #${PR_NUMBER} review"
-          git push origin "$branch"
+
+          # Real finding from a Codex review of this exact step: pushing the
+          # branch before calling `gh pr create`, then swallowing a create
+          # failure, left a remote branch with no open PR on a prior partial
+          # failure. A retry then generated a NEW commit (a fresh
+          # occurred_at timestamp) and tried to push it to that same
+          # branch -- rejected as non-fast-forward, blocking both PR
+          # creation and the tracking-issue step below on every subsequent
+          # run. Fix: only create+push the branch if it doesn't already
+          # exist remotely; if it does (a prior run got as far as pushing
+          # but not as far as opening the PR), reuse it as-is and retry
+          # just the PR creation. Also no longer swallows a genuine
+          # creation failure -- a failed step is a truthful signal that
+          # something needs attention, not something to paper over.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "Remote branch $branch already exists with no open PR — a prior run likely pushed it but failed before creating the PR. Retrying PR creation against the existing branch without re-pushing."
+          else
+            git checkout -b "$branch"
+            git add docs/self-improvement-archive.jsonl
+            git commit -m "chore: archive round from PR #${PR_NUMBER} review"
+            git push origin "$branch"
+          fi
+
           gh pr create \
             --title "chore: archive round from PR #${PR_NUMBER} review" \
             --body "Automatically proposed by [\`archive-and-recommend.yml\`](../blob/main/.github/workflows/archive-and-recommend.yml) after the Codex review on PR #${PR_NUMBER} (commit \`${SOURCE_SHA}\`). This is an append-only audit-log entry — no code or workflow behavior changes. A human still reviews and merges it, same as every other change in this repo." \
             --label "self-improvement-archive" \
             --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)" \
-            --head "$branch" || echo "::warning::Could not open the archive-round PR (label may not exist yet, or another race). The round is still reflected in this run's own comparison below."
+            --head "$branch"
 
       - name: Open a tracking issue for each newly-crossed topic
         if: steps.fetch-comment.outputs.found == 'true'
@@ -222,6 +262,112 @@ jobs:
                 `fix should be, and merging/deploying it, remains a human decision — this`,
                 `workflow never merges, deploys, or touches secrets; the archive update`,
                 `itself is a proposed pull request, not a direct commit.`,
+              ].join("\n");
+
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["self-improvement-recommendation"],
+              });
+              console.log(`Opened tracking issue for topic "${item.topic}".`);
+            }
+
+  reevaluate-on-merge:
+    name: Re-evaluate thresholds after an archive-round PR merges
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    # Narrower than the workflow-level grant above: this job only reads the
+    # merged archive and opens issues, never proposes or pushes a branch.
+    permissions:
+      contents: read
+      issues: write
+    # Merges to main are rare relative to PR review runs, and this job's
+    # only shared risk (the issue-creation dedup race) isn't PR-scoped, so
+    # a single group here is fine — unlike `analyze`, there's no "different
+    # PRs shouldn't cancel each other" dimension to preserve.
+    concurrency:
+      group: archive-and-recommend-reevaluate
+      cancel-in-progress: false
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ensure required labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "self-improvement-recommendation" \
+            --color "b60205" \
+            --description "Automatically opened: a finding topic crossed the mechanism-fix recurrence threshold" \
+            --force
+
+      - name: Recompute recommendations against the merged archive
+        id: detect
+        run: |
+          python3 scripts/detect-recurring-pattern.py docs/self-improvement-archive.jsonl \
+            > "$RUNNER_TEMP/detect-output.txt"
+          cat "$RUNNER_TEMP/detect-output.txt"
+          awk '/^---$/{found=1; next} found' "$RUNNER_TEMP/detect-output.txt" > "$RUNNER_TEMP/detect-result.json"
+
+      - name: Open a tracking issue for any topic at or above threshold
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const raw = fs.readFileSync(process.env.RUNNER_TEMP + "/detect-result.json", "utf8");
+            const { recommendations } = JSON.parse(raw);
+
+            const atThreshold = (recommendations || []).filter(
+              (r) => r.recommended_action === "mechanism"
+            );
+            if (atThreshold.length === 0) {
+              console.log("No topic is at or above the mechanism-fix threshold. Nothing to do.");
+              return;
+            }
+
+            for (const item of atThreshold) {
+              const title = `Recurring pattern: ${item.topic} — mechanism-level fix recommended`;
+
+              // Same dedup as the per-review job: a topic already tracked
+              // by an open issue is not re-opened just because this merge
+              // re-confirms it's still at/above threshold.
+              const existing = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                labels: "self-improvement-recommendation",
+                per_page: 100,
+              });
+              if (existing.some((issue) => issue.title === title)) {
+                console.log(`Issue already open for topic "${item.topic}" — skipping.`);
+                continue;
+              }
+
+              const body = [
+                `Automatically opened by [\`archive-and-recommend.yml\`](../blob/main/.github/workflows/archive-and-recommend.yml)`,
+                `after an archive-round pull request merged into the default branch.`,
+                ``,
+                `**Topic:** \`${item.topic}\``,
+                `**Recurrence:** ${item.recurrence_count} round(s): ${JSON.stringify(item.rounds)}`,
+                ``,
+                `This crossing may have resulted from combining two or more separately`,
+                `proposed archive-round PRs, each of which individually stayed under`,
+                `threshold — the per-review check only sees its own new round, so this`,
+                `merge-triggered re-evaluation is what catches that combined case.`,
+                ``,
+                `Run \`python3 scripts/detect-recurring-pattern.py docs/self-improvement-archive.jsonl\``,
+                `for the full evidence trail behind this recommendation.`,
+                ``,
+                `This issue was opened automatically. Deciding what the mechanism-level`,
+                `fix should be, and merging/deploying it, remains a human decision — this`,
+                `workflow never merges, deploys, or touches secrets.`,
               ].join("\n");
 
               await github.rest.issues.create({
