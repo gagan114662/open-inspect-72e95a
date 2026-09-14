@@ -36,8 +36,10 @@ describe("AnalyticsDashboardStore", () => {
     });
 
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(statements).toHaveLength(12);
-    expect(batchedStatements).toHaveLength(12);
+    // 13, not 12: PullRequestAnalyticsStore.prepare() now includes the
+    // reviewSessions-by-repo query alongside the original 7 PR statements.
+    expect(statements).toHaveLength(13);
+    expect(batchedStatements).toHaveLength(13);
     expect(batchedStatements.every((statement) => statements.includes(statement))).toBe(true);
     expect(response).toMatchObject({
       generatedAt: 1_700_000_000_000,
