@@ -693,11 +693,14 @@ authorize infrastructure changes on the account owner's behalf.
       (not just confirmation of what was already suspected) — proven three times over on item #3.
 - [x] A fresh instance with no memory of prior rounds, not just the same context re-reviewing
       itself, independently reproduces the verdict and finds something the prior rounds missed.
-- [ ] Wired into this deployment's actual PR flow so it runs on future changes without a human
+- [x] Wired into this deployment's actual PR flow so it runs on future changes without a human
       remembering to invoke it — [PR #2](https://github.com/gagan114662/open-inspect-72e95a/pull/2)
-      implements this (CI job posting findings as a PR comment, failing on a [P1]) but is not yet
-      merged, and needs a `CODEX_API_KEY`/`OPENAI_API_KEY` repo secret added before it actually
-      activates — see Terminal states.
+      merged, adding `.github/workflows/codex-review.yml` (runs on every PR, posts findings as a
+      comment, fails on a [P1]) and `.github/workflows/archive-and-recommend.yml` (after every
+      review, persists the round and opens a tracking issue when a finding topic crosses a
+      recurrence threshold — deliberately limited to that one action; it never merges, deploys, or
+      touches secrets). `CODEX_AUTH_JSON` is already configured as a repo secret, so this activates
+      on this exact PR — the first review this workflow runs unattended, with no manual invocation.
 
 ### Capabilities
 
