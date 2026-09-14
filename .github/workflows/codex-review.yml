@@ -49,7 +49,13 @@ concurrency:
 jobs:
   codex-review:
     name: Codex independent review
-    runs-on: ubuntu-latest
+    # ubuntu-22.04, not ubuntu-latest: Codex's Linux sandbox is bubblewrap,
+    # which needs an unprivileged user namespace to build its network
+    # namespace. Ubuntu 24.04 images ship with AppArmor restricting that
+    # (`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`), which
+    # is why every earlier review reported its shell failing to start. 22.04
+    # images predate the restriction, so the full sandbox starts unchanged.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       # persist-credentials: false — this job's own GITHUB_TOKEN
