@@ -376,7 +376,7 @@ def render(
         echo_note = (
             f"<p><b>Echo check.</b> With the verifier's own Codex review sessions counted as the anchor, validity reads "
             f"<b>{fmt(echo['current']['validity'])}</b> over {echo['anchor']['traces_considered']} trace(s). "
-            f"With them excluded it reads <b>{fmt(cur['validity'])}</b> ({anchor_note}). The first number agrees with the "
+            f"With them excluded it reads <b>{fmt(cur['validity'])}</b> ({esc(anchor_note)}). The first number agrees with the "
             f"review signal because it <i>is</i> the review signal; only the second is an independent anchor.</p>"
         )
 

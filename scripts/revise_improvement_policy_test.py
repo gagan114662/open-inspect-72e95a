@@ -469,6 +469,17 @@ def test_validity_rollback_ignores_rounds_newer_than_the_evidence():
     assert revise.entries_covered_by_evidence(stamped, measurement) == []
 
 
+def test_candidate_acceptance_and_rollback_use_the_same_evidence_window():
+    policy = _four_topic_policy([0.5, 1, 1, 1])
+    evidence = _four_topic_evidence([3, 1, 3, 1])
+    evidence["collected_at"] = "2026-09-14T14:30:00Z"  # predates every round
+    measurement = measure.measure(_four_topic_archive(), policy, evidence)
+    decision = revise.decide(_four_topic_archive(), policy, [], measurement, NOW)
+    # No covered rounds: there is no validity to judge a restoration on, so
+    # the candidate is neither accepted on later findings nor rolled back later.
+    assert decision["action"] == "none" or decision.get("validity_after") is None
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))

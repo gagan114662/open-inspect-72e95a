@@ -529,10 +529,15 @@ def decide(
 
     # 3. Weight repair: restorations are always evaluated; discounts only
     #    when validity actually failed.
+    # Every validity comparison in this decision uses the rounds the evidence
+    # snapshot covers, exactly as the rollback check does, so a candidate
+    # cannot pass on later findings and then be rolled back on the snapshot
+    # (Codex review of PR #10, round 8).
+    covered = entries_covered_by_evidence(entries, measurement)
     weighted_topics, weight_changes = weight_repair(
         {**policy, "topics": new_topics},
         current,
-        entries,
+        covered,
         discount=any(t.startswith("validity") for t in triggers),
     )
     new_topics = weighted_topics
@@ -568,8 +573,8 @@ def decide(
     # The whole candidate, not just its weight changes, must not regress
     # validity against the policy it replaces (Codex review of PR #10, round 4).
     anchor = current.get("anchor")
-    v_before = validity_under(policy, entries, anchor)
-    v_after = validity_under(revised, entries, anchor)
+    v_before = validity_under(policy, covered, anchor)
+    v_after = validity_under(revised, covered, anchor)
     if validity_regressed(v_before, v_after):
         return {
             "action": "none",

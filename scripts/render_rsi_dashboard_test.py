@@ -134,3 +134,41 @@ def test_revision_markers_sit_at_the_epoch_they_were_created_after():
     assert render.marker_epoch_index(epochs, "1970-01-01T00:00:09Z") == 2
     assert render.marker_epoch_index(epochs, None) == 2
     assert render.marker_epoch_index([], "1970-01-01T00:00:09Z") == 0
+
+
+def test_evidence_strings_are_escaped_in_the_echo_note(tmp_path):
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text(json.dumps(_archive()[0]) + "\n")
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))
+    hostile = {
+        "source": "<script>alert(1)</script>",
+        "agents": ["<img src=x onerror=alert(1)>"],
+        "topics": {"credential-redaction": [{"id": "t", "agentId": "x", "timestamp": 1}]},
+    }
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text(json.dumps(hostile))
+    out = tmp_path / "d.html"
+    assert (
+        render.main(
+            [
+                "r",
+                str(archive),
+                "--policy",
+                str(policy_path),
+                "--history",
+                str(tmp_path / "h.jsonl"),
+                "--trace-evidence",
+                str(evidence),
+                "--verifier-evidence",
+                str(evidence),
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    page = out.read_text()
+    assert "<script>alert(1)</script>" not in page
+    assert "<img src=x" not in page
+    assert "&lt;img src=x onerror=alert(1)&gt;" in page
