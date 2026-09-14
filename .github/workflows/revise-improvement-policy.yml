@@ -147,7 +147,11 @@ jobs:
           git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/
           git commit -m "chore(rsi): ${ACTION} of the improvement policy (v${version})"
           git push --force origin "$branch"
-          existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          # Same-repository PRs only: `--head` matches by branch name alone, so
+          # a fork PR using this branch name must not be mistaken for the
+          # bot's own proposal (Codex review of PR #10, round 19).
+          existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+            --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           if [ -n "$existing_pr" ]; then
             gh pr comment "$existing_pr" --body "Superseded by a newer archive round at \`${SOURCE_SHA}\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version})."
             echo "Updated the open proposal PR #$existing_pr in place."
