@@ -549,15 +549,17 @@ def decide(
                 # unchanged field look like a regression (Codex review of
                 # PR #10, round 7).
                 covered = entries_covered_by_evidence(entries_under(entries, policy), measurement)
-                parent_now = measure_mod.measure(entries_under(entries, policy), parent, None)[
-                    "current"
-                ]["coverage"]
-                coverage = measure_mod.measure(entries_under(entries, policy), policy, None)[
-                    "current"
-                ]["coverage"]
+                # Coverage on the revision's own rounds, kept apart from the
+                # full-archive `coverage` that the trigger and candidate
+                # acceptance use (Codex review of PR #10, round 26).
+                own_rounds = entries_under(entries, policy)
+                parent_now = measure_mod.measure(own_rounds, parent, None)["current"]["coverage"]
+                own_coverage = measure_mod.measure(own_rounds, policy, None)["current"]["coverage"]
                 child_validity = validity_under(policy, covered, candidate_anchor(current, policy))
                 worse_coverage = (
-                    parent_now is not None and coverage is not None and coverage < parent_now
+                    parent_now is not None
+                    and own_coverage is not None
+                    and own_coverage < parent_now
                 )
                 # Compare against every ancestor in the unjudged chain, not
                 # only the parent: the best-scoring ancestor is the rollback
@@ -580,7 +582,7 @@ def decide(
                         "coverage"
                     ]
                     what = (
-                        f"coverage {coverage} vs {parent_now}"
+                        f"coverage {own_coverage} vs {parent_now}"
                         if worse_coverage
                         else f"validity {child_validity} vs {best_validity}"
                     )
@@ -599,7 +601,7 @@ def decide(
                             created_at=now,
                             restored_version=target["version"],
                         ),
-                        "coverage_before": coverage,
+                        "coverage_before": own_coverage,
                         "coverage_after": target_coverage,
                         "validity_before": child_validity,
                         "validity_after": best_validity if not worse_coverage else None,

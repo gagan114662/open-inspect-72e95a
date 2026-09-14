@@ -828,6 +828,61 @@ def test_rollback_judges_a_revision_only_on_its_own_rounds():
     assert revise.entries_under(older, child) == []
 
 
+def test_rollback_check_does_not_clobber_full_archive_coverage():
+    # v2 covers 100% of its own rounds but only part of the archive; the
+    # trigger must still see the full-archive figure.
+    v1 = policy_mod.builtin_policy()
+    v2 = policy_mod.new_version(
+        v1,
+        topics=v1["topics"],
+        threshold=3,
+        origin="revision",
+        rationale="same",
+        created_at="2026-09-14T14:00:00Z",
+    )
+    history = [
+        {"version": 1, "policy": v1},
+        {"version": 2, "parent": 1, "origin": "revision", "coverage_before": 1.0, "policy": v2},
+    ]
+    own = [
+        {**e, "policy_hash": policy_mod.policy_hash(v2), "policy_version": 2}
+        for e in _archive()[:1]
+    ]
+    older = [
+        {**e, "policy_hash": policy_mod.policy_hash(v1), "policy_version": 1}
+        for e in _archive()[1:]
+    ]
+    older.append(
+        {
+            "round": 9,
+            "occurred_at": "2026-09-14T18:00:00Z",
+            "policy_hash": policy_mod.policy_hash(v1),
+            "policy_version": 1,
+            "findings": ["[P2] Zzz unclassifiable.", "[P2] Yyy unclassifiable."],
+        }
+    )
+    entries = [
+        *own,
+        *older,
+        *[
+            {
+                **e,
+                "round": e["round"] + 20,
+                "policy_hash": policy_mod.policy_hash(v2),
+                "policy_version": 2,
+            }
+            for e in _archive()[:1]
+        ],
+    ]
+    measurement = measure.measure(entries, v2, None)
+    assert measurement["current"]["coverage"] < revise.MIN_COVERAGE
+    decision = revise.decide(entries, v2, history, measurement, NOW)
+    # Not a rollback (own rounds equal the parent), and the low full-archive
+    # coverage must still register as the trigger.
+    assert decision["action"] != "rollback"
+    assert decision["action"] == "revise" or "coverage" in decision["reason"]
+
+
 def test_accepted_revision_never_regresses_validity():
     policy = _four_topic_policy([0.5, 1, 1, 1])
     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))
