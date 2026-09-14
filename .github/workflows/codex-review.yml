@@ -124,7 +124,12 @@ jobs:
           # configured.
           CODEX_HOME: ${{ steps.has-key.outputs.mode == 'auth-json' && format('{0}/codex-home', runner.temp) || '' }}
           CODEX_AUTH_JSON: ${{ steps.has-key.outputs.mode == 'auth-json' && secrets.CODEX_AUTH_JSON || '' }}
-          CODEX_API_KEY: ${{ steps.has-key.outputs.mode == 'api-key' && secrets.CODEX_API_KEY || '' }}
+          # Codex's own auth loader is reported to key off CODEX_API_KEY
+          # specifically for this override (not OPENAI_API_KEY on its own) —
+          # map either configured secret into CODEX_API_KEY so a
+          # OPENAI_API_KEY-only configuration actually authenticates rather
+          # than silently no-op'ing while still passing the presence check.
+          CODEX_API_KEY: ${{ steps.has-key.outputs.mode == 'api-key' && (secrets.CODEX_API_KEY || secrets.OPENAI_API_KEY) || '' }}
           OPENAI_API_KEY: ${{ steps.has-key.outputs.mode == 'api-key' && secrets.OPENAI_API_KEY || '' }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
@@ -160,72 +165,36 @@ jobs:
             exit_code=$?
           fi
 
+          # Redact any verbatim occurrence of each individual credential value
+          # — from BOTH the success output and the failure-path stderr trace,
+          # unconditionally, before either is ever printed to logs or posted
+          # anywhere. An earlier version only redacted the success path;
+          # Codex's own stderr trace on a crash/timeout can also contain
+          # credential material and was being `cat`'d straight to job logs
+          # unredacted. GitHub's own log masking does not apply to text
+          # assembled into a PR comment body via the API in any case.
+          #
+          # Uses scripts/redact-secrets.py — a standalone, tested script
+          # (scripts/redact_secrets_test.py, 9 cases) — rather than the
+          # inline python3 -c block this file used to duplicate verbatim
+          # across both call sites (that duplication is exactly how the
+          # stderr path ended up missing redaction in an earlier version:
+          # the fix was applied to one copy and not the other). One
+          # implementation, reused here and by any future workflow that
+          # needs the same redaction.
+          python3 "$GITHUB_WORKSPACE/scripts/redact-secrets.py" \
+            /tmp/codex-review-raw.txt /tmp/codex-review-output.txt
+          python3 "$GITHUB_WORKSPACE/scripts/redact-secrets.py" \
+            /tmp/codex-review-err.txt /tmp/codex-review-err-redacted.txt
+
           if [ "$exit_code" -ne 0 ]; then
             echo "::error::Codex review command failed or timed out (exit $exit_code) — see logs."
-            cat /tmp/codex-review-err.txt
-            if grep -qiE 'auth|unauthoriz|401|403|token expired|login' /tmp/codex-review-err.txt; then
+            cat /tmp/codex-review-err-redacted.txt
+            if grep -qiE 'auth|unauthoriz|401|403|token expired|login' /tmp/codex-review-err-redacted.txt; then
               echo "::warning::This looks like an authentication failure. If using CODEX_AUTH_JSON, the stored ChatGPT session may have rotated or expired — run 'codex login' again locally and update the secret (gh secret set CODEX_AUTH_JSON --repo ${{ github.repository }} < ~/.codex/auth.json)."
             fi
             echo "review_failed=true" >> "$GITHUB_OUTPUT"
             exit 0
-          fi
-
-          # Redact any verbatim occurrence of each individual credential value
-          # before this text is printed to logs or posted anywhere — see the
-          # residual-risk note at the top of this file. GitHub's own log
-          # masking does not apply to text assembled into a PR comment body
-          # via the API. CODEX_AUTH_JSON is a JSON document with multiple
-          # sensitive fields (access/refresh tokens, account id, ...) — the
-          # first version of this redaction matched only the whole blob
-          # concatenated with the other secrets, so an individual field
-          # value echoed on its own would have survived; this version walks
-          # the parsed JSON and redacts every string value in it separately,
-          # plus the API key secrets, each independently.
-          # (A bash heredoc was tried here first and rejected: its closing
-          # delimiter must start at column 0, which this YAML block's own
-          # indentation makes impossible — verified locally before shipping.
-          # Passing the script as a single `python3 -c` argument sidesteps
-          # that: Python accepts a uniformly-indented top-level script, also
-          # verified locally, and there is no heredoc terminator to break.)
-          if [ -n "${CODEX_AUTH_JSON:-}${CODEX_API_KEY:-}${OPENAI_API_KEY:-}" ]; then
-            python3 -c "
-          import json
-          import os
-          import sys
-
-          def collect_strings(obj, out):
-              if isinstance(obj, dict):
-                  for v in obj.values():
-                      collect_strings(v, out)
-              elif isinstance(obj, list):
-                  for v in obj:
-                      collect_strings(v, out)
-              elif isinstance(obj, str) and len(obj) >= 8:
-                  out.add(obj)
-
-          secrets = set()
-          auth_json = os.environ.get('CODEX_AUTH_JSON', '')
-          if auth_json:
-              try:
-                  collect_strings(json.loads(auth_json), secrets)
-              except ValueError:
-                  secrets.add(auth_json)
-          for key in ('CODEX_API_KEY', 'OPENAI_API_KEY'):
-              value = os.environ.get(key, '')
-              if value:
-                  secrets.add(value)
-
-          src, dst = sys.argv[1], sys.argv[2]
-          with open(src, 'r', errors='replace') as f:
-              text = f.read()
-          for secret in secrets:
-              if secret in text:
-                  text = text.replace(secret, '[REDACTED]')
-          with open(dst, 'w') as f:
-              f.write(text)
-          " /tmp/codex-review-raw.txt /tmp/codex-review-output.txt
-          else
-            cp /tmp/codex-review-raw.txt /tmp/codex-review-output.txt
           fi
 
           cat /tmp/codex-review-output.txt
