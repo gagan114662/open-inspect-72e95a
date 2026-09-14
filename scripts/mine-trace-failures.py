@@ -63,7 +63,8 @@ EXCERPT_CHARS = 160
 FAILURE_PATTERNS: dict[str, re.Pattern[str]] = {
     "traceback": re.compile(r"Traceback \(most recent call last\)"),
     "nonzero-exit": re.compile(r"^Exit code [1-9]\d*", re.M),
-    "test-failure": re.compile(r"\b\d+ failed\b|^FAILED ", re.M),
+    # "0 failed" is a pass; only a positive count is a failure.
+    "test-failure": re.compile(r"\b[1-9]\d* failed\b|^FAILED ", re.M),
     "permission": re.compile(
         r"Permission denied|EACCES|denied by the .* classifier|Operation not permitted"
     ),

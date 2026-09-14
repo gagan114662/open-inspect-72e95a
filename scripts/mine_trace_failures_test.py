@@ -308,3 +308,20 @@ def test_same_output_from_different_commands_are_distinct_failures(monkeypatch):
     evidence = mine.build_evidence(failures, keywords, "/repo", None)
     assert [t["id"] for t in evidence["topics"]["archive-branch"]] == ["t1"]
     assert [t["id"] for t in evidence["topics"]["credential-redaction"]] == ["t1"]
+
+
+def test_zero_failed_is_not_a_test_failure():
+    passing = {
+        "type": "tool_result",
+        "toolName": "Bash",
+        "status": "error",
+        "output": "Exit code 1\n10 passed, 0 failed",
+    }
+    assert mine.failure_kind(passing) == "nonzero-exit"
+    failing = {
+        "type": "tool_result",
+        "toolName": "Bash",
+        "status": "error",
+        "output": "Exit code 1\n2 failed, 8 passed",
+    }
+    assert mine.failure_kind(failing) == "test-failure"
