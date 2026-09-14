@@ -1,0 +1,135 @@
+name: Revise Improvement Policy
+
+# The L5 step of docs/plans/recursive-meta-improvement.md, run automatically
+# but bounded exactly like archive-and-recommend.yml: it never pushes to the
+# default branch, never merges, never deploys, and requests no repository
+# secrets beyond an optional read-only Traces API key.
+#
+# After every change to the review archive on main (an archive-round PR
+# merging), this workflow:
+#   1. measures whether docs/improvement-policy.json's signal still predicts
+#      the field (scripts/measure-policy-validity.py) — coverage of archived
+#      findings, and agreement with Traces evidence when a key is present;
+#   2. lets scripts/revise-improvement-policy.py apply its fixed acceptance
+#      rule: propose a bounded policy revision, propose a rollback of a
+#      revision that made things worse, or do nothing;
+#   3. re-renders docs/rsi/dashboard.html from the resulting state;
+#   4. opens ONE pull request carrying the policy, its history entry, the
+#      measurement, and the dashboard. A human merges it, or closes it.
+#
+# Without TRACES_API_KEY the anchor is absent: coverage is still measured
+# and can still trigger a revision, validity is reported as null, and the
+# workflow says so in the PR body rather than pretending it was checked.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/self-improvement-archive.jsonl
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: revise-improvement-policy
+  cancel-in-progress: false
+
+jobs:
+  revise:
+    name: Measure, revise, and propose
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check for a Traces API key
+        id: traces-key
+        env:
+          HAS_KEY: ${{ secrets.TRACES_API_KEY != '' }}
+        run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Install Traces CLI
+        if: steps.traces-key.outputs.present == 'true'
+        run: |
+          curl -fsSL https://traces.com/install.sh | sh
+          echo "$HOME/.traces/bin" >> "$GITHUB_PATH"
+
+      - name: Measure policy validity
+        env:
+          TRACES_API_KEY: ${{ secrets.TRACES_API_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/rsi
+          if [ -n "${TRACES_API_KEY:-}" ] && [ -f docs/rsi/trace-evidence.json ]; then
+            echo "Using the committed Traces evidence snapshot (docs/rsi/trace-evidence.json); refresh it locally with --repo-dir to update the anchor."
+          fi
+          if [ -f docs/rsi/trace-evidence.json ]; then
+            python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+              --trace-evidence docs/rsi/trace-evidence.json > measurement.txt
+          else
+            python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl > measurement.txt
+          fi
+          sed -n '1,/^---/p' measurement.txt
+          sed -n '/^---/,$p' measurement.txt | tail -n +2 > docs/rsi/measurement.json
+
+      - name: Apply the fixed acceptance rule
+        id: revise
+        run: |
+          set -euo pipefail
+          python3 scripts/revise-improvement-policy.py docs/self-improvement-archive.jsonl \
+            --measurement docs/rsi/measurement.json > revise.txt
+          sed -n '1,/^---/p' revise.txt
+          action=$(sed -n '/^---/,$p' revise.txt | tail -n +2 | python3 -c 'import json,sys; print(json.load(sys.stdin)["action"])')
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+
+      - name: Re-render the dashboard
+        run: |
+          set -euo pipefail
+          args=(docs/self-improvement-archive.jsonl --head "${GITHUB_SHA:0:8}" --out docs/rsi/dashboard.html)
+          [ -f docs/rsi/trace-evidence.json ] && args+=(--trace-evidence docs/rsi/trace-evidence.json)
+          [ -f docs/rsi/trace-evidence-verifier.json ] && args+=(--verifier-evidence docs/rsi/trace-evidence-verifier.json)
+          python3 scripts/render-rsi-dashboard.py "${args[@]}"
+
+      - name: Propose the result as a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ steps.revise.outputs.action }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/; then
+            echo "Nothing changed (action: $ACTION)."
+            exit 0
+          fi
+          version=$(python3 -c 'import json; print(json.load(open("docs/improvement-policy.json"))["version"])')
+          branch="improvement-policy-v${version}-${GITHUB_SHA:0:12}"
+          existing_pr=$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')
+          if [ -n "$existing_pr" ]; then
+            echo "PR #$existing_pr already proposes this revision — skipping."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "Remote branch $branch exists with no open PR — retrying PR creation only."
+          else
+            git checkout -b "$branch"
+            git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/
+            git commit -m "chore(rsi): ${ACTION} of the improvement policy (v${version})"
+            git push origin "$branch"
+          fi
+          gh pr create \
+            --title "chore(rsi): ${ACTION} of the improvement policy (v${version})" \
+            --body "Automatically proposed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) after the archive changed at \`${GITHUB_SHA}\`. Action: **${ACTION}**. See \`docs/improvement-policy-history.jsonl\` for the evidence and \`docs/rsi/dashboard.html\` for the rendered state. This changes only the AI-owned policy files; a human merges it, same as every other change in this repo." \
+            --label "self-improvement-archive" \
+            --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)" \
+            --head "$branch"

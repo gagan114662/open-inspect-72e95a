@@ -1,0 +1,242 @@
+{
+  "policy_version": 2,
+  "policy_hash": "ab3b76c7a8cd",
+  "anchor": {
+    "source": "traces (empty)",
+    "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
+    "collected_at": "2026-09-14T19:14:08Z",
+    "traces_considered": 0
+  },
+  "epochs": [
+    {
+      "round": 1,
+      "timestamp_ms": 1789401028000,
+      "findings_total": 5,
+      "findings_classified": 3,
+      "coverage": 0.6,
+      "dev": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0,
+        "comment": 0
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 2,
+      "timestamp_ms": 1789401435000,
+      "findings_total": 8,
+      "findings_classified": 6,
+      "coverage": 0.75,
+      "dev": {
+        "credential-redaction": 2,
+        "shell-semantics": 1,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0,
+        "comment": 0
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 3,
+      "timestamp_ms": 1789401733000,
+      "findings_total": 11,
+      "findings_classified": 9,
+      "coverage": 0.8182,
+      "dev": {
+        "credential-redaction": 3,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0,
+        "comment": 0
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 4,
+      "timestamp_ms": 1789402092000,
+      "findings_total": 14,
+      "findings_classified": 12,
+      "coverage": 0.8571,
+      "dev": {
+        "credential-redaction": 4,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0,
+        "comment": 0
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 5,
+      "timestamp_ms": 1789402494000,
+      "findings_total": 16,
+      "findings_classified": 14,
+      "coverage": 0.875,
+      "dev": {
+        "credential-redaction": 5,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0,
+        "comment": 0
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 6,
+      "timestamp_ms": 1789402879000,
+      "findings_total": 19,
+      "findings_classified": 17,
+      "coverage": 0.8947,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0,
+        "comment": 0
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 7,
+      "timestamp_ms": 1789403308000,
+      "findings_total": 19,
+      "findings_classified": 17,
+      "coverage": 0.8947,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0,
+        "comment": 0
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 8,
+      "timestamp_ms": 1789405500000,
+      "findings_total": 23,
+      "findings_classified": 21,
+      "coverage": 0.913,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 1,
+        "comment": 1
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 9,
+      "timestamp_ms": 1789405373428,
+      "findings_total": 25,
+      "findings_classified": 23,
+      "coverage": 0.92,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 2,
+        "comment": 1
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    },
+    {
+      "round": 10,
+      "timestamp_ms": 1789405373490,
+      "findings_total": 28,
+      "findings_classified": 26,
+      "coverage": 0.9286,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 3,
+        "comment": 1
+      },
+      "anchor": null,
+      "validity": null,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
+    }
+  ],
+  "current": {
+    "round": 10,
+    "timestamp_ms": null,
+    "findings_total": 28,
+    "findings_classified": 26,
+    "coverage": 0.9286,
+    "dev": {
+      "credential-redaction": 6,
+      "shell-semantics": 2,
+      "env-var-precedence": 1,
+      "fork-pr-permissions": 0,
+      "auth-lifecycle": 0,
+      "archive-branch": 3,
+      "comment": 1
+    },
+    "anchor": null,
+    "validity": null,
+    "unclassified_findings": [
+      {
+        "round": 1,
+        "finding": "[P2] Failed reviews (crash/timeout/auth error) were swallowed and reported as a passing check."
+      },
+      {
+        "round": 1,
+        "finding": "[P2] [P1] detection used a bare substring grep that 'No [P1] findings' would itself trigger."
+      }
+    ],
+    "dev_only_topics": [],
+    "anchor_only_topics": []
+  }
+}

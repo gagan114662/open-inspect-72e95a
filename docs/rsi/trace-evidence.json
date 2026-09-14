@@ -1,0 +1,13 @@
+{
+  "source": "traces",
+  "collected_at": "2026-09-14T19:14:08Z",
+  "repo_dir": "/Users/gaganarora/workplace/open-inspect-72e95a",
+  "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
+  "topics": {
+    "credential-redaction": [],
+    "shell-semantics": [],
+    "env-var-precedence": [],
+    "fork-pr-permissions": [],
+    "auth-lifecycle": []
+  }
+}

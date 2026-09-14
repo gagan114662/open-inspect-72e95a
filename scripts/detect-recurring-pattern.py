@@ -33,31 +33,41 @@ Exit code 0 always (this is advisory, not a pass/fail gate).
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from collections import defaultdict
-
-DEFAULT_THRESHOLD = 3
-
-# Deliberately simple, auditable keyword buckets rather than an embedding
-# model or external call -- the point of this tool is that its decision
-# process is itself inspectable, matching the same "no unexplained black
-# box" standard the rest of this archive holds code changes to.
-TOPIC_KEYWORDS: dict[str, list[str]] = {
-    "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
-    "shell-semantics": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
-    "env-var-precedence": ["precedence", "env var", "environment variable", "unconditionally"],
-    "fork-pr-permissions": ["fork", "github_token", "persist-credentials"],
-    "auth-lifecycle": ["refresh token", "rotat", "expir", "auth.json", "stale"],
-}
+from pathlib import Path
 
 
-def classify_finding(text: str) -> str | None:
-    lowered = text.lower()
-    for topic, keywords in TOPIC_KEYWORDS.items():
-        if any(kw in lowered for kw in keywords):
-            return topic
-    return None
+def _load_sibling_module(name: str, filename: str):
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).parent / filename
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
+
+# The taxonomy and threshold are no longer constants of this file: they are
+# docs/improvement-policy.json, a versioned document the meta-improver
+# (scripts/revise-improvement-policy.py) can revise from evidence and roll
+# back. These module-level names are kept so every existing caller and test
+# keeps working; they reflect the policy version checked in alongside this
+# script (or the built-in v1 fallback when the file is absent).
+POLICY = policy_mod.load_policy_or_builtin()
+DEFAULT_THRESHOLD: int = POLICY["threshold"]
+TOPIC_KEYWORDS: dict[str, list[str]] = policy_mod.topic_keywords(POLICY)
+TOPIC_WEIGHTS: dict[str, float] = policy_mod.topic_weights(POLICY)
+
+
+def classify_finding(text: str, keywords: dict[str, list[str]] | None = None) -> str | None:
+    return policy_mod.classify_finding(text, TOPIC_KEYWORDS if keywords is None else keywords)
 
 
 def load_archive(path: str) -> list[dict]:
@@ -70,14 +80,21 @@ def load_archive(path: str) -> list[dict]:
     return entries
 
 
-def analyze(entries: list[dict], threshold: int) -> dict:
+def analyze(
+    entries: list[dict],
+    threshold: int,
+    keywords: dict[str, list[str]] | None = None,
+    weights: dict[str, float] | None = None,
+) -> dict:
+    keywords = TOPIC_KEYWORDS if keywords is None else keywords
+    weights = TOPIC_WEIGHTS if weights is None else weights
     topic_rounds: dict[str, set[int]] = defaultdict(set)
     topic_examples: dict[str, list[str]] = defaultdict(list)
 
     for entry in entries:
         round_num = entry.get("round")
         for finding in entry.get("findings", []):
-            topic = classify_finding(finding)
+            topic = classify_finding(finding, keywords)
             if topic is None:
                 continue
             topic_rounds[topic].add(round_num)
@@ -87,11 +104,15 @@ def analyze(entries: list[dict], threshold: int) -> dict:
     recommendations = []
     for topic, rounds in sorted(topic_rounds.items(), key=lambda kv: -len(kv[1])):
         recurrence = len(rounds)
-        action = "mechanism" if recurrence >= threshold else "target"
+        # A topic's weight is the policy's learned credit for it: evidence the
+        # field never corroborates gets discounted (see revise-improvement-policy.py).
+        weighted = recurrence * weights.get(topic, 1.0)
+        action = "mechanism" if weighted >= threshold else "target"
         recommendations.append(
             {
                 "topic": topic,
                 "recurrence_count": recurrence,
+                "weighted_recurrence": round(weighted, 3),
                 "rounds": sorted(rounds),
                 "recommended_action": action,
                 "examples": topic_examples[topic],
@@ -104,14 +125,32 @@ def analyze(entries: list[dict], threshold: int) -> dict:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive_path")
-    parser.add_argument("--threshold", type=int, default=DEFAULT_THRESHOLD)
+    parser.add_argument("--threshold", type=int, default=None)
+    parser.add_argument(
+        "--policy",
+        default=None,
+        help="Path to an improvement-policy JSON; defaults to docs/improvement-policy.json",
+    )
     args = parser.parse_args(argv[1:])
 
+    policy = policy_mod.load_policy(args.policy) if args.policy else POLICY
+    threshold = args.threshold if args.threshold is not None else policy["threshold"]
     entries = load_archive(args.archive_path)
-    result = analyze(entries, args.threshold)
+    result = analyze(
+        entries,
+        threshold,
+        policy_mod.topic_keywords(policy),
+        policy_mod.topic_weights(policy),
+    )
+    result["policy_version"] = policy["version"]
+    result["policy_hash"] = policy_mod.policy_hash(policy)
 
     for rec in result["recommendations"]:
-        marker = "MECHANISM-LEVEL FIX RECOMMENDED" if rec["recommended_action"] == "mechanism" else "target-level fix sufficient so far"
+        marker = (
+            "MECHANISM-LEVEL FIX RECOMMENDED"
+            if rec["recommended_action"] == "mechanism"
+            else "target-level fix sufficient so far"
+        )
         print(
             f"[{rec['topic']}] recurred in {rec['recurrence_count']} round(s) "
             f"{rec['rounds']} -> {marker}"
