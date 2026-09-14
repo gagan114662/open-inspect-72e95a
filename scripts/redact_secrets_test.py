@@ -126,3 +126,53 @@ def test_main_cli_copies_unchanged_when_no_secrets_configured(tmp_path):
 
 def test_main_rejects_wrong_arg_count():
     assert redact_secrets.main(["redact-secrets.py", "only-one-arg"]) == 2
+
+
+def test_redacts_a_rotated_token_written_to_auth_json_mid_run(tmp_path):
+    """Round 6's real finding: codex can rotate its own refresh token and
+    write the new value to auth.json mid-run. Redacting only the original
+    CODEX_AUTH_JSON env var value (captured before the run started) would
+    miss a rotated token that later appears in output."""
+    codex_home = tmp_path / "codex-home"
+    codex_home.mkdir()
+    (codex_home / "auth.json").write_text('{"access_token":"rotated-token-value-999"}')
+
+    env = {
+        "CODEX_AUTH_JSON": '{"access_token":"original-token-value-111"}',
+        "CODEX_HOME": str(codex_home),
+    }
+    secrets = redact_secrets.collect_secrets_from_env(env)
+
+    assert "original-token-value-111" in secrets
+    assert "rotated-token-value-999" in secrets
+
+    out = redact_secrets.redact("leak of rotated-token-value-999 here", secrets)
+    assert out == "leak of [REDACTED] here"
+
+
+def test_missing_auth_json_under_codex_home_is_not_an_error(tmp_path):
+    """CODEX_HOME may be set (e.g. api-key mode) without an auth.json under
+    it existing at all -- must not crash, just collect nothing extra."""
+    env = {"CODEX_HOME": str(tmp_path / "does-not-exist"), "CODEX_API_KEY": "some-api-key-value"}
+    secrets = redact_secrets.collect_secrets_from_env(env)
+    assert secrets == {"some-api-key-value"}
+
+
+def test_overlapping_secrets_redacted_longest_first(tmp_path):
+    """Round 6's real finding: iterating an unordered set of secrets where
+    one is a substring of another can redact the shorter one first, mutating
+    the text before the longer match is found, leaving part of the longer
+    secret exposed. Must process longest-first."""
+    secrets = {"short-secret", "short-secret-but-longer-variant"}
+    out = redact_secrets.redact("leak: short-secret-but-longer-variant end", secrets)
+    # Must be fully redacted as ONE match on the longer secret, not left
+    # with a residual "-but-longer-variant" fragment from redacting the
+    # shorter secret first.
+    assert out == "leak: [REDACTED] end"
+    assert "-but-longer-variant" not in out
+
+
+def test_overlapping_secrets_both_present_independently_still_work():
+    secrets = {"short-secret", "short-secret-but-longer-variant"}
+    out = redact_secrets.redact("only the short one: short-secret here", secrets)
+    assert out == "only the short one: [REDACTED] here"

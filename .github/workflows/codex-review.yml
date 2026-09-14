@@ -109,31 +109,42 @@ jobs:
       # the checkout step above) without switching the working tree, so the
       # untrusted PR diff being reviewed is never touched by this step.
       #
-      # One-time bootstrap exception: the very first PR that introduces this
-      # script (this one) cannot extract it from the base branch, because it
-      # doesn't exist there yet. That gap is unavoidable for a brand-new
-      # tool's first introduction and is not silently swallowed — it prints
-      # a loud, explicit warning and falls back to the PR's own copy only in
-      # that specific case. Every PR after this one merges is protected: the
-      # base branch will have a copy by then, so the fallback path stops
-      # being reachable in normal operation.
+      # Fails closed, no fallback: an earlier version fell back to the PR's
+      # own copy when the base branch lacked the file, reasoning this would
+      # only fire once (this script's first introduction). That reasoning
+      # was wrong — it fires on EVERY run of a PR that legitimately needs
+      # the fallback, for the PR's entire open lifetime (the base branch
+      # won't have the file until merge), which is exactly the same
+      # untrusted-execution risk this whole extraction step exists to
+      # close, just deferred to "as long as this PR stays open" instead of
+      # eliminated. No trusted copy available means no safe review — full
+      # stop, not a silent downgrade. A PR that introduces this script for
+      # the first time (as the one that landed it did) is reviewed by other
+      # means (see item #1's reviewer path) until it merges; after that,
+      # every subsequent PR gets the real protection with no gap.
       - name: Extract trusted redaction script from the base branch
         if: steps.has-key.outputs.present == 'true'
+        id: extract
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           mkdir -p "$RUNNER_TEMP/trusted"
           if git show "origin/${BASE_REF}:scripts/redact-secrets.py" > "$RUNNER_TEMP/trusted/redact-secrets.py" 2>/tmp/trusted-extract-err.txt; then
-            echo "Extracted trusted redact-secrets.py from origin/${BASE_REF}."
+            chmod 444 "$RUNNER_TEMP/trusted/redact-secrets.py"
+            echo "available=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::scripts/redact-secrets.py was not found on origin/${BASE_REF} — this must be its first introduction. Falling back to this PR's own copy for THIS RUN ONLY. Every subsequent PR, once this one merges, extracts from the base branch instead."
+            echo "::error::scripts/redact-secrets.py was not found on origin/${BASE_REF} — no trusted baseline to review from. Failing closed rather than trusting this PR's own copy."
             cat /tmp/trusted-extract-err.txt
-            cp "$GITHUB_WORKSPACE/scripts/redact-secrets.py" "$RUNNER_TEMP/trusted/redact-secrets.py"
+            echo "available=false" >> "$GITHUB_OUTPUT"
           fi
-          chmod 444 "$RUNNER_TEMP/trusted/redact-secrets.py"
+
+      - name: Report unavailable trusted baseline
+        if: steps.has-key.outputs.present == 'true' && steps.extract.outputs.available == 'false'
+        run: |
+          echo "No trusted copy of scripts/redact-secrets.py exists on the base branch, so this PR cannot be safely reviewed by this job yet (failing closed rather than trusting the PR's own copy of the redactor)." > /tmp/codex-review-status.txt
 
       - name: Write ChatGPT-subscription auth
-        if: steps.has-key.outputs.mode == 'auth-json'
+        if: steps.has-key.outputs.mode == 'auth-json' && steps.extract.outputs.available == 'true'
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
@@ -146,7 +157,7 @@ jobs:
       # failure, timeout) leaves review_failed=true and no output file, so a
       # broken run cannot be mistaken for "reviewed, nothing found."
       - name: Run Codex review
-        if: steps.has-key.outputs.present == 'true'
+        if: steps.has-key.outputs.present == 'true' && steps.extract.outputs.available == 'true'
         id: review
         env:
           # Only the selected mode's credentials are exported. Codex gives an
@@ -253,12 +264,14 @@ jobs:
         if: always() && github.event.pull_request.head.repo.full_name == github.repository
         env:
           HAS_KEY: ${{ steps.has-key.outputs.present }}
+          EXTRACT_AVAILABLE: ${{ steps.extract.outputs.available }}
           REVIEW_FAILED: ${{ steps.review.outputs.review_failed }}
         uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
             const hasKey = process.env.HAS_KEY === 'true';
+            const extractUnavailable = hasKey && process.env.EXTRACT_AVAILABLE === 'false';
             const reviewFailed = process.env.REVIEW_FAILED === 'true';
 
             let body;
@@ -266,6 +279,10 @@ jobs:
               body = fs.existsSync('/tmp/codex-review-status.txt')
                 ? fs.readFileSync('/tmp/codex-review-status.txt', 'utf8')
                 : 'No Codex credentials secret is configured. Codex review did not run for this PR.';
+            } else if (extractUnavailable) {
+              body = fs.existsSync('/tmp/codex-review-status.txt')
+                ? fs.readFileSync('/tmp/codex-review-status.txt', 'utf8')
+                : 'No trusted copy of the redaction script is available on the base branch — failing closed rather than trusting this PR\'s own copy.';
             } else if (reviewFailed) {
               body = '**Review did not complete successfully** (command failed, crashed, or timed out — see job logs). This is not a passing review; no findings below should be read as "nothing found."';
             } else if (fs.existsSync('/tmp/codex-review-output.txt')) {
@@ -287,9 +304,14 @@ jobs:
             });
 
       - name: Fail on a [P1] finding or a failed review
-        if: steps.review.outputs.found_p1 == 'true' || steps.review.outputs.review_failed == 'true'
+        if: |
+          steps.review.outputs.found_p1 == 'true' ||
+          steps.review.outputs.review_failed == 'true' ||
+          (steps.has-key.outputs.present == 'true' && steps.extract.outputs.available == 'false')
         run: |
-          if [ "${{ steps.review.outputs.review_failed }}" = "true" ]; then
+          if [ "${{ steps.extract.outputs.available }}" = "false" ]; then
+            echo "::error::No trusted copy of the redaction script was available on the base branch — failed closed rather than reviewing unsafely."
+          elif [ "${{ steps.review.outputs.review_failed }}" = "true" ]; then
             echo "::error::Codex review did not complete successfully — treating as a failed check, not a pass."
           else
             echo "::error::Codex review found at least one [P1] (critical) finding — see the PR comment."
