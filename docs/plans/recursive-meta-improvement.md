@@ -112,6 +112,24 @@ should fail the suite, not wait for a reviewer.
     only, checkout pinned to the default branch, labelled with the commit actually measured,
     machine-readable JSON written apart from the human report, re-measured after a decision.
 
+## What the field anchor is made of
+
+The first anchor searched transcript text for the taxonomy's keywords and every hit was narration:
+the assistant summarising review findings. Counting it made the field echo the reviews. The anchor
+is now built by `scripts/mine-trace-failures.py`, which walks every event of each working session
+through `traces show --json` and keeps only executions that went wrong: tool results Traces marked
+as errors, and command tools that reported a non-zero exit. Output that merely contains
+failure-shaped text (a file displayed with `cat`, a quoted finding) never counts. Each failure is
+paired with the command that produced it, deduplicated per session by tool, command and excerpt,
+matched independently against every topic's keywords, and written as evidence with the keyword
+definitions it was searched under. Failures no topic claims are the field's blind spots; when at
+least `MIN_FIELD_BLIND_SPOTS` of them exist, `revise-improvement-policy.py --field-failures` mines
+topics from their output the same way it mines unclassified review findings.
+
+First strict run over the working sessions in this folder: 96 distinct failures across 3 sessions,
+validity 0.55 against the review signal, 69 blind spots dominated by "permission denied by the
+auto-mode classifier" (28), tool input errors, and missing tools.
+
 ## First real run
 
 Measured against the archive as of round 10 with policy v1: coverage 0.61, anchor empty (no working
