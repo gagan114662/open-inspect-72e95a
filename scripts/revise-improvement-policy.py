@@ -343,7 +343,7 @@ def weight_repair(
     review of PR #10, round 3, finding 2), and discount topics the field
     never shows (only when the validity trigger fired). The whole proposal
     is kept only if it does not regress validity on the same anchor."""
-    anchor = candidate_anchor(current)
+    anchor = candidate_anchor(current, policy)
     weights = policy_mod.topic_weights(policy)
     if anchor is None:
         return policy["topics"], []
@@ -372,8 +372,9 @@ def weight_repair(
             )
     if not changes:
         return policy["topics"], []
+    candidate = {**policy, "topics": topics}
     before_v = validity_under(policy, entries, anchor)
-    after_v = validity_under({**policy, "topics": topics}, entries, anchor)
+    after_v = validity_under(candidate, entries, candidate_anchor(current, candidate))
     if validity_regressed(before_v, after_v):
         return policy["topics"], [
             f"kept weights unchanged: proposed reweighting would move validity {before_v} -> {after_v}"
@@ -381,16 +382,26 @@ def weight_repair(
     return topics, changes
 
 
-def candidate_anchor(current: dict) -> dict | None:
-    """Anchor counts for judging a candidate: the policy's topics plus every
-    other topic the evidence searched, so evidence against a topic survives
-    that topic's removal (Codex review of PR #10, round 9)."""
+def candidate_anchor(current: dict, policy: dict) -> dict | None:
+    """Anchor counts for judging a specific policy: the measured topics plus
+    every other topic the evidence searched, but only where the evidence's
+    recorded keyword definition matches this policy's keywords. A topic
+    re-mined with different keywords is unknown until the evidence is
+    refreshed (Codex review of PR #10, rounds 9 and 12)."""
     anchor = current.get("anchor")
     if anchor is None:
         return None
     merged = dict(current.get("anchor_evidence") or {})
     merged.update(anchor)
-    return merged
+    definitions = current.get("anchor_definitions") or {}
+    keywords = policy_mod.topic_keywords(policy)
+    result: dict[str, int | None] = {}
+    for topic, count in merged.items():
+        if topic in keywords and list(definitions.get(topic, [])) != list(keywords[topic]):
+            result[topic] = None
+        else:
+            result[topic] = count
+    return result
 
 
 def rejected_configuration(candidate: dict, history: list[dict], measurement: dict) -> dict | None:
@@ -473,14 +484,13 @@ def decide(
             parent = snapshot_for_version(policy["parent"], history)
             if parent is not None and coverage is not None:
                 parent_now = measure_mod.measure(entries, parent, None)["current"]["coverage"]
-                anchor = candidate_anchor(current)
                 # Validity is judged only on rounds the evidence snapshot could
                 # have seen; rounds archived after collection would make an
                 # unchanged field look like a regression (Codex review of
                 # PR #10, round 7).
                 covered = entries_covered_by_evidence(entries, measurement)
-                child_validity = validity_under(policy, covered, anchor)
-                parent_validity = validity_under(parent, covered, anchor)
+                child_validity = validity_under(policy, covered, candidate_anchor(current, policy))
+                parent_validity = validity_under(parent, covered, candidate_anchor(current, parent))
                 worse_coverage = parent_now is not None and coverage < parent_now
                 worse_validity = parent_validity is not None and (
                     child_validity is None or child_validity < parent_validity
@@ -600,9 +610,8 @@ def decide(
     )
     # The whole candidate, not just its weight changes, must not regress
     # validity against the policy it replaces (Codex review of PR #10, round 4).
-    anchor = candidate_anchor(current)
-    v_before = validity_under(policy, covered, anchor)
-    v_after = validity_under(revised, covered, anchor)
+    v_before = validity_under(policy, covered, candidate_anchor(current, policy))
+    v_after = validity_under(revised, covered, candidate_anchor(current, revised))
     rejected = rejected_configuration(revised, history, measurement)
     if rejected is not None:
         return {

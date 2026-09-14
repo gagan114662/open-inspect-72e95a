@@ -332,6 +332,7 @@
     "dev_only_topics": [],
     "anchor_only_topics": [],
     "rounds_after_evidence": 0,
+    "anchor_definitions": null,
     "anchor_evidence": null
   }
 }

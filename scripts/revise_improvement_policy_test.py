@@ -530,9 +530,19 @@ def test_evidence_against_a_removed_topic_survives_for_candidates():
     current = {
         "anchor": {"credential-redaction": 1},
         "anchor_evidence": {"credential-redaction": 1, "archive-ops": 0, "shell-semantics": 2},
+        "anchor_definitions": {
+            "credential-redaction": policy_mod.BUILTIN_TOPIC_KEYWORDS["credential-redaction"],
+            "archive-ops": ["archive"],
+            "shell-semantics": policy_mod.BUILTIN_TOPIC_KEYWORDS["shell-semantics"],
+        },
     }
-    merged = revise.candidate_anchor(current)
+    policy = policy_mod.builtin_policy()
+    policy["topics"]["archive-ops"] = {"keywords": ["archive"], "weight": 1.0}
+    merged = revise.candidate_anchor(current, policy)
     assert merged == {"credential-redaction": 1, "archive-ops": 0, "shell-semantics": 2}
+    # Re-mined with different keywords: the old counts no longer apply.
+    policy["topics"]["archive-ops"] = {"keywords": ["archive", "branch"], "weight": 1.0}
+    assert revise.candidate_anchor(current, policy)["archive-ops"] is None
 
 
 def test_main_writes_nothing_when_the_history_path_is_refused(tmp_path, monkeypatch):

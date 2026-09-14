@@ -409,6 +409,9 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
     # Anchor counts for EVERY topic the evidence searched, not only the
     # policy's current topics, so a topic removed by a rollback keeps its
     # adverse evidence when a revision tries to mine it again.
+    # Definitions travel with the counts so a candidate can be checked
+    # against what was actually searched (Codex review of PR #10, round 12).
+    current["anchor_definitions"] = dict(evidence.get("definitions") or {}) if evidence else None
     current["anchor_evidence"] = (
         anchor_counts_at(
             evidence, list(evidence.get("topics", {})), None, evidence.get("definitions") or {}
