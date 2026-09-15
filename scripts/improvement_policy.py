@@ -93,6 +93,21 @@ def load_policy_or_builtin(path: Path | str = POLICY_PATH) -> dict:
 VALID_ORIGINS = frozenset({"init", "revision", "rollback"})
 
 
+def round_key(entry: dict) -> str:
+    """Identity of an archived round, shared by every tool that counts
+    rounds (the detector that opens issues and the measurer the policy is
+    judged on must count the same signal — Codex review of PR #10, round
+    37). Automated rounds are identified by the commit they reviewed: two
+    archive proposals opened before either merged both computed the same
+    next round number, and merging by number alone collapsed two reviews
+    into one round (full-branch review, workflows finding 2). Legacy rounds
+    without a source_sha keep their number (placeholder + result pairs)."""
+    sha = entry.get("source_sha")
+    if isinstance(sha, str) and sha:
+        return f"sha:{sha}"
+    return f"round:{entry.get('round')}"
+
+
 def assert_policy_matches_history(policy: dict, history: list[dict]) -> None:
     """The policy's lineage metadata (version, parent, origin,
     restored_version) is not part of its content hash, yet the wait gate and

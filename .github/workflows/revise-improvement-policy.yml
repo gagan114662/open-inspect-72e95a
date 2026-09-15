@@ -187,6 +187,17 @@ jobs:
             # in place, so the hourly run never opens a new PR per hour; a
             # human merges it whenever, and merging it re-triggers this
             # workflow through the trace-evidence.json path filter.
+            # A standing policy proposal that the current decision no longer
+            # supports is withdrawn, not left open to merge (Codex review of
+            # PR #10, round 37): new rounds can legitimately turn a
+            # `revise` into `none`.
+            stale_pr=$(gh pr list --head "improvement-policy-proposal" --base "$default_branch" --state open \
+              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+            if [ -n "$stale_pr" ]; then
+              gh pr close "$stale_pr" --delete-branch \
+                --comment "Withdrawn: re-evaluated at \`${SOURCE_SHA}\` the fixed acceptance rule proposes no policy change (action: **${ACTION}**), so this proposal no longer satisfies it. A new proposal will be opened if a later round supports one."
+              echo "Closed the stale policy proposal PR #$stale_pr."
+            fi
             branch="improvement-evidence-refresh"
             title="chore(rsi): refresh the Traces field anchor"
             body="Automatically refreshed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) from the shared Traces namespace at \`${SOURCE_SHA}\`. The fixed acceptance rule proposed no policy change on this evidence (action: **${ACTION}**). This changes only the evidence snapshot, the measurement and the dashboard; the policy is untouched."

@@ -130,3 +130,16 @@ def test_main_cli_runs_against_a_file_and_exits_zero(tmp_path):
     )
     exit_code = detect.main(["detect-recurring-pattern.py", str(archive), "--threshold", "2"])
     assert exit_code == 0
+
+
+def test_reviews_sharing_a_round_number_count_separately_like_the_measurer():
+    entries = [
+        {"round": 11, "source_sha": "a", "findings": ["[P1] leaked credential in output"]},
+        {"round": 11, "source_sha": "b", "findings": ["[P1] secret token exposed again"]},
+        {"round": 11, "source_sha": "c", "findings": ["[P2] another credential redaction gap"]},
+    ]
+    rec = detect.analyze(entries, 3)["recommendations"][0]
+    assert rec["topic"] == "credential-redaction"
+    assert rec["recurrence_count"] == 3
+    assert rec["recommended_action"] == "mechanism"
+    assert rec["rounds"] == [11, 11, 11]

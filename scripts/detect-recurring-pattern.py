@@ -88,7 +88,10 @@ def analyze(
 ) -> dict:
     keywords = TOPIC_KEYWORDS if keywords is None else keywords
     weights = TOPIC_WEIGHTS if weights is None else weights
-    topic_rounds: dict[str, set[int]] = defaultdict(set)
+    # Rounds are counted by identity (commit reviewed), the same rule the
+    # measurer uses, so the recurrence that opens an issue is the recurrence
+    # the policy is judged on (Codex review of PR #10, round 37).
+    topic_rounds: dict[str, dict[str, int]] = defaultdict(dict)
     topic_examples: dict[str, list[str]] = defaultdict(list)
 
     for entry in entries:
@@ -97,7 +100,7 @@ def analyze(
             topic = classify_finding(finding, keywords)
             if topic is None:
                 continue
-            topic_rounds[topic].add(round_num)
+            topic_rounds[topic][policy_mod.round_key(entry)] = round_num
             if len(topic_examples[topic]) < 3:
                 topic_examples[topic].append(f"round {round_num}: {finding[:120]}")
 
@@ -113,7 +116,7 @@ def analyze(
                 "topic": topic,
                 "recurrence_count": recurrence,
                 "weighted_recurrence": round(weighted, 3),
-                "rounds": sorted(rounds),
+                "rounds": sorted(rounds.values(), key=lambda r: (r is None, r)),
                 "recommended_action": action,
                 "examples": topic_examples[topic],
             }

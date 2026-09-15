@@ -98,16 +98,9 @@ def parse_timestamp_ms(value: object) -> int | None:
 
 
 def round_key(entry: dict) -> str:
-    """Identity of a round. Automated rounds are identified by the commit
-    they reviewed: two archive proposals opened before either merged both
-    computed the same next round number, and merging by number alone
-    collapsed two reviews into one evaluation round (Codex full-branch
-    review, workflows finding 2). Legacy hand-written rounds without a
-    source_sha keep their number as identity (placeholder + result pairs)."""
-    sha = entry.get("source_sha")
-    if isinstance(sha, str) and sha:
-        return f"sha:{sha}"
-    return f"round:{entry.get('round')}"
+    """See improvement_policy.round_key: one identity rule shared by the
+    detector and the measurer (Codex review of PR #10, round 37)."""
+    return policy_mod.round_key(entry)
 
 
 def rounds_in_order(entries: list[dict]) -> list[dict]:

@@ -1310,3 +1310,24 @@ def test_main_refuses_a_policy_whose_lineage_metadata_was_edited(tmp_path, monke
     with pytest.raises(ValueError, match="history records no versions"):
         policy_mod.assert_policy_matches_history(v2, [])
     policy_mod.assert_policy_matches_history(v2, [{"version": 2, "policy": v2}])
+
+
+def test_evidence_window_filters_by_round_identity_not_number():
+    # Two reviews share round 5; one predates the snapshot and one does not.
+    entries = [
+        {
+            "round": 5,
+            "source_sha": "old",
+            "findings": ["**[P1]** a."],
+            "occurred_at": "2026-09-14T15:00:00Z",
+        },
+        {
+            "round": 5,
+            "source_sha": "new",
+            "findings": ["**[P1]** b."],
+            "occurred_at": "2026-09-14T17:00:00Z",
+        },
+    ]
+    measurement = {"anchor": {"collected_at": "2026-09-14T16:00:00Z"}}
+    covered = revise.entries_covered_by_evidence(entries, measurement)
+    assert [e["source_sha"] for e in covered] == ["old"]

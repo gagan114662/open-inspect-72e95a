@@ -348,12 +348,14 @@ def entries_covered_by_evidence(entries: list[dict], measurement: dict) -> list[
     )
     if collected_ms is None:
         return entries
-    covered_rounds = {
-        r["round"]
+    # By round identity, not number: two reviews sharing a number can
+    # straddle the snapshot time (Codex review of PR #10, round 37).
+    covered = {
+        r["key"]
         for r in measure_mod.rounds_in_order(entries)
         if r["timestamp_ms"] is not None and r["timestamp_ms"] <= collected_ms
     }
-    return [e for e in entries if e.get("round") in covered_rounds]
+    return [e for e in entries if policy_mod.round_key(e) in covered]
 
 
 def validity_regressed(before: float | None, after: float | None) -> bool:
