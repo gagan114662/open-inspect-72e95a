@@ -289,6 +289,64 @@ jobs:
               console.log(`Opened tracking issue for topic "${item.topic}".`);
             }
 
+  rebuild-archive-branches:
+    name: Rebuild open archive branches on the merged archive
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    # When one archive PR merges, every other open archive-rounds-pr-* branch
+    # still claims the round number that just landed and shows a conflict
+    # that would never clear (its own PR may already be merged, so no review
+    # run will rebuild it). Rebuild each on the new default branch with
+    # scripts/merge-archive-rounds.py; a branch that would not change is
+    # left alone.
+    permissions:
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: archive-and-recommend-rebuild
+      cancel-in-progress: false
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Rebuild each open archive branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          : > "$RUNNER_TEMP/empty.jsonl"
+          for branch in $(gh pr list --state open --base "$default_branch" \
+              --json headRefName,isCrossRepository \
+              --jq '.[] | select(.isCrossRepository == false) | .headRefName | select(startswith("archive-rounds-pr-"))'); do
+            git fetch origin "$branch"
+            git show FETCH_HEAD:docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/standing.jsonl" || : > "$RUNNER_TEMP/standing.jsonl"
+            python3 scripts/merge-archive-rounds.py \
+              docs/self-improvement-archive.jsonl "$RUNNER_TEMP/standing.jsonl" \
+              "$RUNNER_TEMP/empty.jsonl" "$RUNNER_TEMP/merged.jsonl" > "$RUNNER_TEMP/merge-result.json"
+            if cmp -s "$RUNNER_TEMP/merged.jsonl" "$RUNNER_TEMP/standing.jsonl"; then
+              echo "$branch: already on the current archive."
+              continue
+            fi
+            rounds=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["rounds"]))' "$RUNNER_TEMP/merge-result.json")
+            git checkout -B "$branch" "origin/$default_branch"
+            cp "$RUNNER_TEMP/merged.jsonl" docs/self-improvement-archive.jsonl
+            git add docs/self-improvement-archive.jsonl
+            git commit -m "chore: archive ${rounds} review round(s) (rebuilt on the current default branch)"
+            git push --force origin "$branch"
+            git checkout -q "origin/$default_branch"
+            echo "$branch: rebuilt with ${rounds} round(s)."
+          done
+
   reevaluate-on-merge:
     name: Re-evaluate thresholds after an archive-round PR merges
     runs-on: ubuntu-latest
