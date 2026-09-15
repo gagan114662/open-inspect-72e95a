@@ -131,3 +131,46 @@ def test_keywords_with_quotes_still_produce_valid_generated_tests(tmp_path):
         text=True,
     )
     assert tests.returncode == 0, tests.stdout + tests.stderr
+
+
+def test_ineligible_drafts_are_removed_and_the_scanner_ignores_diff_context(tmp_path):
+    policy = policy_mod.builtin_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    out = tmp_path / "proposals"
+    assert (
+        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]) == 0
+    )
+    assert (out / "shell-semantics").is_dir()
+    (out / "handmade").mkdir()
+    (out / "handmade" / "README.md").write_text("a human wrote this")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+        )
+    )
+    assert (
+        propose.main(
+            [
+                "p",
+                str(archive),
+                "--policy",
+                str(policy_path),
+                "--manifest",
+                str(manifest),
+                "--out-dir",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    assert not (out / "shell-semantics").exists() and (out / "handmade").exists()
+    rec = propose.topics_needing_a_tool(_archive(), policy, {"tools": []})[0]
+    propose.draft(rec["topic"], rec, _archive(), policy, tmp_path / "d")
+    script = tmp_path / "d" / rec["topic"] / f"check-{rec['topic']}.py"
+    diff = "+++ b/x\n@@ -1 +1 @@\n pipefail context\n-pipefail removed\n+pipefail added\n"
+    run = subprocess.run([sys.executable, str(script)], input=diff, capture_output=True, text=True)
+    assert "1 line(s)" in run.stdout

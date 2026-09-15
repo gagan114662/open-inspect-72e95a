@@ -36,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUT_DIR = REPO_ROOT / "proposals" / "tools"
 DEFAULT_MANIFEST = REPO_ROOT / "tools" / "manifest.json"
 MAX_EXAMPLES = 6
+GENERATED_MARKER = "Drafted automatically by `scripts/propose-tool.py`"
 SAFE_TOPIC_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 
 
@@ -114,11 +115,13 @@ PRIOR_FINDINGS = {examples!r}
 
 
 def scan(text: str) -> list[tuple[int, str, str]]:
-    """(line number, keyword, line) for every added or plain line that
-    mentions a keyword; removed diff lines are skipped."""
+    """(line number, keyword, line) for every line that mentions a keyword.
+    In a unified diff only ADDED lines count: context and removed lines are
+    not the author's change."""
+    is_diff = any(line.startswith(("+++ ", "@@ ")) for line in text.splitlines())
     hits: list[tuple[int, str, str]] = []
     for number, line in enumerate(text.splitlines(), 1):
-        if line.startswith("-") and not line.startswith("---"):
+        if is_diff and not (line.startswith("+") and not line.startswith("+++")):
             continue
         lowered = line.lower()
         for word in KEYWORDS:
@@ -291,6 +294,21 @@ def main(argv: list[str]) -> int:
     proposals = {
         rec["topic"]: draft(rec["topic"], rec, entries, policy, out_dir) for rec in needing
     }
+    # Drafts for topics that are no longer eligible (covered since, or below
+    # threshold) are removed; only folders this script generated (they carry
+    # its README marker) are touched (Codex review of PR #61, round 2).
+    if out_dir.exists():
+        for folder in out_dir.iterdir():
+            marker = folder / "README.md"
+            if (
+                folder.is_dir()
+                and folder.name not in proposals
+                and marker.exists()
+                and GENERATED_MARKER in marker.read_text()
+            ):
+                for child in folder.iterdir():
+                    child.unlink()
+                folder.rmdir()
     print(json.dumps({"policy_version": policy["version"], "proposals": proposals}, indent=2))
     return 0
 

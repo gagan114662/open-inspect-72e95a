@@ -65,6 +65,9 @@ on:
       # mechanism-fix threshold on the existing archive; re-evaluate then
       # too (Codex review of PR #10, round 31).
       - "docs/improvement-policy.json"
+      # A registry change (a tool now covers a topic) changes which drafts
+      # are eligible (Codex review of PR #61, round 2).
+      - "tools/manifest.json"
 
 permissions:
   contents: write
