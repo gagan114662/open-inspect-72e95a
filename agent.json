@@ -40,5 +40,6 @@
     "channels/github-pull-requests.md",
     "channels/github-issues.md",
     "channels/codex-review.md"
-  ]
+  ],
+  "entry": "run.py"
 }
