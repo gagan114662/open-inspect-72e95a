@@ -192,6 +192,15 @@ jobs:
           [ -f docs/rsi/trace-evidence-verifier.json ] && args+=(--verifier-evidence docs/rsi/trace-evidence-verifier.json)
           python3 scripts/render-rsi-dashboard.py "${args[@]}"
 
+      - name: Replay every policy version out of sample
+        # Each version judged only on rounds archived after it existed: the
+        # evidence that the improver improved, or the case for a rollback.
+        run: |
+          set -euo pipefail
+          args=(docs/self-improvement-archive.jsonl --out-json docs/rsi/replay.json)
+          [ -f docs/rsi/trace-evidence.json ] && args+=(--trace-evidence docs/rsi/trace-evidence.json)
+          python3 scripts/replay-policy-history.py "${args[@]}" | sed -n '1,/^---/p' | grep -v '^---'
+
       - name: Distill skills from the archive
         # The eve-shaped agent directory: resolved rounds become per-topic
         # playbooks (skills/) the next fix can load.

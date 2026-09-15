@@ -284,3 +284,9 @@ def test_negative_validity_is_drawn_below_zero_not_clamped_onto_it():
     assert ys[0] > ys[1], "a -1 correlation must sit lower on the page than +1"
     assert ys[0] > 140 + 3, "a -1 correlation sits below the zero line, not on it"
     assert "right axis, -1..+1" in svg
+
+
+def test_dashboard_carries_the_out_of_sample_replay():
+    html = render.render(_archive(), policy_mod.builtin_policy(), [], None, None, "abc123")
+    assert "Did the improver improve?" in html and "Out-of-sample replay per policy version" in html
+    assert "later round(s)" in html
