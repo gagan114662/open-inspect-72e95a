@@ -319,8 +319,22 @@ def is_location(word: str) -> bool:
     #56, rounds 2 and 3)."""
     # Trailing punctuation only, and no leading dot: ".github/actions" is a
     # directory, not "github/actions" (Codex review of PR #56, round 5).
-    w = word.lstrip("()[]<>`'\"*_").rstrip("()[]<>`'\",;.:!?*_").lower()
-    w = strip_line_refs(w)
+    w = word.lower()
+    # Decorations can nest: `allocator.py`:41, allocator.py#L41-L43, (x.py:3).
+    # Peel punctuation, line suffixes and fragments until nothing changes
+    # (Codex review of PR #56, round 9).
+    while True:
+        before = w
+        w = w.lstrip("()[]<>`'\"*_").rstrip("()[]<>`'\",;.:!?*_")
+        w = strip_line_refs(w)
+        hash_pos = w.rfind("#")
+        if (
+            hash_pos > 0
+            and w[hash_pos + 1 :].lstrip("l").replace("-l", "-").replace("-", "").isdigit()
+        ):
+            w = w[:hash_pos]
+        if w == before:
+            break
     if not w:
         return False
     if "http://" in w or "https://" in w:
