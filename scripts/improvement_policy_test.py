@@ -188,3 +188,12 @@ def test_scrub_secrets_covers_command_line_flag_forms():
     assert "FAKE_FLAG_PW" not in out and "FAKE_TOK_1234" not in out
     assert "--user admin" in out and "--host db" in out
     assert scrub("git --no-pager log --oneline -3") == "git --no-pager log --oneline -3"
+
+
+def test_scrub_secrets_covers_basic_auth_and_quoted_flag_values():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub("curl -H 'Authorization: Basic YWRtaW46RkFLRV9QQVNT' https://api; HTTP 401")
+    assert "YWRtaW46RkFLRV9QQVNT" not in out and "HTTP 401" in out
+    out = scrub('tool --api-key "FAKE_QUOTED_KEY_1" --region us; token FAKEBARE_TOKEN_22 rejected')
+    assert "FAKE_QUOTED_KEY_1" not in out and "FAKEBARE_TOKEN_22" not in out
+    assert "--region us" in out

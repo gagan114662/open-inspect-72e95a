@@ -99,14 +99,15 @@ VALID_ORIGINS = frozenset({"init", "revision", "rollback"})
 # is pushed (Codex review of PR #10, round 38).
 _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s]+@"),  # scheme://user:PASS@
-    re.compile(r"(?i)\b(bearer\s+)[a-z0-9._~+/=-]{8,}"),
-    re.compile(r"(?i)\b(authorization\s*[:=]\s*)\S+"),
+    re.compile(r"(?i)\b((?:bearer|basic|token|digest)\s+)[a-z0-9._~+/=-]{8,}"),
+    # The whole header value, scheme included (round 41).
+    re.compile(r"(?i)\b(authorization\s*[:=]\s*[\"']?(?:[a-z]+\s+)?)[^\s\"']+"),
     re.compile(
         r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*[\"']?)[^\s\"']{4,}"
     ),
     # Command-line flags: --password VALUE, --token=VALUE, -p VALUE (round 40).
     re.compile(
-        r"(?i)(--?(?:[a-z0-9-]*)(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b(?:\s+|=))[^\s\"']{4,}"
+        r"(?i)(--?(?:[a-z0-9-]*)(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b(?:\s+|=)[\"']?)[^\s\"']{4,}"
     ),
     # Quoted JSON/YAML fields: {"password": "..."} (round 39).
     re.compile(
