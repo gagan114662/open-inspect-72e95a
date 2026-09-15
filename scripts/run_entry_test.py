@@ -55,3 +55,35 @@ def test_refresh_keeps_the_committed_evidence_when_nothing_was_observed(tmp_path
     monkeypatch.setattr(run, "ROOT", root)
     assert run.main(["run.py", "--refresh", "--repo-dir", str(tmp_path)]) == 0
     assert _json.loads(committed.read_text())["sessions"] == ["real"]
+
+
+def test_repo_dir_is_resolved_against_the_callers_directory(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("run_entry2", ROOT / "run.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+    seen = {}
+
+    def fake_step(name, argv):
+        if name == "mine field failures":
+            seen["repo_dir"] = argv[argv.index("--repo-dir") + 1]
+            fresh = Path(argv[argv.index("--save-evidence") + 1])
+            fresh.write_text('{"sessions": []}')
+        return 0
+
+    root = tmp_path / "repo"
+    (root / "docs" / "rsi").mkdir(parents=True)
+    (root / "docs" / "self-improvement-archive.jsonl").write_text("")
+    monkeypatch.setattr(run, "ROOT", root)
+    monkeypatch.setattr(run, "step", fake_step)
+    monkeypatch.setattr(
+        run.subprocess,
+        "run",
+        lambda *_a, **_k: type(
+            "R", (), {"returncode": 0, "stdout": "policy v1 (x): ok", "stderr": ""}
+        )(),
+    )
+    monkeypatch.chdir(tmp_path)
+    assert run.main(["run.py", "--refresh", "--repo-dir", "."]) == 0
+    assert seen["repo_dir"] == str(tmp_path.resolve())

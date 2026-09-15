@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ARCHIVE = "docs/self-improvement-archive.jsonl"
 EVIDENCE = "docs/rsi/trace-evidence.json"
+VERIFIER_EVIDENCE = "docs/rsi/trace-evidence-verifier.json"
 MEASUREMENT = "docs/rsi/measurement.json"
 DASHBOARD = "docs/rsi/dashboard.html"
 
@@ -64,6 +65,9 @@ def main(argv: list[str]) -> int:
         "--apply", action="store_true", help="write the decision instead of a dry run"
     )
     args = parser.parse_args(argv[1:])
+    # Subprocesses run from the repository root; a relative --repo-dir means
+    # relative to where the user typed it (Codex review of PR #68, round 2).
+    args.repo_dir = str(Path(args.repo_dir).expanduser().resolve())
 
     field_failures: list[str] = []
     if args.refresh:
@@ -92,6 +96,9 @@ def main(argv: list[str]) -> int:
         else:
             print("[skip] refresh: no session observed; the committed evidence snapshot is kept")
     evidence = ["--trace-evidence", EVIDENCE] if (ROOT / EVIDENCE).exists() else []
+    verifier = (
+        ["--verifier-evidence", VERIFIER_EVIDENCE] if (ROOT / VERIFIER_EVIDENCE).exists() else []
+    )
     measure_out = subprocess.run(
         [
             sys.executable,
@@ -132,7 +139,7 @@ def main(argv: list[str]) -> int:
         return 1  # the live measurement must describe the policy now in force
     if step(
         "render dashboard",
-        ["scripts/render-rsi-dashboard.py", ARCHIVE, *evidence, "--out", DASHBOARD],
+        ["scripts/render-rsi-dashboard.py", ARCHIVE, *evidence, *verifier, "--out", DASHBOARD],
     ):
         return 1
     if step("distill skills", ["scripts/distill-skills.py", ARCHIVE]):
