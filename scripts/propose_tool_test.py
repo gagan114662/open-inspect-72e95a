@@ -404,3 +404,41 @@ def test_a_human_note_in_the_readme_ends_the_generators_ownership(tmp_path):
         == 0
     )
     assert propose.generator_owns(fresh / "shell-semantics")
+
+
+def test_a_symlinked_output_directory_never_reaches_a_protected_path(tmp_path):
+    """Codex review of PR #61, round 11: `proposals/tools -> ../scripts` in
+    the standing checkout resolved fine for the containment check (which only
+    knew the trusted checkout) and the job wrote scripts/<topic>/."""
+    repo = tmp_path / "checkout"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "scripts").mkdir()
+    (repo / "proposals").mkdir()
+    (repo / "proposals" / "tools").symlink_to(repo / "scripts")
+    policy = policy_mod.builtin_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    with pytest.raises(PermissionError):
+        propose.main(
+            [
+                "p",
+                str(archive),
+                "--policy",
+                str(policy_path),
+                "--out-dir",
+                str(repo / "proposals" / "tools"),
+            ]
+        )
+    assert list((repo / "scripts").iterdir()) == []
+    # A symlinked ancestor is refused too, and a plain path inside the
+    # checkout that resolves into scripts/ is refused by name.
+    (repo / "elsewhere").symlink_to(repo / "scripts")
+    with pytest.raises(PermissionError):
+        propose.assert_safe_out_dir(repo / "elsewhere" / "tools")
+    with pytest.raises(PermissionError):
+        propose.assert_safe_out_dir(repo / "scripts" / "drafts")
+    assert (
+        propose.assert_safe_out_dir(repo / "proposals" / "drafts") == repo / "proposals" / "drafts"
+    )

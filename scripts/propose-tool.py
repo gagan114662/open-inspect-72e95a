@@ -383,6 +383,40 @@ def draft(
     return written
 
 
+def checkout_root(path: Path) -> Path | None:
+    """The nearest ancestor of `path` (unresolved) that is a git checkout."""
+    for candidate in [path, *path.parents]:
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def assert_safe_out_dir(out_dir: Path) -> Path:
+    """The output directory and every ancestor below its checkout must be a
+    real directory (or not exist yet), and the resolved location must not be
+    a protected path OF THAT checkout: `proposals/tools -> ../scripts` made
+    the script write scripts/<topic>/ in the standing checkout while the
+    guard only knew the trusted one (Codex review of PR #61, round 11)."""
+    root = checkout_root(out_dir)
+    stop = root.resolve() if root else None
+    for candidate in [out_dir, *out_dir.parents]:
+        if stop is not None and candidate.resolve() == stop:
+            break
+        if candidate.is_symlink():
+            raise PermissionError(f"{candidate} is a symlink; refusing to use it as an output path")
+    resolved = out_dir.resolve()
+    if stop is not None:
+        try:
+            rel = resolved.relative_to(stop).as_posix()
+        except ValueError as exc:
+            raise PermissionError(f"{out_dir} resolves outside its checkout {root}") from exc
+        if rel in policy_mod.PROTECTED_OUTPUT_FILES or any(
+            (rel + "/").startswith(prefix) for prefix in policy_mod.PROTECTED_OUTPUT_PREFIXES
+        ):
+            raise PermissionError(f"{out_dir} resolves to protected {rel} in {root}")
+    return out_dir
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -415,7 +449,7 @@ def main(argv: list[str]) -> int:
     needing = topics_needing_a_tool(entries, policy, manifest, args.threshold)
     if args.topic:
         needing = [r for r in needing if r["topic"] in set(args.topic)]
-    out_dir = Path(args.out_dir)
+    out_dir = assert_safe_out_dir(Path(args.out_dir))
     inputs = [x for x in (args.archive_path, args.policy, args.manifest) if x]
     proposals: dict[str, list[str]] = {}
     skipped: dict[str, str] = {}

@@ -610,7 +610,14 @@ jobs:
             # not on whether this run staged changes: removing the last
             # eligible draft stages deletions, which must still end in the
             # PR being closed (Codex review of PR #61, round 10).
-            remaining=$(find proposals/tools -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+            # No topic qualified and nothing was ever drafted: the folder may
+            # not exist, which is zero remaining proposals, not a failure
+            # under set -e (Codex review of PR #61, round 11).
+            if [ -d proposals/tools ]; then
+              remaining=$(find proposals/tools -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+            else
+              remaining=0
+            fi
             if git diff --cached --quiet; then
               if [ -z "$topics" ] && [ "$remaining" = 0 ]; then
                 echo "No tool proposals apply."

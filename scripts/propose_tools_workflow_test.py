@@ -313,3 +313,43 @@ def test_removing_the_last_draft_withdraws_the_open_pr(tmp_path):
     _git(ws2, "fetch", "-q", "origin", env=env)
     tree = _git(ws2, "ls-tree", "-r", "--name-only", "origin/tool-proposals", env=env)
     assert "proposals/tools/shell-semantics" not in tree, "the stale draft was removed and pushed"
+
+
+def test_an_empty_archive_ends_the_step_cleanly_without_a_proposals_folder(tmp_path):
+    """Codex review of PR #61, round 11: with no qualifying topic the
+    proposals folder never exists, and `find` on it failed the whole job
+    under set -e before the no-proposals path could run."""
+    origin, seed, env = _seed_repo(tmp_path)
+    (seed / "docs" / "self-improvement-archive.jsonl").write_text("")
+    _git(seed, "add", "-A", env=env)
+    _git(seed, "commit", "-q", "-m", "empty archive", env=env)
+    _git(seed, "push", "-q", "origin", "main", env=env)
+    ws = tmp_path / "ws"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws), env=env)
+    run = _run_step(ws, env, tmp_path)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "No tool proposals apply." in run.stdout
+    assert (
+        "created" not in (tmp_path / "gh.log").read_text()
+        if (tmp_path / "gh.log").exists()
+        else True
+    )
+
+
+def test_a_symlinked_proposals_folder_on_the_branch_is_refused(tmp_path):
+    """Codex review of PR #61, round 11: `proposals/tools -> ../scripts`
+    committed on the standing branch let the job write scripts/<topic>/."""
+    origin, seed, env = _first_run(tmp_path)
+    human = _human_clone(tmp_path, origin, env)
+    shutil.rmtree(human / "proposals" / "tools")
+    (human / "scripts").mkdir(exist_ok=True)
+    (human / "proposals" / "tools").symlink_to(Path("..") / "scripts")
+    _git(human, "add", "-A", env=env)
+    _git(human, "commit", "-q", "-m", "plant a link", env=env)
+    _git(human, "push", "-q", "origin", "tool-proposals", env=env)
+    _advance_main(seed, env)
+    ws2 = tmp_path / "ws2"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws2), env=env)
+    run = _run_step(ws2, env, tmp_path)
+    assert run.returncode != 0, "a planted output link must fail the job loudly"
+    assert not (ws2 / "scripts" / "shell-semantics").exists()
