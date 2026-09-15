@@ -492,7 +492,7 @@ def test_secrets_in_failed_output_never_reach_reports_or_evidence(monkeypatch, t
     evidence = mine.build_evidence(failures, keywords, "/repo", None)
     blob = "\n".join(lines) + json.dumps(summary) + json.dumps(evidence)
     assert "FAKE_PW_123" not in blob and "sk-livefakekey1234567890" not in blob
-    assert "_text" not in json.dumps(summary)
+    assert "_occurrences" not in json.dumps(summary)
     # The failure is still classifiable (credential-redaction keywords match)
     assert evidence["topics"]["credential-redaction"]
 
@@ -551,3 +551,62 @@ def test_cli_timeouts_and_errors_never_expose_the_api_key(monkeypatch):
     with pytest.raises(mine.TracesCliError) as exc:
         mine.run_traces_json("traces", ["list", "@slug", "--all"])
     assert "tr_SENTINEL_KEY" not in str(exc.value)
+
+
+def test_secrets_are_scrubbed_before_the_excerpt_is_shortened(monkeypatch):
+    long_url = "postgres://admin:FAKE_PW_XYZ@" + "x" * 200 + ".internal:5432/app"
+    events = [
+        {"type": "tool_call", "callId": "c1", "args": {"command": "psql " + long_url}},
+        {
+            "type": "tool_result",
+            "callId": "c1",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 1,
+            "eventNumber": 2,
+            "output": "Exit code 2\nconnecting to "
+            + long_url
+            + " failed\n"
+            + json.dumps({"password": "FAKE_JSON_PW"}),
+        },
+    ]
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    blob = json.dumps([mine.public_failure(f) for f in failures])
+    assert "FAKE_PW_XYZ" not in blob and "FAKE_JSON_PW" not in blob
+    assert policy_mod.scrub_secrets('{"password": "FAKE_JSON_PW"}') == '{"password": "[REDACTED]"}'
+
+
+def test_a_diagnostic_first_seen_later_keeps_its_own_timestamp(monkeypatch):
+    head = "Exit code 1\njob crashed\n"
+    events = [
+        {"type": "tool_call", "callId": "c1", "args": {"command": "python3 job.py"}},
+        {
+            "type": "tool_result",
+            "callId": "c1",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 1,
+            "eventNumber": 2,
+            "output": head + "nothing special",
+        },
+        {"type": "tool_call", "callId": "c2", "args": {"command": "python3 job.py"}},
+        {
+            "type": "tool_result",
+            "callId": "c2",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 100,
+            "eventNumber": 4,
+            "output": head + "later: the session expired, log in again",
+        },
+    ]
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    assert len(failures) == 1 and failures[0]["timestamp"] == 1
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    evidence = mine.build_evidence(failures, keywords, "/repo", None)
+    (trace,) = evidence["topics"]["auth-lifecycle"]
+    assert trace["timestamp"] == 100, (
+        "evidence first observed at t=100 must not be backdated to t=1"
+    )

@@ -104,6 +104,10 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     re.compile(
         r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*[\"']?)[^\s\"']{4,}"
     ),
+    # Quoted JSON/YAML fields: {"password": "..."} (round 39).
+    re.compile(
+        r"(?i)(\"[a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\"\s*:\s*\")[^\"]{4,}"
+    ),
     re.compile(r"\b(sk|ghp|gho|ghu|ghs|ghr|vcp|xox[abp]|npm_|pypi-|glpat-|AKIA)[A-Za-z0-9_-]{8,}"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),  # JWT
 )

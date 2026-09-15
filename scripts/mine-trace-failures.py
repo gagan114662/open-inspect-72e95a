@@ -265,25 +265,31 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
         call = calls.get(str(event.get("callId")), {})
         args = call.get("args") or {}
         command = str(args.get("command") or args.get("file_path") or args.get("pattern") or "")
-        # Anything that leaves this process is scrubbed first: a report, a
-        # log line, or the policy's mined_from evidence is public the moment
-        # the proposal PR is pushed (Codex review of PR #10, round 38).
-        excerpt = policy_mod.scrub_secrets(excerpt_for(kind, output))
+        # Anything that leaves this process is scrubbed first, and scrubbed
+        # BEFORE it is shortened: a long database URL cut before its "@"
+        # would hide the password from the scrubber (Codex review of PR #10,
+        # rounds 38 and 39). A report, a log line or the policy's mined_from
+        # evidence is public the moment the proposal PR is pushed.
+        excerpt = excerpt_for(kind, policy_mod.scrub_secrets(output))
         command = policy_mod.scrub_secrets(command)
         # The command is part of identity: two commands with the same output
         # are two failures, and classification reads the command
         # (Codex review of PR #10, round 28).
         key = (tool, " ".join(command.split())[:EXCERPT_CHARS], excerpt)
+        occurrence = {
+            "timestamp": event.get("timestamp"),
+            "text": f"{command} {output}".lower()[:MAX_TEXT_CHARS],
+        }
         if key in failures:
             failures[key]["count"] += 1
             # A repeat with the same header but different later diagnostics
-            # still contributes its text to topic matching (round 38).
-            failures[key]["_text"] = (failures[key]["_text"] + " " + output.lower())[
-                :MAX_TEXT_CHARS
-            ]
+            # still contributes its text to topic matching, under its OWN
+            # timestamp, so evidence first seen later is not backdated to
+            # the first occurrence (rounds 38 and 39).
+            failures[key]["_occurrences"].append(occurrence)
             continue
         failures[key] = {
-            "_text": f"{command} {output}".lower()[:MAX_TEXT_CHARS],
+            "_occurrences": [occurrence],
             "trace_id": trace["id"],
             "agent": trace.get("agentId"),
             "event_number": event.get("eventNumber"),
@@ -297,16 +303,32 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
     return sorted(failures.values(), key=lambda f: (f["event_number"] or 0))
 
 
+def occurrences(failure: dict) -> list[tuple[int | float | None, str]]:
+    """(timestamp, text) per occurrence: the full command and tool output
+    while mining (kept in memory under a private key and never written
+    out), so a keyword past the excerpt still counts; the stored command
+    and excerpt for records read back from disk (Codex full-branch review,
+    finding 3)."""
+    kept = failure.get("_occurrences")
+    if isinstance(kept, list) and kept:
+        return [(o.get("timestamp"), str(o.get("text", ""))) for o in kept]
+    return [(failure.get("timestamp"), f"{failure['command']} {failure['excerpt']}".lower())]
+
+
 def failure_text(failure: dict) -> str:
-    """The text a topic is matched against: the full command and the full
-    tool output while mining (kept in memory under a private key and never
-    written out), so a keyword past the excerpt still counts; the stored
-    command and excerpt for records read back from disk (Codex full-branch
-    review, finding 3)."""
-    full = failure.get("_text")
-    if isinstance(full, str):
-        return full
-    return f"{failure['command']} {failure['excerpt']}".lower()
+    return " ".join(text for _, text in occurrences(failure))
+
+
+def first_match_timestamp(failure: dict, words: list[str]) -> int | float | None:
+    """When this failure first showed the topic's keywords: the earliest
+    occurrence that matches, not the failure's first occurrence, so a
+    diagnostic seen at t=100 never counts in the anchor at t=50 (Codex
+    review of PR #10, round 39)."""
+    matched = [ts for ts, text in occurrences(failure) if any(w.lower() in text for w in words)]
+    if not matched:
+        return None
+    dated = [ts for ts in matched if isinstance(ts, int | float)]
+    return min(dated) if len(dated) == len(matched) else None
 
 
 def public_failure(failure: dict) -> dict:
@@ -338,14 +360,16 @@ def build_evidence(
     per_topic: dict[str, dict[str, dict]] = defaultdict(dict)
     for failure in failures:
         for topic in matching_topics(failure, keywords):
-            per_topic[topic].setdefault(
+            when = first_match_timestamp(failure, keywords[topic])
+            entry = per_topic[topic].setdefault(
                 failure["trace_id"],
-                {
-                    "id": failure["trace_id"],
-                    "agentId": failure["agent"],
-                    "timestamp": failure["timestamp"],
-                },
+                {"id": failure["trace_id"], "agentId": failure["agent"], "timestamp": when},
             )
+            # A session's timestamp for a topic is the earliest dated match;
+            # any undated match makes it unknown (historical epochs then
+            # treat the count as unknown rather than guessing).
+            if entry["timestamp"] is not None and (when is None or when < entry["timestamp"]):
+                entry["timestamp"] = when
     return {
         "source": "trace-failures",
         "collected_at": policy_mod.utc_now_iso(),
