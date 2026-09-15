@@ -20,12 +20,15 @@ Against the article's core claims, as of 2026-09-14:
 | Independent second opinion, not just the same model reviewing itself | Codex as a standing adversarial reviewer (item #4)                                                                  | **Adopted, used live 3x** (caught a real P1, two P2s, a P3); **CI wiring open in PR #2**, needs review/merge + an API-key secret |
 | Self-improving over time                                             | This backlog itself: every item's audit → fix → independent verification → recorded evidence, feeding the next item | **Ongoing** — this table is the mechanism, updated as items close                                                                |
 
-Two things gate calling this "ready": the credential-isolation deploy (code done, needs the repo
-owner to trigger `terraform.yml`'s `workflow_dispatch`), and PR #2's review/merge/secret to make
-independent review self-sustaining instead of manually invoked. Both are deliberately left as human
-decisions, not automated around — delegating the merge/deploy decision itself to Codex was tried and
-correctly refused by the same classifier gate (see item #4's Context). See item #3's and item #4's
-Follow-up/Terminal states for exact status.
+Both gates that stood on 2026-09-14 morning have since closed by human action: the repo owner ran
+`terraform.yml`'s `workflow_dispatch` (Apply succeeded 2026-09-14 19:54 UTC, run 34889164305) and
+merged PR #2 (17:18 UTC) with `CODEX_AUTH_JSON` configured, so Codex now reviews every PR unattended
+and, since PR #10, executes the test suite inside its sandbox. What is still open is item #3's five
+live acceptance proofs from inside a restored sandbox, which nobody has run against the deployed
+control plane yet. Both gates were deliberately left as human decisions, not automated around —
+delegating the merge/deploy decision itself to Codex was tried and correctly refused by the same
+classifier gate (see item #4's Context). See item #3's and item #4's Follow-up/Terminal states for
+exact status.
 
 ---
 
@@ -333,12 +336,15 @@ N/A — audit only, nothing merged, nothing to roll back.
 
 ## 3. Credential isolation audit
 
-**Status:** In progress — 2026-09-14. Audit done, fix implemented, independently verified three
-times by a second model (Codex — read-only, live execution, and a third pass that caught a further
-response-validation gap), merged to `main`
-([PR #1](https://github.com/gagan114662/open-inspect-72e95a/pull/1)). **Blocked only on triggering
-the production deploy** — `terraform.yml`'s `Apply` job is `workflow_dispatch`-only by this repo's
-own design (see item #3's Follow-up) and remains `skipped` until the repo owner runs it; this is a
+**Status:** Deployed, live proofs pending — 2026-09-14. Audit done, fix implemented, independently
+verified three times by a second model (Codex — read-only, live execution, and a third pass that
+caught a further response-validation gap), merged to `main`
+([PR #1](https://github.com/gagan114662/open-inspect-72e95a/pull/1)), and deployed by the repo owner
+(`terraform.yml` Apply succeeded 2026-09-14 19:54 UTC, run 34889164305). The five acceptance
+checkboxes below remain unchecked because the live proofs from inside a restored sandbox have not
+been run yet. Earlier text in this item describing the deploy as **blocked only on triggering the
+production deploy** — `terraform.yml`'s `Apply` job is `workflow_dispatch`-only by this repo's own
+design (see item #3's Follow-up) and remains `skipped` until the repo owner runs it; this is a
 protected action this session cannot execute itself. See Implementation and Follow-up below.
 
 ### Objective and non-goals
@@ -577,7 +583,7 @@ both were refused by Claude Code's own auto-mode classifier, correctly:
    by the same classifier, for the same reason — delegating the decision to a second model does not
    change what action is being taken. This needs the repo owner to run
    `gh workflow run terraform.yml --ref main` (or the equivalent "Run workflow" click in GitHub's
-   Actions tab) themselves; still outstanding as of this writing.
+   Actions tab) themselves; done by the repo owner on 2026-09-14 at 19:54 UTC (run 34889164305).
 
 `terraform plan` was reviewed (rebuilds+redeploys `control-plane` for this fix, `modal_app` for the
 Python side, and unconditionally rebuilds+redeploys `github-bot` too — that last one is this
@@ -620,10 +626,12 @@ unnarrowed grant (immediate, no data migration involved).
 
 ## 4. Independent second-model review as a standing practice
 
-**Status:** Adopted, wiring in progress — 2026-09-14. In effect starting with item #3's fix (three
-manually-invoked rounds); [PR #2](https://github.com/gagan114662/open-inspect-72e95a/pull/2) adds it
-as an automatic CI job on every future PR, open and unmerged. Not retroactively applied to items
-#1/#2.
+**Status:** Adopted and wired — 2026-09-14 (PR #2 merged 17:18 UTC; the job has run unattended on
+every PR since, 25+ rounds on PR #10 alone, and executes pytest/ruff inside its sandbox since the
+runner moved to ubuntu-22.04). Earlier wording below was written while PR #2 was still open. In
+effect starting with item #3's fix (three manually-invoked rounds);
+[PR #2](https://github.com/gagan114662/open-inspect-72e95a/pull/2) adds it as an automatic CI job on
+every future PR, open and unmerged. Not retroactively applied to items #1/#2.
 
 ### Objective and non-goals
 
@@ -701,14 +709,17 @@ authorize infrastructure changes on the account owner's behalf.
       recurrence threshold — deliberately limited to that one action; it never merges, deploys, or
       touches secrets). `CODEX_AUTH_JSON` is already configured as a repo secret, so this activates
       on this exact PR — the first review this workflow runs unattended, with no manual invocation.
-- [ ] Evidence sources broadened beyond PR diffs: `scripts/analyze-traces.py`
+- [x] Evidence sources broadened beyond PR diffs: `scripts/analyze-traces.py`
       ([PR #7](https://github.com/gagan114662/open-inspect-72e95a/pull/7)) searches actual agent
       session traces (via traces.com) for the same recurring-topic taxonomy, catching struggles a
       clean final diff never shows. Git hooks (`traces setup git`) and agent hooks
       (`traces setup agents --hooks`) installed locally so future sessions/commits in this repo
       auto-publish and link traces via git notes. `TRACES_API_KEY` (scope `traces:read`) added as a
       repo secret. CI wiring (reading git-notes-linked traces per PR, feeding results into the
-      archive) not yet built — local tooling only so far.
+      archive) built and merged since: `.github/workflows/analyze-pr-traces.yml`
+      ([PR #9](https://github.com/gagan114662/open-inspect-72e95a/pull/9)) syncs git-notes-linked
+      traces per PR and comments the analysis; PR #10 adds the hourly Traces refresh that feeds the
+      L5 policy revision.
 
 ### Capabilities
 
@@ -762,7 +773,8 @@ validation finding — all independently reproduced rather than taken on Codex's
 outside Codex's sandbox and getting a clean pass; round 3's own claim of "4309/4309 clean, no EPERM"
 was itself a data point worth recording, not just trusting).
 
-CI wiring: [PR #2](https://github.com/gagan114662/open-inspect-72e95a/pull/2), open, unmerged.
+CI wiring: [PR #2](https://github.com/gagan114662/open-inspect-72e95a/pull/2), merged 2026-09-14
+17:18 UTC (the sentence above it, written earlier, is kept as history).
 
 ### Rollback
 

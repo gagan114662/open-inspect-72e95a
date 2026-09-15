@@ -8,12 +8,15 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 _MODULE_PATH = Path(__file__).parent / "archive-round.py"
 _spec = importlib.util.spec_from_file_location("archive_round", _MODULE_PATH)
 assert _spec is not None and _spec.loader is not None
 archive_round = importlib.util.module_from_spec(_spec)
 sys.modules["archive_round"] = archive_round
 _spec.loader.exec_module(archive_round)
+policy_mod = sys.modules["improvement_policy"]
 
 
 def _write_archive(path, entries):
@@ -102,9 +105,7 @@ def test_rerunning_with_same_source_sha_does_not_duplicate(tmp_path):
     assert second_pass_lines == first_pass_lines
 
 
-def test_cross_pr_accumulation_crosses_threshold_on_the_third_contributing_round(
-    tmp_path, capsys
-):
+def test_cross_pr_accumulation_crosses_threshold_on_the_third_contributing_round(tmp_path, capsys):
     """The core bug this script exists to fix: without persistence, two
     separate PRs each contributing one finding on the same topic never
     combine. With persistence, round 1 (in the seed archive) + round 2 (this
@@ -112,7 +113,13 @@ def test_cross_pr_accumulation_crosses_threshold_on_the_third_contributing_round
     archive_path = tmp_path / "archive.jsonl"
     _write_archive(
         archive_path,
-        [{"round": 1, "findings": ["**[P1]** Secret token leaked in stdout."], "source_sha": "sha-1"}],
+        [
+            {
+                "round": 1,
+                "findings": ["**[P1]** Secret token leaked in stdout."],
+                "source_sha": "sha-1",
+            }
+        ],
     )
 
     review_path_a = tmp_path / "review-a.txt"
@@ -135,18 +142,85 @@ def test_cross_pr_accumulation_crosses_threshold_on_the_third_contributing_round
     assert "credential-redaction" in topics
 
 
-def test_no_findings_in_review_does_not_append_anything(tmp_path, capsys):
+def test_clean_review_is_persisted_as_a_stamped_round(tmp_path, capsys):
+    # A review with no findings is still a completed round under the current
+    # policy; discarding it would keep a policy that eliminates findings from
+    # ever accumulating the rounds needed to judge it (Codex, round 32).
     archive_path = tmp_path / "archive.jsonl"
-    _write_archive(archive_path, [])
+    _write_archive(archive_path, [{"round": 1, "findings": ["**[P1]** old finding."]}])
 
     review_path = tmp_path / "review.txt"
-    review_path.write_text("### Codex independent review\n\nNo issues found.\n")
+    review_path.write_text(
+        "### Codex independent review\n\nNo issues found.\n\n"
+        "<!-- codex-review-status: completed -->\n<!-- codex-review-sha: sha-empty -->\n"
+    )
 
     exit_code = archive_round.main(
         ["archive-round.py", str(archive_path), str(review_path), "sha-empty"]
     )
     assert exit_code == 0
+    entries = [json.loads(line) for line in archive_path.read_text().splitlines()]
+    assert entries[-1]["round"] == 2
+    assert entries[-1]["findings"] == []
+    assert entries[-1]["source_sha"] == "sha-empty"
+    assert entries[-1]["policy_version"] == policy_mod.POLICY_VERSION
+    assert entries[-1]["policy_hash"] == policy_mod.POLICY_HASH
+    out = json.loads(capsys.readouterr().out.strip())
+    assert out["round"] == 2
+    assert out["newly_crossed"] == []
+    assert out["already_processed"] is False
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # The workflow's failure comment: no findings, stamped as failed.
+        "### Codex independent review\n\n**Review did not complete successfully**\n\n"
+        "<!-- codex-review-status: failed -->\n<!-- codex-review-sha: sha-x -->\n",
+        # Missing credentials: stamped not-run.
+        "### Codex independent review\n\nNo Codex credentials secret is configured.\n\n"
+        "<!-- codex-review-status: not-run -->\n<!-- codex-review-sha: sha-x -->\n",
+        # A comment from before the stamp existed with nothing in it.
+        "### Codex independent review\n\nNo issues found.\n",
+    ],
+)
+def test_reviews_that_did_not_complete_are_not_archived_as_clean_rounds(tmp_path, capsys, body):
+    # Otherwise a crash would consume the round's SHA (a retry's findings
+    # would be dropped as already processed) and advance the policy's
+    # evaluation period (Codex, round 33).
+    archive_path = tmp_path / "archive.jsonl"
+    _write_archive(archive_path, [])
+    review_path = tmp_path / "review.txt"
+    review_path.write_text(body)
+
+    assert (
+        archive_round.main(["archive-round.py", str(archive_path), str(review_path), "sha-x"]) == 0
+    )
     assert archive_path.read_text().strip() == ""
     out = json.loads(capsys.readouterr().out.strip())
     assert out["round"] is None
-    assert out["already_processed"] is False
+
+    # The retry with real findings under the same SHA is then archived.
+    review_path.write_text(
+        "### Codex independent review\n\n1. **[P1]** Something real.\n\n"
+        "<!-- codex-review-status: completed -->\n<!-- codex-review-sha: sha-x -->\n"
+    )
+    assert (
+        archive_round.main(["archive-round.py", str(archive_path), str(review_path), "sha-x"]) == 0
+    )
+    entries = [json.loads(line) for line in archive_path.read_text().splitlines()]
+    assert entries[-1]["findings"] == ["**[P1]** Something real."]
+
+
+def test_a_failed_review_that_still_contains_numbered_lines_is_not_archived(tmp_path):
+    archive_path = tmp_path / "archive.jsonl"
+    _write_archive(archive_path, [])
+    review_path = tmp_path / "review.txt"
+    review_path.write_text(
+        "### Codex independent review\n\n1. **[P2]** partial output before the crash\n\n"
+        "<!-- codex-review-status: failed -->\n<!-- codex-review-sha: sha-y -->\n"
+    )
+    assert (
+        archive_round.main(["archive-round.py", str(archive_path), str(review_path), "sha-y"]) == 0
+    )
+    assert archive_path.read_text().strip() == ""

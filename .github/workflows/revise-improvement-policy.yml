@@ -1,0 +1,258 @@
+name: Revise Improvement Policy
+
+# The L5 step of docs/plans/recursive-meta-improvement.md, run automatically
+# but bounded exactly like archive-and-recommend.yml: it never pushes to the
+# default branch, never merges, never deploys, and requests no repository
+# repository secrets at all.
+#
+# After every change to the review archive on main (an archive-round PR
+# merging), this workflow:
+#   1. measures whether docs/improvement-policy.json's signal still predicts
+#      the field (scripts/measure-policy-validity.py) — coverage of archived
+#      findings, and agreement with Traces evidence when a key is present;
+#   2. lets scripts/revise-improvement-policy.py apply its fixed acceptance
+#      rule: propose a bounded policy revision, propose a rollback of a
+#      revision that made things worse, or do nothing;
+#   3. re-renders docs/rsi/dashboard.html from the resulting state;
+#   4. opens ONE pull request carrying the policy, its history entry, the
+#      measurement, and the dashboard. A human merges it, or closes it.
+#
+# The field anchor (Traces evidence) is refreshed on every run from the
+# shared traces.com namespace when a read-only TRACES_API_KEY is present
+# (hourly on the schedule above); otherwise the committed snapshot is used.
+# Without any snapshot the anchor is absent: coverage is still measured and
+# can still trigger a revision, validity is reported as null, and the
+# workflow says so rather than pretending it was checked.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/self-improvement-archive.jsonl
+      # A refreshed field snapshot is new evidence too (Codex review of PR #10, round 10).
+      - docs/rsi/trace-evidence.json
+  schedule:
+    # Hourly: refresh the field anchor from the shared Traces namespace,
+    # re-measure, and let the fixed acceptance rule decide. Off the hour so
+    # it does not queue behind every other project's :00 cron.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: revise-improvement-policy
+  cancel-in-progress: false
+
+jobs:
+  revise:
+    name: Measure, revise, and propose
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+        with:
+          # Always the default branch, whatever ref a manual dispatch was
+          # started from, so a proposal never carries an unrelated feature
+          # branch's commits (Codex review of PR #10, round 5).
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Record the commit actually checked out
+        # The default branch may have advanced past the triggering commit, and
+        # a manual dispatch may come from another ref; label everything with
+        # what this run measured (Codex review of PR #10, round 16).
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check for a Traces API key
+        id: traces-key
+        env:
+          HAS_KEY: ${{ secrets.TRACES_API_KEY != '' }}
+        run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Install Traces CLI
+        if: steps.traces-key.outputs.present == 'true'
+        run: |
+          curl -fsSL https://www.traces.com/install | bash
+          echo "$HOME/.traces/bin" >> "$GITHUB_PATH"
+
+      - name: Refresh the field anchor from the shared Traces namespace
+        # Working sessions live on developers' machines, but every session
+        # they share lands in the traces.com namespace, which a read-only key
+        # can list and sync. The miner keeps only tool results the tool
+        # itself reported as errors, so the anchor is failures, never
+        # narration. Without a key the committed snapshot is used and its
+        # age is reported instead of silently reused (Codex review of
+        # PR #10, round 3).
+        if: steps.traces-key.outputs.present == 'true'
+        env:
+          TRACES_API_KEY: ${{ secrets.TRACES_API_KEY }}
+          TRACES_NAMESPACE: ${{ vars.TRACES_NAMESPACE || '@gagan114' }}
+          # Optional extra folder name whose sessions also count as this
+          # repository's (a scratch folder with no git remote). Repo variable.
+          TRACES_EXTRA_MATCH: ${{ vars.TRACES_EXTRA_MATCH || '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/rsi
+          # --match scopes the namespace to sessions whose git remote is THIS
+          # repository; a namespace holds every project its owner shares.
+          extra=()
+          [ -n "$TRACES_EXTRA_MATCH" ] && extra=(--match "$TRACES_EXTRA_MATCH")
+          if python3 scripts/mine-trace-failures.py \
+              --namespace "$TRACES_NAMESPACE" --traces-key "$TRACES_API_KEY" \
+              --match "github.com/${GITHUB_REPOSITORY}" "${extra[@]}" \
+              --save-evidence docs/rsi/trace-evidence.json \
+              --out-json "$RUNNER_TEMP/field-failures.json" > "$RUNNER_TEMP/mine.txt"; then
+            # Only the human summary (counts and kinds) reaches this public
+            # log; excerpts and commands live in the JSON under RUNNER_TEMP.
+            sed -n '1,/^---/p' "$RUNNER_TEMP/mine.txt" | grep -v '^---' | head -n 30
+          else
+            echo "::warning::Traces refresh failed; using the committed evidence snapshot instead."
+            sed -n '1,40p' "$RUNNER_TEMP/mine.txt" || true
+            git checkout -- docs/rsi/trace-evidence.json 2>/dev/null || true
+            rm -f "$RUNNER_TEMP/field-failures.json"
+          fi
+
+      - name: Measure policy validity
+        # This step reports the snapshot's age so a stale anchor is visible
+        # rather than silently reused (Codex review of PR #10, round 3).
+        run: |
+          set -euo pipefail
+          mkdir -p docs/rsi
+          if [ -f docs/rsi/trace-evidence.json ]; then
+            collected=$(python3 -c 'import json; print(json.load(open("docs/rsi/trace-evidence.json")).get("collected_at", "unknown"))')
+            echo "::notice::Using the committed Traces evidence snapshot collected at ${collected}. Refresh it locally to update the field anchor."
+            python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+              --trace-evidence docs/rsi/trace-evidence.json --out-json docs/rsi/measurement.json > measurement.txt
+          else
+            echo "::notice::No Traces evidence snapshot committed; validity will be null and only coverage can trigger a revision."
+            python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+              --out-json docs/rsi/measurement.json > measurement.txt
+          fi
+          sed -n '1,/^---/p' measurement.txt
+
+      - name: Apply the fixed acceptance rule
+        id: revise
+        run: |
+          set -euo pipefail
+          args=(docs/self-improvement-archive.jsonl --measurement docs/rsi/measurement.json --out-json decision.json)
+          # Fresh field blind spots (from this run's Traces refresh) feed
+          # topic mining the same way unclassified review findings do.
+          [ -f "$RUNNER_TEMP/field-failures.json" ] && args+=(--field-failures "$RUNNER_TEMP/field-failures.json")
+          python3 scripts/revise-improvement-policy.py "${args[@]}" > revise.txt
+          sed -n '1,/^---/p' revise.txt
+          action=$(python3 -c 'import json; print(json.load(open("decision.json"))["action"])')
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          if [ "$action" != "none" ]; then
+            # The measurement that justified the decision is evidence; keep it.
+            # The live measurement must describe the policy now in force, or the
+            # next run's hash check would refuse it (Codex review of PR #10, round 4).
+            cp docs/rsi/measurement.json docs/rsi/measurement-decision.json
+            if [ -f docs/rsi/trace-evidence.json ]; then
+              python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+                --trace-evidence docs/rsi/trace-evidence.json --out-json docs/rsi/measurement.json > remeasure.txt
+            else
+              python3 scripts/measure-policy-validity.py docs/self-improvement-archive.jsonl \
+                --out-json docs/rsi/measurement.json > remeasure.txt
+            fi
+          fi
+
+      - name: Re-render the dashboard
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          args=(docs/self-improvement-archive.jsonl --head "${SOURCE_SHA:0:8}" --out docs/rsi/dashboard.html)
+          [ -f docs/rsi/trace-evidence.json ] && args+=(--trace-evidence docs/rsi/trace-evidence.json)
+          [ -f docs/rsi/trace-evidence-verifier.json ] && args+=(--verifier-evidence docs/rsi/trace-evidence-verifier.json)
+          python3 scripts/render-rsi-dashboard.py "${args[@]}"
+
+      - name: Propose the result as a pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ steps.revise.outputs.action }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/; then
+            echo "Nothing changed (action: $ACTION)."
+            exit 0
+          fi
+          version=$(python3 -c 'import json; print(json.load(open("docs/improvement-policy.json"))["version"])')
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/improvement-policy.json docs/improvement-policy-history.jsonl; then
+            # Only the evidence, measurement and dashboard moved (the hourly
+            # refresh with no decision). One standing evidence branch, updated
+            # in place, so the hourly run never opens a new PR per hour; a
+            # human merges it whenever, and merging it re-triggers this
+            # workflow through the trace-evidence.json path filter.
+            # A standing policy proposal that the current decision no longer
+            # supports is withdrawn, not left open to merge (Codex review of
+            # PR #10, round 37): new rounds can legitimately turn a
+            # `revise` into `none`.
+            stale_pr=$(gh pr list --head "improvement-policy-proposal" --base "$default_branch" --state open \
+              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+            if [ -n "$stale_pr" ]; then
+              gh pr close "$stale_pr" --delete-branch \
+                --comment "Withdrawn: re-evaluated at \`${SOURCE_SHA}\` the fixed acceptance rule proposes no policy change (action: **${ACTION}**), so this proposal no longer satisfies it. A new proposal will be opened if a later round supports one."
+              echo "Closed the stale policy proposal PR #$stale_pr."
+            fi
+            branch="improvement-evidence-refresh"
+            title="chore(rsi): refresh the Traces field anchor"
+            body="Automatically refreshed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) from the shared Traces namespace at \`${SOURCE_SHA}\`. The fixed acceptance rule proposed no policy change on this evidence (action: **${ACTION}**). This changes only the evidence snapshot, the measurement and the dashboard; the policy is untouched."
+            git checkout -b "$branch"
+            git add docs/rsi/
+            git commit -m "$title"
+            git push --force origin "$branch"
+            existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+            if [ -n "$existing_pr" ]; then
+              echo "Updated the open evidence PR #$existing_pr in place."
+              exit 0
+            fi
+            gh pr create --title "$title" --body "$body" --label "self-improvement-archive" \
+              --base "$default_branch" --head "$branch"
+            exit 0
+          fi
+          # One standing proposal branch: a newer archive round supersedes an
+          # open proposal instead of opening a competing one with the same
+          # version and parent (Codex review of PR #10, round 5).
+          branch="improvement-policy-proposal"
+          git checkout -b "$branch"
+          git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/
+          git commit -m "chore(rsi): ${ACTION} of the improvement policy (v${version})"
+          git push --force origin "$branch"
+          # Same-repository PRs only: `--head` matches by branch name alone, so
+          # a fork PR using this branch name must not be mistaken for the
+          # bot's own proposal (Codex review of PR #10, round 19).
+          existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+            --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          if [ -n "$existing_pr" ]; then
+            # One comment per source commit: the hourly run regenerates the
+            # same proposal from the same archive and must not notify again
+            # (Codex verification pass, finding 3).
+            already=$(gh pr view "$existing_pr" --json comments \
+              --jq "[.comments[].body | select(contains(\"${SOURCE_SHA}\"))] | length")
+            if [ "${already:-0}" = "0" ]; then
+              gh pr comment "$existing_pr" --body "Superseded by a newer archive round at \`${SOURCE_SHA}\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version})."
+            fi
+            echo "Updated the open proposal PR #$existing_pr in place."
+            exit 0
+          fi
+          gh pr create \
+            --title "chore(rsi): ${ACTION} of the improvement policy (v${version})" \
+            --body "Automatically proposed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) after the archive changed at \`${SOURCE_SHA}\`. Action: **${ACTION}**. See \`docs/improvement-policy-history.jsonl\` for the evidence and \`docs/rsi/dashboard.html\` for the rendered state. This changes only the AI-owned policy files; a human merges it, same as every other change in this repo." \
+            --label "self-improvement-archive" \
+            --base "$default_branch" \
+            --head "$branch"

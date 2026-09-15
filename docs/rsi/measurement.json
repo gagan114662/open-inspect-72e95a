@@ -1,0 +1,431 @@
+{
+  "policy_version": 2,
+  "policy_hash": "c3c6db9d8605",
+  "archive_digest": "34d56884482d",
+  "anchor": {
+    "source": "trace-failures",
+    "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
+    "event_types": "tool_result(status=error) or failure-shaped output",
+    "collected_at": "2026-09-14T22:57:47Z",
+    "traces_considered": 2
+  },
+  "epochs": [
+    {
+      "round": 1,
+      "timestamp_ms": 1789401028000,
+      "findings_total": 5,
+      "findings_classified": 3,
+      "coverage": 0.6,
+      "dev": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0
+      },
+      "dev_weighted": {
+        "credential-redaction": 1.0,
+        "shell-semantics": 1.0,
+        "env-var-precedence": 0.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.5,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
+    },
+    {
+      "round": 2,
+      "timestamp_ms": 1789401435000,
+      "findings_total": 8,
+      "findings_classified": 6,
+      "coverage": 0.75,
+      "dev": {
+        "credential-redaction": 2,
+        "shell-semantics": 1,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0
+      },
+      "dev_weighted": {
+        "credential-redaction": 2.0,
+        "shell-semantics": 1.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.1118,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
+    },
+    {
+      "round": 3,
+      "timestamp_ms": 1789401733000,
+      "findings_total": 11,
+      "findings_classified": 9,
+      "coverage": 0.8182,
+      "dev": {
+        "credential-redaction": 3,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0
+      },
+      "dev_weighted": {
+        "credential-redaction": 3.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.22,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
+    },
+    {
+      "round": 4,
+      "timestamp_ms": 1789402092000,
+      "findings_total": 14,
+      "findings_classified": 12,
+      "coverage": 0.8571,
+      "dev": {
+        "credential-redaction": 4,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0
+      },
+      "dev_weighted": {
+        "credential-redaction": 4.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.22,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
+    },
+    {
+      "round": 5,
+      "timestamp_ms": 1789402494000,
+      "findings_total": 16,
+      "findings_classified": 14,
+      "coverage": 0.875,
+      "dev": {
+        "credential-redaction": 5,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0
+      },
+      "dev_weighted": {
+        "credential-redaction": 5.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.22,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
+    },
+    {
+      "round": 6,
+      "timestamp_ms": 1789402879000,
+      "findings_total": 19,
+      "findings_classified": 17,
+      "coverage": 0.8947,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0
+      },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.22,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
+    },
+    {
+      "round": 7,
+      "timestamp_ms": 1789403308000,
+      "findings_total": 19,
+      "findings_classified": 17,
+      "coverage": 0.8947,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 0
+      },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 0.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.22,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
+    },
+    {
+      "round": 9,
+      "timestamp_ms": 1789405373428,
+      "findings_total": 21,
+      "findings_classified": 19,
+      "coverage": 0.9048,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 1
+      },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 1.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.4264,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["auth-lifecycle"]
+    },
+    {
+      "round": 10,
+      "timestamp_ms": 1789405373490,
+      "findings_total": 24,
+      "findings_classified": 22,
+      "coverage": 0.9167,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 2
+      },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 2.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.533,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["auth-lifecycle"]
+    },
+    {
+      "round": 8,
+      "timestamp_ms": 1789405500000,
+      "findings_total": 28,
+      "findings_classified": 25,
+      "coverage": 0.8929,
+      "dev": {
+        "credential-redaction": 6,
+        "shell-semantics": 2,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 0,
+        "archive-branch": 3
+      },
+      "dev_weighted": {
+        "credential-redaction": 6.0,
+        "shell-semantics": 2.0,
+        "env-var-precedence": 1.0,
+        "fork-pr-permissions": 0.0,
+        "auth-lifecycle": 0.0,
+        "archive-branch": 3.0
+      },
+      "anchor": {
+        "credential-redaction": 1,
+        "shell-semantics": 1,
+        "env-var-precedence": 0,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 1,
+        "archive-branch": 1
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.5251,
+      "dev_only_topics": [],
+      "anchor_only_topics": ["auth-lifecycle"]
+    }
+  ],
+  "current": {
+    "round": 8,
+    "timestamp_ms": null,
+    "findings_total": 28,
+    "findings_classified": 25,
+    "coverage": 0.8929,
+    "dev": {
+      "credential-redaction": 6,
+      "shell-semantics": 2,
+      "env-var-precedence": 1,
+      "fork-pr-permissions": 0,
+      "auth-lifecycle": 0,
+      "archive-branch": 3
+    },
+    "dev_weighted": {
+      "credential-redaction": 6.0,
+      "shell-semantics": 2.0,
+      "env-var-precedence": 1.0,
+      "fork-pr-permissions": 0.0,
+      "auth-lifecycle": 0.0,
+      "archive-branch": 3.0
+    },
+    "anchor": {
+      "credential-redaction": 1,
+      "shell-semantics": 2,
+      "env-var-precedence": 0,
+      "fork-pr-permissions": 0,
+      "auth-lifecycle": 1,
+      "archive-branch": 2
+    },
+    "anchor_unknown_topics": [],
+    "validity": 0.5457,
+    "unclassified_findings": [
+      {
+        "round": 1,
+        "finding": "[P2] Failed reviews (crash/timeout/auth error) were swallowed and reported as a passing check."
+      },
+      {
+        "round": 1,
+        "finding": "[P2] [P1] detection used a bare substring grep that 'No [P1] findings' would itself trigger."
+      },
+      {
+        "round": 8,
+        "finding": "[P2] Any PR commenter could forge a comment starting with '### Codex independent review' and have it trusted as the genuine review, since the original draft filtered only on the opening text."
+      }
+    ],
+    "dev_only_topics": [],
+    "anchor_only_topics": ["auth-lifecycle"],
+    "validity_all_rounds": 0.5457,
+    "rounds_after_evidence": 0,
+    "anchor_definitions": {
+      "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
+      "shell-semantics": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
+      "env-var-precedence": ["precedence", "env var", "environment variable", "unconditionally"],
+      "fork-pr-permissions": ["fork", "github_token", "persist-credentials"],
+      "auth-lifecycle": ["refresh token", "rotat", "expir", "auth.json", "stale"],
+      "archive-branch": ["archive", "branch", "commit", "create", "creation"]
+    },
+    "anchor_evidence": {
+      "credential-redaction": 1,
+      "shell-semantics": 2,
+      "env-var-precedence": 0,
+      "fork-pr-permissions": 0,
+      "auth-lifecycle": 1,
+      "archive-branch": 2
+    }
+  }
+}

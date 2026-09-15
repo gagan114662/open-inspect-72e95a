@@ -1,0 +1,504 @@
+#!/usr/bin/env python3
+"""Measure whether the improvement policy's own signal predicts what the
+field shows -- the L5 trigger from docs/plans/recursive-meta-improvement.md.
+
+The loop in this repo decides "target fix vs mechanism fix" from Codex
+review findings bucketed by docs/improvement-policy.json's taxonomy. That
+bucketed count is the loop's development score: it is what the mechanism
+sees. It can be wrong in two ways the mechanism itself cannot notice:
+
+  1. Coverage: findings the taxonomy does not classify are simply dropped,
+     so a class of problem the loop keeps hitting never accumulates toward
+     the threshold. Measured as classified / total findings.
+  2. Predictive validity: a topic the taxonomy credits heavily may never
+     show up in actual working sessions, while one it barely credits does.
+     Measured as the Spearman rank correlation, across topics, between the
+     review-derived recurrence (rounds with a finding) and an independent
+     anchor: Traces evidence from working sessions in this repository.
+
+The anchor deliberately excludes the verifier's own transcripts (Codex
+review sessions) by default: those contain the findings themselves, so
+counting them would make the anchor echo the development score instead of
+checking it (paper failure mode 3, "reliable verification").
+
+Both measures are replayed per archive round, using only the rounds and
+traces that existed at that round's timestamp, so the dashboard can show
+when a revision would have fired, not just where things stand now.
+
+Usage:
+    python3 measure-policy-validity.py <archive.jsonl>
+        [--policy PATH] [--trace-evidence EVIDENCE.json] [--out-json PATH]
+
+Evidence comes from `mine-trace-failures.py --repo-dir DIR --save-evidence
+EVIDENCE.json`. Without --trace-evidence the anchor is absent: coverage is
+still measured, validity is reported as null, and the JSON says so plainly.
+Prints human-readable lines, then a `---` separator, then a JSON object.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+
+def _load_sibling_module(name: str, filename: str):
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).parent / filename
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
+
+DEFAULT_ANCHOR_AGENTS = ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"]
+MIN_TOPICS_FOR_VALIDITY = 3
+
+
+# --- archive replay ---------------------------------------------------------
+
+
+def load_archive(path: str) -> list[dict]:
+    entries = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                entries.append(json.loads(line))
+    return entries
+
+
+def archive_digest(entries: list[dict]) -> str:
+    """Content digest of the archive a measurement was taken against, so a
+    decision can refuse a measurement from a different archive (Codex
+    review of PR #10, round 2, finding 2)."""
+    canonical = json.dumps(entries, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()[:12]
+
+
+def parse_timestamp_ms(value: object) -> int | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return int(parsed.timestamp() * 1000)
+
+
+def round_key(entry: dict) -> str:
+    """See improvement_policy.round_key: one identity rule shared by the
+    detector and the measurer (Codex review of PR #10, round 37)."""
+    return policy_mod.round_key(entry)
+
+
+def rounds_in_order(entries: list[dict]) -> list[dict]:
+    """Merge archive entries by round identity (a legacy round may be
+    recorded as a 'pending' placeholder and later as its result) and carry
+    the latest parseable timestamp forward so every epoch has a time."""
+    by_round: dict[str, dict] = {}
+    for entry in entries:
+        round_num = entry.get("round")
+        if not isinstance(round_num, int):
+            continue
+        key = round_key(entry)
+        merged = by_round.setdefault(
+            key, {"round": round_num, "key": key, "findings": [], "timestamp_ms": None}
+        )
+        merged["findings"].extend(f for f in entry.get("findings", []) if isinstance(f, str))
+        ts = parse_timestamp_ms(entry.get("occurred_at"))
+        if ts is not None and (merged["timestamp_ms"] is None or ts > merged["timestamp_ms"]):
+            merged["timestamp_ms"] = ts
+    ordered = [by_round[k] for k in sorted(by_round, key=lambda k: (by_round[k]["round"], k))]
+    last_ts: int | None = None
+    for rnd in ordered:
+        if rnd["timestamp_ms"] is None:
+            rnd["timestamp_ms"] = last_ts
+        last_ts = rnd["timestamp_ms"]
+    # Replay order is time order, not round-number order: a round recorded
+    # later than a higher-numbered one must not be replayed against an
+    # earlier field snapshot (Codex review of PR #10, round 2, finding 4).
+    return sorted(
+        ordered,
+        key=lambda r: (r["timestamp_ms"] if r["timestamp_ms"] is not None else -1, r["round"]),
+    )
+
+
+# --- anchor evidence ---------------------------------------------------------
+#
+# Evidence is produced by scripts/mine-trace-failures.py --save-evidence and
+# consumed here. This script no longer collects evidence itself: keyword
+# searches over transcript text matched narration and successful file reads,
+# which made the anchor echo the reviews (Codex review of PR #10, round 30).
+
+
+def historical_definitions(
+    history: list[dict], keywords: dict[str, list[str]]
+) -> dict[str, list[str]]:
+    """Keyword definitions of every topic any recorded policy version ever
+    had, beyond the current policy's own. A refresh must keep searching
+    them, or a rolled-back topic loses the adverse evidence that stops it
+    being re-mined on the same archive (Codex review of PR #10, round 21)."""
+    extra: dict[str, list[str]] = {}
+    for entry in history:
+        snapshot = entry.get("policy") or {}
+        for name, spec in (snapshot.get("topics") or {}).items():
+            words = spec.get("keywords")
+            if not isinstance(words, list) or not words:
+                continue
+            words = list(words)
+            if keywords.get(name) == words or any(
+                key.split("@")[0] == name and recorded == words for key, recorded in extra.items()
+            ):
+                continue
+            # A name reused with different keywords keeps every definition
+            # under its own key, so an ancestor that used the older words is
+            # still judged on evidence searched for those words rather than
+            # on nothing (Codex review of PR #10, round 32).
+            key = (
+                name
+                if name not in keywords and name not in extra
+                else f"{name}@{definition_tag(words)}"
+            )
+            extra[key] = words
+    return extra
+
+
+def definition_tag(words: list[str]) -> str:
+    return hashlib.sha256(json.dumps(list(words)).encode()).hexdigest()[:8]
+
+
+def resolve_evidence_key(
+    definitions: dict[str, list[str]] | None, topic: str, words: list[str]
+) -> str | None:
+    """The evidence key searched with exactly these keywords for this topic:
+    the plain name, or a `name@tag` variant kept for an older definition.
+    None when no matching search was recorded."""
+    if not definitions:
+        return None
+    if list(definitions.get(topic, [])) == list(words):
+        return topic
+    for key, recorded in definitions.items():
+        if key.split("@")[0] == topic and list(recorded) == list(words):
+            return key
+    return None
+
+
+def anchor_counts_at(
+    evidence: dict | None,
+    topics: list[str],
+    until_ms: int | None,
+    keywords: dict[str, list[str]] | None = None,
+) -> dict[str, int | None] | None:
+    """Per-topic trace counts at a point in time. A topic the evidence
+    snapshot never searched (added by a later policy revision) is None,
+    unknown, not zero: reusing an old snapshot must not make a new topic
+    look unsupported (Codex review of PR #10, finding 5)."""
+    if evidence is None:
+        return None
+    searched = evidence.get("topics", {})
+    truncated = set(evidence.get("truncated", []))
+    definitions = evidence.get("definitions")
+    counts: dict[str, int | None] = {}
+    for topic in topics:
+        key = topic
+        if keywords is not None:
+            # Searched under a different (or unrecorded) definition: unknown
+            # until the evidence is refreshed.
+            key = resolve_evidence_key(definitions, topic, list(keywords.get(topic, []))) or ""
+        if key not in searched or key in truncated:
+            counts[topic] = None
+            continue
+        traces = searched[key]
+        if until_ms is None:
+            counts[topic] = len(traces)
+        elif any(not isinstance(t.get("timestamp"), int | float) for t in traces):
+            # An undated trace cannot be placed in time; a historical count
+            # that would include or exclude it is unknown (Codex review of
+            # PR #10, round 22).
+            counts[topic] = None
+        else:
+            counts[topic] = sum(1 for t in traces if t["timestamp"] <= until_ms)
+    return counts
+
+
+# --- statistics --------------------------------------------------------------
+
+
+def average_ranks(values: list[float]) -> list[float]:
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        avg = (i + j) / 2 + 1
+        for k in range(i, j + 1):
+            ranks[order[k]] = avg
+        i = j + 1
+    return ranks
+
+
+def spearman(xs: list[float], ys: list[float]) -> float | None:
+    if len(xs) != len(ys) or len(xs) < MIN_TOPICS_FOR_VALIDITY:
+        return None
+    if len(set(xs)) == 1 or len(set(ys)) == 1:
+        return None
+    rx, ry = average_ranks(xs), average_ranks(ys)
+    mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
+    cov = sum((a - mx) * (b - my) for a, b in zip(rx, ry, strict=True))
+    vx = sum((a - mx) ** 2 for a in rx) ** 0.5
+    vy = sum((b - my) ** 2 for b in ry) ** 0.5
+    if vx == 0 or vy == 0:
+        return None
+    return round(cov / (vx * vy), 4)
+
+
+# --- measurement -------------------------------------------------------------
+
+
+def measure_epoch(
+    rounds: list[dict],
+    keywords: dict[str, list[str]],
+    weights: dict[str, float],
+    evidence: dict | None,
+    until_ms: int | None,
+    *,
+    historical: bool = False,
+) -> dict:
+    topics = list(keywords)
+    dev_rounds: dict[str, set[int]] = {t: set() for t in topics}
+    total = 0
+    classified = 0
+    unclassified: list[dict] = []
+    for rnd in rounds:
+        for finding in rnd["findings"]:
+            total += 1
+            topic = policy_mod.classify_finding(finding, keywords)
+            if topic is None:
+                unclassified.append({"round": rnd["round"], "finding": finding})
+                continue
+            classified += 1
+            dev_rounds[topic].add(rnd.get("key", rnd["round"]))
+    dev = {t: len(dev_rounds[t]) for t in topics}
+    # The detector decides on weighted recurrence, so validity must be
+    # measured on the same signal, or discounting a topic could never
+    # change what is measured (Codex review of PR #10, finding 4).
+    dev_weighted = {t: round(dev[t] * weights.get(t, 1.0), 4) for t in topics}
+    if historical and until_ms is None and evidence is not None:
+        # A historical epoch with no usable timestamp has no defensible
+        # evidence window: unknown, not "everything" (Codex review of
+        # PR #10, round 18).
+        anchor: dict[str, int | None] | None = dict.fromkeys(topics)
+    else:
+        anchor = anchor_counts_at(evidence, topics, until_ms, keywords)
+    validity = None
+    known = [t for t in topics if anchor is not None and anchor[t] is not None]
+    if anchor is not None:
+        validity = spearman(
+            [float(dev_weighted[t]) for t in known], [float(anchor[t]) for t in known]
+        )
+    coverage = round(classified / total, 4) if total else None
+    return {
+        "round": rounds[-1]["round"] if rounds else None,
+        "timestamp_ms": until_ms,
+        "findings_total": total,
+        "findings_classified": classified,
+        "coverage": coverage,
+        "dev": dev,
+        "dev_weighted": dev_weighted,
+        "anchor": anchor,
+        "anchor_unknown_topics": sorted(
+            t for t in topics if anchor is not None and anchor[t] is None
+        ),
+        "validity": validity,
+        "unclassified_findings": unclassified,
+        "dev_only_topics": sorted(
+            t for t in known if dev[t] >= 2 and anchor is not None and anchor[t] == 0
+        ),
+        "anchor_only_topics": sorted(
+            t for t in known if dev[t] == 0 and anchor is not None and (anchor[t] or 0) > 0
+        ),
+    }
+
+
+def evidence_digest(evidence: dict | None) -> str | None:
+    """Content identity of an evidence snapshot: what was observed, not when.
+    An hourly refresh that finds nothing new produces a new collected_at but
+    the same digest, so it cannot re-enable a candidate that was rejected on
+    this very evidence (Codex verification pass, finding 1)."""
+    if evidence is None:
+        return None
+    body = {k: v for k, v in evidence.items() if k not in {"collected_at", "repo_dir", "namespace"}}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def evidence_trace_ids(evidence: dict | None) -> set[str]:
+    """Every session the evidence observed: the scanned-session list when
+    the snapshot records one, plus any session a topic matched. A complete
+    scan whose failures were all unclassified is an observed field with
+    confirmed zero counts, not an empty anchor (Codex review of PR #10,
+    round 36)."""
+    if evidence is None:
+        return set()
+    scanned = {s for s in evidence.get("sessions") or [] if isinstance(s, str)}
+    return scanned | {t["id"] for traces in evidence.get("topics", {}).values() for t in traces}
+
+
+def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
+    keywords = policy_mod.topic_keywords(policy)
+    weights = policy_mod.topic_weights(policy)
+    rounds = rounds_in_order(entries)
+    anchor_meta: dict = {"source": "none", "agents": [], "traces_considered": 0}
+    if evidence is not None:
+        seen = evidence_trace_ids(evidence)
+        anchor_meta = {
+            "source": evidence.get("source", "traces"),
+            "agents": evidence.get("agents", []),
+            "event_types": evidence.get("event_types"),
+            "collected_at": evidence.get("collected_at"),
+            "evidence_digest": evidence_digest(evidence),
+            "traces_considered": len(seen),
+        }
+        if not seen:
+            # An anchor with no traces at all is absence of evidence, not
+            # evidence of absence: treat it as no anchor so nothing gets
+            # discounted for failing to appear in a field nobody observed.
+            anchor_meta["source"] = f"{anchor_meta['source']} (empty)"
+            evidence = None
+    epochs = []
+    for i in range(len(rounds)):
+        epoch = measure_epoch(
+            rounds[: i + 1], keywords, weights, evidence, rounds[i]["timestamp_ms"], historical=True
+        )
+        epoch.pop("unclassified_findings")
+        epochs.append(epoch)
+    current = measure_epoch(rounds, keywords, weights, evidence, None)
+    # Evidence is a snapshot: findings archived after it was collected come
+    # from sessions it never searched, so they must not mark a topic as
+    # "credited by reviews, never seen in the field" (Codex review of
+    # PR #10, round 6). Weight-relevant fields are recomputed over the
+    # rounds the snapshot could have seen; the count of newer rounds is
+    # reported so a caller can insist on fresh evidence.
+    rounds_after_evidence = 0
+    if evidence is not None:
+        collected_ms = parse_timestamp_ms(evidence.get("collected_at"))
+        if collected_ms is not None:
+            seen_rounds = [
+                r
+                for r in rounds
+                if r["timestamp_ms"] is not None and r["timestamp_ms"] <= collected_ms
+            ]
+            rounds_after_evidence = len(rounds) - len(seen_rounds)
+            aligned = measure_epoch(seen_rounds, keywords, weights, evidence, None)
+            current["dev_only_topics"] = aligned["dev_only_topics"]
+            current["anchor_only_topics"] = aligned["anchor_only_topics"]
+            # The reported validity is the one decisions are judged on: the
+            # covered window. The all-rounds figure stays available, labelled
+            # (Codex review of PR #10, round 9).
+            current["validity_all_rounds"] = current["validity"]
+            current["validity"] = aligned["validity"]
+    current["rounds_after_evidence"] = rounds_after_evidence
+    # Anchor counts for EVERY topic the evidence searched, not only the
+    # policy's current topics, so a topic removed by a rollback keeps its
+    # adverse evidence when a revision tries to mine it again.
+    # Definitions travel with the counts so a candidate can be checked
+    # against what was actually searched (Codex review of PR #10, round 12).
+    current["anchor_definitions"] = dict(evidence.get("definitions") or {}) if evidence else None
+    current["anchor_evidence"] = (
+        anchor_counts_at(
+            evidence, list(evidence.get("topics", {})), None, evidence.get("definitions") or {}
+        )
+        if evidence
+        else None
+    )
+    return {
+        "policy_version": policy["version"],
+        "policy_hash": policy_mod.policy_hash(policy),
+        "archive_digest": archive_digest(entries),
+        "anchor": anchor_meta,
+        "epochs": epochs,
+        "current": current,
+    }
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("archive_path")
+    parser.add_argument("--policy", default=None)
+    parser.add_argument(
+        "--trace-evidence",
+        default=None,
+        help="Evidence file written by mine-trace-failures.py --save-evidence",
+    )
+    parser.add_argument(
+        "--history",
+        default=str(policy_mod.HISTORY_PATH),
+        help="Policy history; topics from earlier versions are searched too so evidence outlives a rollback",
+    )
+    parser.add_argument(
+        "--out-json",
+        default=None,
+        help="Also write the JSON result to this path (machine-readable output kept apart from the report)",
+    )
+    args = parser.parse_args(argv[1:])
+
+    policy = (
+        policy_mod.load_policy(args.policy) if args.policy else policy_mod.load_policy_or_builtin()
+    )
+    # Every file this run reads is an input, the history included (Codex
+    # review of PR #10, round 23).
+    inputs = [args.archive_path, args.policy, args.trace_evidence, args.history]
+    if args.out_json:
+        policy_mod.assert_safe_output(args.out_json, inputs=inputs)
+    entries = load_archive(args.archive_path)
+
+    evidence: dict | None = None
+    if args.trace_evidence:
+        with open(args.trace_evidence) as f:
+            evidence = json.load(f)
+
+    result = measure(entries, policy, evidence)
+    current = result["current"]
+    print(
+        f"policy v{result['policy_version']} ({result['policy_hash']}): "
+        f"coverage {current['coverage']} over {current['findings_total']} finding(s); "
+        f"validity {current['validity']} "
+        f"(anchor: {result['anchor']['source']}, {result['anchor']['traces_considered']} trace(s))"
+    )
+    for item in current["unclassified_findings"]:
+        # One line per finding: embedded newlines must not be able to forge
+        # the report/JSON boundary (Codex review of PR #10, round 10).
+        text = " ".join(item["finding"].split())[:100]
+        print(f"  unclassified (round {item['round']}): {text}")
+    if current["dev_only_topics"]:
+        print(f"  credited by reviews, never seen in the field: {current['dev_only_topics']}")
+    if current["anchor_only_topics"]:
+        print(f"  seen in the field, never credited by reviews: {current['anchor_only_topics']}")
+    if current["anchor_unknown_topics"]:
+        print(
+            f"  not yet searched in the field (re-collect evidence): {current['anchor_unknown_topics']}"
+        )
+    if args.out_json:
+        Path(args.out_json).write_text(json.dumps(result, indent=2) + "\n")
+    print("---")
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
