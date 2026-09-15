@@ -14,6 +14,8 @@ schedules in .github/workflows/ run the same steps on their own.
 from __future__ import annotations
 
 import argparse
+import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -63,18 +65,32 @@ def main(argv: list[str]) -> int:
     )
     args = parser.parse_args(argv[1:])
 
+    field_failures: list[str] = []
     if args.refresh:
-        if step(
-            "mine field failures",
-            [
-                "scripts/mine-trace-failures.py",
-                "--repo-dir",
-                args.repo_dir,
-                "--save-evidence",
-                EVIDENCE,
-            ],
-        ):
+        # Mine into scratch files first: a refresh that observed no session
+        # must never replace the committed snapshot, and the mined blind
+        # spots feed the decision (Codex review of PR #68).
+        tmp = ROOT / "docs" / "rsi" / ".refresh"
+        tmp.mkdir(parents=True, exist_ok=True)
+        fresh, failures = tmp / "trace-evidence.json", tmp / "field-failures.json"
+        mine = [
+            "scripts/mine-trace-failures.py",
+            "--repo-dir",
+            args.repo_dir,
+            "--save-evidence",
+            str(fresh),
+            "--out-json",
+            str(failures),
+        ]
+        if step("mine field failures", mine):
             return 1
+        observed = len(json.loads(fresh.read_text()).get("sessions") or [])
+        if observed:
+            shutil.copyfile(fresh, ROOT / EVIDENCE)
+            field_failures = ["--field-failures", str(failures)]
+            print(f"[ok] refresh: {observed} session(s) observed; evidence snapshot replaced")
+        else:
+            print("[skip] refresh: no session observed; the committed evidence snapshot is kept")
     evidence = ["--trace-evidence", EVIDENCE] if (ROOT / EVIDENCE).exists() else []
     measure_out = subprocess.run(
         [
@@ -98,11 +114,22 @@ def main(argv: list[str]) -> int:
     if measure_out.returncode:
         print(measure_out.stderr.strip()[-600:], file=sys.stderr)
         return 1
-    decide = ["scripts/revise-improvement-policy.py", ARCHIVE, "--measurement", MEASUREMENT]
+    decide = [
+        "scripts/revise-improvement-policy.py",
+        ARCHIVE,
+        "--measurement",
+        MEASUREMENT,
+        *field_failures,
+    ]
     if not args.apply:
         decide.append("--dry-run")
     if step("decide" + ("" if args.apply else " (dry run)"), decide):
         return 1
+    if args.apply and step(
+        "re-measure under the applied policy",
+        ["scripts/measure-policy-validity.py", ARCHIVE, *evidence, "--out-json", MEASUREMENT],
+    ):
+        return 1  # the live measurement must describe the policy now in force
     if step(
         "render dashboard",
         ["scripts/render-rsi-dashboard.py", ARCHIVE, *evidence, "--out", DASHBOARD],
