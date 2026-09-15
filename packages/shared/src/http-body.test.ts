@@ -115,6 +115,27 @@ describe("readBody (Effect)", () => {
     expect(stalled.locked).toBe(false);
   });
 
+  it("does not wait for a cancel() that never settles", async () => {
+    let cancelCalled = false;
+    const stalled = new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise(() => undefined);
+      },
+      cancel() {
+        cancelCalled = true;
+        return new Promise(() => undefined); // the source never finishes cancelling
+      },
+    });
+    const started = Date.now();
+    const exit = await Effect.runPromiseExit(
+      readBody(stalled, 10).pipe(Effect.timeout("30 millis"))
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(cancelCalled).toBe(true);
+    expect(stalled.locked).toBe(false);
+  });
+
   it("releases the lock after a successful read", async () => {
     const stream = streamOf(new Uint8Array([1]));
     await Effect.runPromise(readBody(stream, 10));

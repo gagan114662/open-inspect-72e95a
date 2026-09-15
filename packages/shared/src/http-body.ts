@@ -64,14 +64,16 @@ export function readBody(
         return bytes;
       }),
     (reader, exit) =>
-      Exit.isSuccess(exit)
-        ? Effect.sync(() => reader.releaseLock())
-        : Effect.promise(() =>
-            reader
-              .cancel()
-              .catch(() => undefined)
-              .then(() => reader.releaseLock())
-          )
+      Effect.sync(() => {
+        // Cancellation is started, never awaited: `cancel()` runs the
+        // source's cancel step synchronously and returns a promise that a
+        // stalled source may never settle, and a finalizer that waits on
+        // it would keep the timeout or interruption pending forever (Codex
+        // review of PR #75, round 2). The lock is released right after, so
+        // the stream is usable again whatever the source does.
+        if (!Exit.isSuccess(exit)) void reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      })
   );
 }
 
