@@ -68,17 +68,41 @@ def test_rendered_skill_never_contains_a_secret():
     assert text.startswith("# Skill: credential-redaction")
 
 
-def test_main_writes_one_skill_per_topic_and_removes_stale_ones(tmp_path):
+def test_main_writes_one_skill_per_topic_and_removes_only_its_own_stale_files(tmp_path):
     archive = tmp_path / "archive.jsonl"
     archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
     out = tmp_path / "skills"
     out.mkdir()
-    (out / "retired-topic.md").write_text("old")
+    (out / "retired-topic.md").write_text("old\n" + distill.GENERATED_FOOTER + " ...")
     (out / "README.md").write_text("keep")
+    (out / "handwritten.md").write_text("a human wrote this; it has no generated footer")
+    notes = out / "notes.md"
+    notes.write_text('{"round": 1, "findings": []}\n')
+    assert distill.main(["d", str(notes), "--out-dir", str(out)]) == 0, (
+        "an input inside out-dir survives"
+    )
+    assert notes.exists()
     assert distill.main(["d", str(archive), "--out-dir", str(out)]) == 0
     names = sorted(p.name for p in out.glob("*.md"))
-    assert "retired-topic.md" not in names and "README.md" in names
+    assert "retired-topic.md" not in names, "generated and no longer a topic: removed"
+    assert "README.md" in names and "handwritten.md" in names and "notes.md" in names
     assert set(names) >= {f"{t}.md" for t in policy_mod.BUILTIN_TOPIC_KEYWORDS}
+
+
+def test_topic_names_cannot_escape_the_output_directory(tmp_path, monkeypatch):
+    import pytest
+
+    policy = policy_mod.builtin_policy()
+    policy["topics"]["../outside"] = {"keywords": ["zzz"], "weight": 1.0}
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("")
+    monkeypatch.setattr(policy_mod, "validate_policy", lambda p: None)  # bypass to reach the guard
+    out = tmp_path / "skills"
+    with pytest.raises(ValueError, match="safe filename"):
+        distill.main(["d", str(archive), "--policy", str(policy_path), "--out-dir", str(out)])
+    assert not (tmp_path / "outside.md").exists()
 
 
 def test_tool_registry_matches_the_scripts_directory():
@@ -109,6 +133,10 @@ def test_tool_registry_matches_the_scripts_directory():
     agent = json.loads((REPO / "agents" / "self-improver" / "agent.json").read_text())
     for rel in agent["schedules"] + agent["channels"]:
         assert (REPO / "agents" / "self-improver" / rel).exists(), rel
-    policy = policy_mod.load_policy()
-    assert agent["policy"]["version"] == policy["version"]
-    assert agent["policy"]["topics"] == list(policy["topics"])
+    # agent.json points at the policy and never copies its version or topics,
+    # so a policy revision cannot leave the configuration stale (Codex review
+    # of PR #45, finding 3).
+    assert (REPO / agent["policy"]["path"]).exists() and (
+        REPO / agent["policy"]["history"]
+    ).exists()
+    assert "version" not in agent["policy"] and "topics" not in agent["policy"]

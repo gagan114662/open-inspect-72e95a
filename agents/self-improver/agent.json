@@ -10,16 +10,7 @@
   "policy": {
     "path": "docs/improvement-policy.json",
     "history": "docs/improvement-policy-history.jsonl",
-    "version": 2,
-    "topics": [
-      "credential-redaction",
-      "shell-semantics",
-      "env-var-precedence",
-      "fork-pr-permissions",
-      "auth-lifecycle",
-      "archive-branch"
-    ],
-    "threshold": 3
+    "note": "version, topics and threshold live in the policy file itself; read them there"
   },
   "acceptance_rule": {
     "min_coverage": 0.8,
