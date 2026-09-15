@@ -245,12 +245,36 @@ _TOKEN_RE = re.compile(r"[a-z][a-z_-]{2,}")
 # of problem it is: "/home/runner/work/<repo>/scripts/x.py:41" must not
 # hand mining the tokens home, runner, scripts or the repository's own name
 # (the loop's first autonomous proposal, PR #54, did exactly that).
-_LOCATION_RE = re.compile(
-    r"https?://\S+"  # URLs
-    r"|(?<!\S)(?:/|\./|\.\./|~/)\S+"  # absolute or explicitly relative paths
-    r"|\S+/\S+/\S+"  # two or more separators: a path, not prose like deadlock/livelock
-    r"|\S+\.(?:py|ts|tsx|js|mjs|yml|yaml|json|jsonl|md|sh|toml)\b(?::\d+)?"  # file references
+_LOCATION_EXTENSIONS = (
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".mjs",
+    ".yml",
+    ".yaml",
+    ".json",
+    ".jsonl",
+    ".md",
+    ".sh",
+    ".toml",
 )
+
+
+def is_location(word: str) -> bool:
+    """A URL, an absolute or explicitly relative path, a multi-segment path,
+    or a file reference (x.py, x.py:41). Checked per whitespace-separated
+    word with plain string tests, so a long string costs linear time
+    (Codex review of PR #56, round 2)."""
+    w = word.strip("()[]<>`'\",;")
+    if w.startswith(("http://", "https://", "/", "./", "../", "~/")):
+        return True
+    if w.count("/") >= 2:
+        return True
+    base = w.rsplit(":", 1)[0] if ":" in w and w.rsplit(":", 1)[1].isdigit() else w
+    return base.lower().endswith(_LOCATION_EXTENSIONS)
+
+
 # A token present in more than this share of ALL archived findings is the
 # repository's background vocabulary ("policy", "evidence", "scripts"), not
 # a class of problem, and may not name or define a mined topic.
@@ -261,7 +285,7 @@ MIN_BACKGROUND_OCCURRENCES = 10
 
 
 def tokenize(text: str) -> set[str]:
-    text = _LOCATION_RE.sub(" ", text.lower())
+    text = " ".join(w for w in text.lower().split() if not is_location(w))
     return {
         tok.strip("-_")
         for tok in _TOKEN_RE.findall(text)
@@ -450,10 +474,22 @@ SAFE_FIELD_VOCABULARY: frozenset[str] = frozenset(
 )
 
 
-def background_tokens(entries: list[dict]) -> set[str]:
-    """Tokens that appear in more than MAX_BACKGROUND_SHARE of every archived
-    finding: what this repository talks about, not what goes wrong in it."""
-    findings = [f for e in entries for f in e.get("findings", []) if isinstance(f, str)]
+def background_tokens(
+    entries: list[dict], keywords: dict[str, list[str]] | None = None
+) -> set[str]:
+    """Tokens that pervade the findings the taxonomy ALREADY classifies: what
+    this repository talks about across every class of problem ("scripts",
+    "policy", "evidence"). A word that recurs only in unclassified findings
+    ("deadlock", ten times) is a defect waiting for a topic, not background,
+    so it is never excluded however often it appears (Codex review of PR
+    #56, round 2)."""
+    findings = [
+        f
+        for e in entries
+        for f in e.get("findings", [])
+        if isinstance(f, str)
+        and (not keywords or policy_mod.classify_finding(f, keywords) is not None)
+    ]
     if not findings:
         return set()
     df: Counter[str] = Counter(tok for f in findings for tok in tokenize(f))
@@ -1010,7 +1046,9 @@ def decide(
     if field_trigger or coverage_trigger:
         mining_input.extend(blind)
     mined = (
-        mine_topics(mining_input, keywords, field_vocabulary(entries), background_tokens(entries))
+        mine_topics(
+            mining_input, keywords, field_vocabulary(entries), background_tokens(entries, keywords)
+        )
         if (coverage_trigger or field_trigger)
         else []
     )

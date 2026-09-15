@@ -1532,3 +1532,43 @@ def test_slash_separated_prose_and_small_recurrences_still_mine():
     unclassified = [{"round": e["round"], "finding": e["findings"][0]} for e in entries[:3]]
     mined = revise.mine_topics(unclassified, {}, None, revise.background_tokens(entries))
     assert mined and "deadlock" in mined[0]["keywords"]
+
+
+def test_a_defect_word_that_recurs_only_in_unclassified_findings_is_never_background():
+    # Ten "deadlock" findings among forty: not background, because none of the
+    # classified findings contain it (Codex review of PR #56, round 2).
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    entries = [
+        {
+            "round": i,
+            "source_sha": f"c{i}",
+            "findings": [f"**[P1]** leaked credential in scripts run {i}"],
+        }
+        for i in range(30)
+    ] + [
+        {
+            "round": 100 + i,
+            "source_sha": f"d{i}",
+            "findings": [f"**[P2]** deadlock in worker pool {i}"],
+        }
+        for i in range(10)
+    ]
+    background = revise.background_tokens(entries, keywords)
+    assert "scripts" in background and "deadlock" not in background
+    unclassified = [{"round": e["round"], "finding": e["findings"][0]} for e in entries[30:]]
+    mined = revise.mine_topics(unclassified, keywords, None, background)
+    assert mined and "deadlock" in mined[0]["keywords"]
+
+
+def test_location_detection_is_linear_on_long_words():
+    import time
+
+    long_word = "a" * 200_000
+    start = time.perf_counter()
+    revise.tokenize(long_word + " and deadlock/livelock in /home/runner/x.py")
+    assert time.perf_counter() - start < 1.0
+    assert revise.is_location("/home/runner/x.py") and revise.is_location("scripts/a/b")
+    assert revise.is_location("revise-improvement-policy.py:541") and revise.is_location(
+        "https://x.y/z"
+    )
+    assert not revise.is_location("deadlock/livelock") and not revise.is_location("reader/writer")
