@@ -97,20 +97,29 @@ VALID_ORIGINS = frozenset({"init", "revision", "rollback"})
 # that reaches a report, a log, or the policy's `mined_from` evidence passes
 # through scrub_secrets first, because a proposal PR is public the moment it
 # is pushed (Codex review of PR #10, round 38).
+# `name = value` where the name says credential. In prose and command output
+# any value is suspect; in source code the value is usually an expression
+# (`token_count = len(items)`), so the source variant below only redacts
+# quoted string literals (Codex review of PR #72, finding 3).
+_ASSIGNMENT_SHAPE = re.compile(
+    r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
+)
+_LITERAL_ASSIGNMENT_SHAPE = re.compile(
+    r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"(?:\\.|[^\"\\]){8,}\"|'(?:\\.|[^'\\]){8,}')"
+)
+# Command-line flags: --password VALUE, --token=VALUE, -p VALUE, -pVALUE,
+# and whole quoted values with spaces (rounds 40-42).
+_FLAG_SHAPE = re.compile(
+    r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-[pa])(?:\s+|=)?)"
+    r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
+)
 _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s]+@"),  # scheme://user:PASS@
     re.compile(r"(?i)\b((?:bearer|basic|token|digest)\s+)[a-z0-9._~+/=-]{8,}"),
     # The whole header value, scheme included (round 41).
     re.compile(r"(?i)\b(authorization\s*[:=]\s*[\"']?(?:[a-z]+\s+)?)[^\s\"']+"),
-    re.compile(
-        r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
-    ),
-    # Command-line flags: --password VALUE, --token=VALUE, -p VALUE, -pVALUE,
-    # and whole quoted values with spaces (rounds 40-42).
-    re.compile(
-        r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-[pa])(?:\s+|=)?)"
-        r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
-    ),
+    _ASSIGNMENT_SHAPE,
+    _FLAG_SHAPE,
     # curl-style user:password arguments, attached or not, quoted or not:
     # -u user:PASS, -uuser:PASS, --user 'user:PASS WITH SPACES' (rounds 43-44).
     re.compile(
@@ -135,15 +144,32 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
 )
 
 
-def scrub_secrets(text: str) -> str:
+def scrub_secrets(text: str, shapes: tuple[re.Pattern[str], ...] = _SECRET_SHAPES) -> str:
     """Replace credential-shaped substrings with [REDACTED], keeping the
     surrounding words so the failure stays classifiable."""
-    for pattern in _SECRET_SHAPES:
+    for pattern in shapes:
         if not pattern.groups:
             text = pattern.sub("[REDACTED]", text)
         else:
             text = pattern.sub(_redact_match, text)
     return text
+
+
+# Source code is redacted with the same shapes except the two that treat any
+# bare word after `name =` / `--flag` as a secret: in code those are
+# expressions and variable references, not credentials. Quoted literals with
+# a credential-shaped name, prefixed tokens, JWTs and long mixed tokens are
+# still removed (Codex review of PR #72, finding 3).
+_SOURCE_SECRET_SHAPES: tuple[re.Pattern[str], ...] = tuple(
+    _LITERAL_ASSIGNMENT_SHAPE if p is _ASSIGNMENT_SHAPE else p
+    for p in _SECRET_SHAPES
+    if p is not _FLAG_SHAPE
+)
+
+
+def scrub_source_secrets(text: str) -> str:
+    """scrub_secrets for source code and diffs: expressions survive."""
+    return scrub_secrets(text, _SOURCE_SECRET_SHAPES)
 
 
 def _redact_match(m: re.Match[str]) -> str:

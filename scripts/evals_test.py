@@ -39,15 +39,20 @@ def _diffs(sha):
     )
 
 
+def _diffs_with_base(sha):
+    diff = _diffs(sha)
+    return ("base", diff) if diff is not None else None
+
+
 def test_build_makes_one_case_per_reachable_round_and_scrubs_secrets():
-    cases, skipped = build.build(_entries(), KW, _diffs, 60_000)
+    cases, skipped = build.build(_entries(), KW, _diffs_with_base, 60_000)
     assert [c["id"] for c in cases] == ["round-001", "round-002"] and skipped == 2
     assert cases[0]["expected_topics"] == ["credential-redaction"]
     assert "FAKE_TOK_1" not in json.dumps(cases[0])
 
 
 def test_keyword_grader_measures_what_a_prepush_check_could_catch():
-    cases, _ = build.build(_entries(), KW, _diffs, 60_000)
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
     r1 = run.grade_keywords(cases[0], KW)
     r2 = run.grade_keywords(cases[1], KW)
     assert r1["recall"] == 1.0, "the diff mentions 'token'"
@@ -57,7 +62,7 @@ def test_keyword_grader_measures_what_a_prepush_check_could_catch():
 
 
 def test_codex_grader_scores_recall_from_the_reviewers_json():
-    cases, _ = build.build(_entries(), KW, _diffs, 60_000)
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
 
     def reviewer_labels_other(_prompt):
         return (
@@ -75,7 +80,7 @@ def test_codex_grader_scores_recall_from_the_reviewers_json():
 
 
 def test_main_writes_a_result_file_outside_protected_paths(tmp_path):
-    cases, _ = build.build(_entries(), KW, _diffs, 60_000)
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
     cases_dir = tmp_path / "cases"
     cases_dir.mkdir()
     for c in cases:
@@ -84,3 +89,160 @@ def test_main_writes_a_result_file_outside_protected_paths(tmp_path):
     assert run.main(["r", "--cases", str(cases_dir), "--out", str(out), "--limit", "1"]) == 0
     written = list(out.glob("keywords-*.json"))
     assert len(written) == 1 and json.loads(written[0].read_text())["summary"]["cases"] == 1
+
+
+# ── Codex review of PR #72 ───────────────────────────────────────────────────
+
+
+def _git(repo, *args):
+    import os
+    import subprocess
+
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@x",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@x",
+            "PATH": os.environ["PATH"],
+        },
+    ).stdout.strip()
+
+
+def _repo_with_a_merged_branch(tmp_path):
+    """main: A; branch: B, C (two files); merge commit M on main."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "a.txt").write_text("a\n")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "A")
+    a = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-qb", "feature")
+    (repo / "first.py").write_text("token_count = len(items)\n")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "B")
+    (repo / "second.py").write_text("print(token_count)\n")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "C")
+    c = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "M", "feature")
+    return repo, a, c
+
+
+def test_case_diff_covers_the_whole_reviewed_branch_not_just_the_last_commit(tmp_path):
+    """Finding 1: the review ran on `origin/main...HEAD`; a case built from
+    `HEAD~1..HEAD` alone contains only the last commit's change."""
+    repo, base, head = _repo_with_a_merged_branch(tmp_path)
+    found_base, diff = build.reviewed_diff(head, repo=repo, main_ref="main")
+    assert found_base == base
+    assert "first.py" in diff and "second.py" in diff
+    # A commit that sits on main's own first-parent line has no recoverable
+    # reviewed base: the case is built but is not scorable.
+    assert build.reviewed_diff(base, repo=repo, main_ref="main") == (None, None)
+
+
+def test_a_round_without_a_recoverable_base_is_kept_but_not_scorable():
+    entries = [{"round": 7, "source_sha": "onmain", "findings": ["[P2] leaked token FAKE_1"]}]
+    cases, skipped = build.build(entries, KW, lambda _sha: (None, None), 60_000)
+    assert skipped == 0 and cases[0]["scorable"] is False
+    assert "base" in cases[0]["not_scorable_reason"]
+    assert run.load_cases_from(cases) == [], "the runner skips non-scorable cases"
+
+
+def _patch(path, body):
+    return f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1 @@\n+{body}\n"
+
+
+def test_truncation_keeps_the_files_the_findings_reference_or_marks_the_case_unscorable():
+    """Finding 2: a truncated diff must still contain every file an expected
+    finding talks about, otherwise recall on it is meaningless."""
+    big = _patch("noise.txt", "x" * 500)
+    small = _patch("scripts/thing.py", "token = read()")
+    entry = {"round": 1, "source_sha": "s", "findings": ["[P2] scripts/thing.py leaks the token"]}
+    # The referenced file comes after 500 chars of noise; a naive prefix cut
+    # would drop it. Referenced files are kept first, whole.
+    case = build.build_case(entry, "base", big + small, KW, max_diff_chars=len(small) + 10)
+    assert case["diff_truncated"] is True and case["scorable"] is True
+    assert "scripts/thing.py" in case["diff"] and "noise.txt" not in case["diff"]
+    assert case["omitted_files"] == ["noise.txt"]
+    # When even the referenced file does not fit, the case is not scorable.
+    case = build.build_case(entry, "base", big + small, KW, max_diff_chars=20)
+    assert case["scorable"] is False and "scripts/thing.py" in case["not_scorable_reason"]
+    # Findings that name no file give nothing to check: a truncated case is
+    # then not scorable either.
+    vague = {"round": 2, "source_sha": "s", "findings": ["[P2] the token leaks somewhere"]}
+    case = build.build_case(vague, "base", big + small, KW, max_diff_chars=len(small) + 10)
+    assert case["scorable"] is False
+
+
+def test_referenced_files_keep_dot_directories_and_ignore_runner_paths():
+    refs = build.referenced_files(
+        [
+            "In `.github/workflows/archive-and-recommend.yml` the marker is last.",
+            "[scripts/distill-skills.py:52](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill-skills.py:52) fails.",
+            "See ./docs/plan.md too.",
+        ]
+    )
+    assert refs == [
+        ".github/workflows/archive-and-recommend.yml",
+        "scripts/distill-skills.py",
+        "docs/plan.md",
+    ]
+
+
+def test_source_scrubbing_keeps_expressions_and_removes_real_secrets():
+    """Finding 3: `token_count = len(items)` is code, not a credential."""
+    src = "\n".join(
+        [
+            "token_count = len(items)",
+            "auth = request.headers.get('Authorization')",
+            'GITHUB_TOKEN = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"',
+            "password = 'hunter2hunter2hunter2'",
+        ]
+    )
+    out = build.scrub_source(src)
+    assert "token_count = len(items)" in out
+    assert "auth = request.headers.get('Authorization')" in out
+    assert "ghp_ABC" not in out and "hunter2" not in out
+    assert "[REDACTED]" in out
+
+
+def test_reviewer_execution_failure_is_an_error_not_zero_recall():
+    """Finding 4: a reviewer that could not run (auth failure, exit 1) has
+    not reviewed anything; its case must not count as recall 0."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+
+    def reviewer_cannot_run(_prompt):
+        return run.ReviewerRun(text="", returncode=1, stderr="not logged in")
+
+    result = run.grade_codex(cases[0], KW, reviewer_cannot_run)
+    assert result["status"] == "error" and result["recall"] is None
+    assert "not logged in" in result["error"]
+    summary = run.summarize([result, run.grade_keywords(cases[1], KW)])
+    assert summary["errors"] == 1 and summary["cases"] == 1 and summary["mean_recall"] == 1.0
+
+
+def test_a_finding_labelled_with_a_valid_topic_is_credited_once():
+    """Finding 5: the keyword fallback exists for findings the reviewer
+    labelled `other`; a finding already filed under a valid topic must not
+    also be credited to a second topic its summary happens to mention."""
+    case = {
+        "id": "round-099",
+        "round": 99,
+        "expected_topics": ["fork-pr-permissions", "credential-redaction"],
+        "diff": "",
+        "scorable": True,
+    }
+
+    def reviewer(_prompt):
+        return (
+            '{"findings": [{"topic": "fork-pr-permissions", '
+            '"summary": "A fork PR cannot read the token secret, so credentials are missing."}]}'
+        )
+
+    result = run.grade_codex(case, KW, reviewer)
+    assert result["found_topics"] == ["fork-pr-permissions"] and result["recall"] == 0.5

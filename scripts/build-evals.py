@@ -6,10 +6,13 @@ the commit Codex reviewed and the findings it reported. That is an eval
 case: given this diff, does a reviewer (or a pre-push check, or a future
 version of the agent with new skills) surface the same classes of problem?
 
-Each case under evals/cases/ holds the diff of the reviewed commit (capped,
-credentials scrubbed), the findings as expected outcomes, and the topic the
-current policy files each finding under. Cases whose commit is no longer
-reachable are skipped and counted.
+Each case under evals/cases/ holds the diff Codex actually reviewed (the
+whole branch against the main line it forked from, credentials scrubbed
+source-aware), the findings as expected outcomes, and the topic the current
+policy files each finding under. Cases whose commit is no longer reachable
+are skipped and counted. A case is `scorable` only when its diff is the
+reviewed range and still contains every file its findings name; otherwise it
+is kept for the record with a `not_scorable_reason` and the runner skips it.
 
 usage: build-evals.py [ARCHIVE] [--policy PATH] [--out-dir DIR] [--max-diff-chars N]
 """
@@ -19,6 +22,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -42,23 +46,134 @@ def _load_sibling_module(name: str, filename: str):
 policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
 
 
-def commit_diff(sha: str, repo: Path = REPO_ROOT) -> str | None:
-    """The reviewed commit's diff, or None when the commit is unreachable."""
+def _first_parent_chain(repo: Path, main_ref: str | None) -> set[str]:
+    """Commits on the main line (first-parent history of origin/main or main)."""
+    refs = [main_ref] if main_ref else ["origin/main", "main"]
+    for ref in refs:
+        result = subprocess.run(
+            ["git", "rev-list", "--first-parent", ref], cwd=repo, capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            return set(result.stdout.split())
+    return set()
+
+
+def reviewed_base(sha: str, repo: Path = REPO_ROOT, main_ref: str | None = None) -> str | None:
+    """The main-line commit the review diffed against (`origin/main...HEAD`
+    resolves to the branch's fork point, or the last main commit merged into
+    it). A commit that sits on the main line itself has no recoverable base:
+    the branch it was reviewed on has been linearised away."""
+    chain = _first_parent_chain(repo, main_ref)
+    if not chain or sha in chain:
+        return None
+    result = subprocess.run(
+        ["git", "rev-list", "--topo-order", sha], cwd=repo, capture_output=True, text=True
+    )
+    if result.returncode:
+        return None
+    for ancestor in result.stdout.split():
+        if ancestor in chain:
+            return ancestor
+    return None
+
+
+def reviewed_diff(
+    sha: str, repo: Path = REPO_ROOT, main_ref: str | None = None
+) -> tuple[str | None, str | None] | None:
+    """(base, diff) of the range Codex reviewed; (None, None) when the commit
+    is reachable but its reviewed base is not; None when it is unreachable.
+    Round 009's case held only the archive update of its last commit while
+    the review covered the whole PR (Codex review of PR #72, finding 1)."""
     if subprocess.run(
         ["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=repo, capture_output=True
     ).returncode:
         return None
-    result = subprocess.run(
-        ["git", "diff", f"{sha}~1", sha], cwd=repo, capture_output=True, text=True
-    )
-    if result.returncode:
-        result = subprocess.run(
-            ["git", "show", "--format=", sha], cwd=repo, capture_output=True, text=True
-        )
-    return result.stdout if result.returncode == 0 else None
+    base = reviewed_base(sha, repo, main_ref)
+    if base is None:
+        return (None, None)
+    result = subprocess.run(["git", "diff", base, sha], cwd=repo, capture_output=True, text=True)
+    return (base, result.stdout) if result.returncode == 0 else None
 
 
-def build_case(entry: dict, diff: str, keywords: dict[str, list[str]], max_diff_chars: int) -> dict:
+scrub_source = policy_mod.scrub_source_secrets
+
+# Relative paths only: an absolute runner path (`/home/runner/work/...`) in a
+# markdown link is not a file the diff can be checked for, and a match may
+# not start in the middle of a hyphenated directory name.
+_PATH_RE = re.compile(
+    r"(?<![\w/.-])((?:[\w.-]+/)*[\w.-]+\.(?:py|yml|yaml|ts|tsx|js|mjs|json|md|sh|toml|txt))\b"
+)
+
+
+def referenced_files(findings: list[str]) -> list[str]:
+    """Files the findings name, in order of first mention."""
+    seen: list[str] = []
+    for finding in findings:
+        for match in _PATH_RE.findall(finding):
+            path = re.sub(r"^(?:\./)+", "", match)
+            if path not in seen:
+                seen.append(path)
+    return seen
+
+
+def split_patches(diff: str) -> list[tuple[str, str]]:
+    """(path, patch) per file, from the `diff --git` headers."""
+    parts = re.split(r"(?m)^(?=diff --git )", diff)
+    patches = []
+    for part in parts:
+        if not part.strip():
+            continue
+        m = re.match(r"diff --git a/(\S+) b/(\S+)", part)
+        patches.append((m.group(2) if m else "", part))
+    return patches
+
+
+def cap_diff(
+    diff: str, referenced: list[str], max_diff_chars: int
+) -> tuple[str, bool, list[str], str | None]:
+    """Keep the diff under the cap without dropping the files the findings
+    name: those patches go first, whole; the rest fill what is left. Returns
+    (diff, truncated, omitted_files, not_scorable_reason). A truncated case
+    whose findings name no file, or name one that did not fit, cannot be
+    scored (Codex review of PR #72, finding 2)."""
+    if len(diff) <= max_diff_chars:
+        return diff, False, [], None
+    patches = split_patches(diff)
+    present = {path for path, _ in patches}
+    wanted = [f for f in referenced if any(p == f or p.endswith("/" + f) for p in present)]
+
+    def is_wanted(path: str) -> bool:
+        return any(path == f or path.endswith("/" + f) for f in wanted)
+
+    ordered = [pp for pp in patches if is_wanted(pp[0])] + [
+        pp for pp in patches if not is_wanted(pp[0])
+    ]
+    kept: list[str] = []
+    omitted: list[str] = []
+    used = 0
+    for path, patch in ordered:
+        if used + len(patch) <= max_diff_chars:
+            kept.append(patch)
+            used += len(patch)
+        else:
+            omitted.append(path)
+    reason = None
+    if not wanted:
+        reason = "diff truncated and the findings name no file in it"
+    else:
+        missing = [f for f in wanted if any(is_wanted(o) and o.endswith(f) for o in omitted)]
+        if missing:
+            reason = f"diff truncated past the files the findings name: {', '.join(missing)}"
+    return "".join(kept), True, omitted, reason
+
+
+def build_case(
+    entry: dict,
+    base: str | None,
+    diff: str | None,
+    keywords: dict[str, list[str]],
+    max_diff_chars: int,
+) -> dict:
     findings = [f for f in entry.get("findings", []) or [] if isinstance(f, str)]
     expected = [
         {
@@ -67,19 +182,30 @@ def build_case(entry: dict, diff: str, keywords: dict[str, list[str]], max_diff_
         }
         for f in findings
     ]
-    scrubbed = policy_mod.scrub_secrets(diff)
-    truncated = len(scrubbed) > max_diff_chars
+    referenced = referenced_files(findings)
+    if diff is None:
+        capped, truncated, omitted, reason = "", False, [], "no reviewed base is recoverable"
+        diff_chars = 0
+    else:
+        scrubbed = scrub_source(diff)
+        capped, truncated, omitted, reason = cap_diff(scrubbed, referenced, max_diff_chars)
+        diff_chars = len(scrubbed)
     return {
         "id": f"round-{int(entry['round']):03d}",
         "round": entry["round"],
         "source_sha": entry.get("source_sha"),
+        "base_sha": base,
         "target": entry.get("target"),
         "occurred_at": entry.get("occurred_at"),
         "expected": expected,
         "expected_topics": sorted({e["topic"] for e in expected if e["topic"]}),
-        "diff": scrubbed[:max_diff_chars],
+        "referenced_files": referenced,
+        "diff": capped,
         "diff_truncated": truncated,
-        "diff_chars": len(scrubbed),
+        "diff_chars": diff_chars,
+        "omitted_files": omitted,
+        "scorable": reason is None,
+        "not_scorable_reason": reason,
     }
 
 
@@ -93,11 +219,12 @@ def build(
         if not sha or not isinstance(entry.get("round"), int):
             skipped += 1
             continue
-        diff = diff_for(sha)
-        if diff is None:
+        reviewed = diff_for(sha)
+        if reviewed is None:
             skipped += 1
             continue
-        cases.append(build_case(entry, diff, keywords, max_diff_chars))
+        base, diff = reviewed
+        cases.append(build_case(entry, base, diff, keywords, max_diff_chars))
     return cases, skipped
 
 
@@ -123,7 +250,7 @@ def main(argv: list[str]) -> int:
         if line.strip()
     ]
     cases, skipped = build(
-        entries, policy_mod.topic_keywords(policy), commit_diff, args.max_diff_chars
+        entries, policy_mod.topic_keywords(policy), reviewed_diff, args.max_diff_chars
     )
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -135,6 +262,7 @@ def main(argv: list[str]) -> int:
         json.dumps(
             {
                 "cases": len(cases),
+                "scorable": sum(1 for c in cases if c["scorable"]),
                 "skipped": skipped,
                 "policy_version": policy["version"],
                 "out_dir": policy_mod.relative_to_repo(out_dir),

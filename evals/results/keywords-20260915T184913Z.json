@@ -2,17 +2,18 @@
   "grader": "keywords",
   "policy_version": 3,
   "policy_hash": "11e8243663fa",
-  "ran_at": "2026-09-15T16:46:40+00:00",
+  "ran_at": "2026-09-15T18:49:13+00:00",
   "summary": {
-    "cases": 48,
-    "mean_recall": 0.8229,
+    "cases": 41,
+    "errors": 0,
+    "mean_recall": 0.9634,
     "per_topic_recall": {
-      "archive-branch": 0.8846,
-      "auth-lifecycle": 0.2857,
-      "credential-redaction": 0.9167,
+      "archive-branch": 1.0,
+      "auth-lifecycle": 0.8,
+      "credential-redaction": 1.0,
       "env-var-precedence": 1.0,
-      "fork-pr-permissions": 0.0,
-      "shell-semantics": 0.25
+      "fork-pr-permissions": 1.0,
+      "shell-semantics": 0.6667
     }
   },
   "results": [
@@ -26,6 +27,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -36,6 +38,7 @@
       ],
       "found_topics": [],
       "recall": 0.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -50,6 +53,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -66,6 +70,7 @@
         "env-var-precedence"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -76,8 +81,13 @@
         "auth-lifecycle",
         "credential-redaction"
       ],
-      "found_topics": [],
-      "recall": 0.0,
+      "found_topics": [
+        "archive-branch",
+        "auth-lifecycle",
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -90,6 +100,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -104,6 +115,7 @@
         "auth-lifecycle"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -116,6 +128,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -128,6 +141,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -140,6 +154,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -150,19 +165,11 @@
         "auth-lifecycle"
       ],
       "found_topics": [
-        "archive-branch"
-      ],
-      "recall": 0.5,
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-023",
-      "round": 23,
-      "expected_topics": [
+        "archive-branch",
         "auth-lifecycle"
       ],
-      "found_topics": [],
-      "recall": 0.0,
+      "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -175,6 +182,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -187,6 +195,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -199,6 +208,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -211,6 +221,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -223,6 +234,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -231,8 +243,11 @@
       "expected_topics": [
         "fork-pr-permissions"
       ],
-      "found_topics": [],
-      "recall": 0.0,
+      "found_topics": [
+        "fork-pr-permissions"
+      ],
+      "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -245,19 +260,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-038",
-      "round": 38,
-      "expected_topics": [
-        "archive-branch",
-        "credential-redaction"
-      ],
-      "found_topics": [
-        "credential-redaction"
-      ],
-      "recall": 0.5,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -270,6 +273,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -284,17 +288,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-041",
-      "round": 41,
-      "expected_topics": [
-        "auth-lifecycle",
-        "shell-semantics"
-      ],
-      "found_topics": [],
-      "recall": 0.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -307,6 +301,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -320,6 +315,7 @@
         "archive-branch"
       ],
       "recall": 0.5,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -328,32 +324,11 @@
       "expected_topics": [
         "credential-redaction"
       ],
-      "found_topics": [],
-      "recall": 0.0,
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-048",
-      "round": 48,
-      "expected_topics": [
-        "archive-branch"
-      ],
-      "found_topics": [
-        "archive-branch"
-      ],
-      "recall": 1.0,
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-049",
-      "round": 49,
-      "expected_topics": [
-        "credential-redaction"
-      ],
       "found_topics": [
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -366,6 +341,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -380,6 +356,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -392,6 +369,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -404,19 +382,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-054",
-      "round": 54,
-      "expected_topics": [
-        "archive-branch",
-        "credential-redaction"
-      ],
-      "found_topics": [
-        "credential-redaction"
-      ],
-      "recall": 0.5,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -429,6 +395,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -441,6 +408,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -453,18 +421,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-058",
-      "round": 58,
-      "expected_topics": [
-        "credential-redaction"
-      ],
-      "found_topics": [
-        "credential-redaction"
-      ],
-      "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -477,6 +434,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -489,6 +447,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -501,6 +460,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -513,6 +473,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -527,6 +488,7 @@
         "shell-semantics"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -539,6 +501,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -549,9 +512,11 @@
         "shell-semantics"
       ],
       "found_topics": [
-        "archive-branch"
+        "archive-branch",
+        "shell-semantics"
       ],
-      "recall": 0.5,
+      "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -564,6 +529,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -576,6 +542,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -588,6 +555,7 @@
         "credential-redaction"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     },
     {
@@ -600,6 +568,7 @@
         "archive-branch"
       ],
       "recall": 1.0,
+      "status": "completed",
       "method": "policy keywords present in the diff"
     }
   ]

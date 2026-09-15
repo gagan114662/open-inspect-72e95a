@@ -30,6 +30,7 @@ import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CASES = REPO_ROOT / "evals" / "cases"
@@ -50,13 +51,22 @@ def _load_sibling_module(name: str, filename: str):
 policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
 
 
-def load_cases(cases_dir: Path, only: list[str] | None, limit: int | None) -> list[dict]:
-    cases = [json.loads(p.read_text()) for p in sorted(cases_dir.glob("round-*.json"))]
+def load_cases_from(
+    cases: list[dict], only: list[str] | None = None, limit: int | None = None
+) -> list[dict]:
+    """Cases the runner scores: with expected topics, and scorable (built
+    from the reviewed range and still holding the files the findings name;
+    Codex review of PR #72, findings 1 and 2)."""
     if only:
         wanted = set(only)
         cases = [c for c in cases if c["id"] in wanted]
-    cases = [c for c in cases if c["expected_topics"]]
+    cases = [c for c in cases if c["expected_topics"] and c.get("scorable", False)]
     return cases[:limit] if limit else cases
+
+
+def load_cases(cases_dir: Path, only: list[str] | None, limit: int | None) -> list[dict]:
+    cases = [json.loads(p.read_text()) for p in sorted(cases_dir.glob("round-*.json"))]
+    return load_cases_from(cases, only, limit)
 
 
 def grade_keywords(case: dict, keywords: dict[str, list[str]]) -> dict:
@@ -77,20 +87,36 @@ DIFF:
 """
 
 
-def run_codex(prompt: str, codex_bin: str = "codex") -> str:
+class ReviewerRun(NamedTuple):
+    """What the reviewer process produced. A non-zero exit or no output is
+    an execution failure, not a review with nothing to say (Codex review of
+    PR #72, finding 4)."""
+
+    text: str
+    returncode: int
+    stderr: str = ""
+
+
+def run_codex(prompt: str, codex_bin: str = "codex") -> ReviewerRun:
     with tempfile.NamedTemporaryFile("w+", suffix=".md", delete=False) as out:
         path = out.name
-    result = subprocess.run(
-        [codex_bin, "exec", "-s", "read-only", "-o", path, prompt],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        timeout=600,
-        stdin=subprocess.DEVNULL,
-    )
+    try:
+        result = subprocess.run(
+            [codex_bin, "exec", "-s", "read-only", "-o", path, prompt],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            stdin=subprocess.DEVNULL,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        Path(path).unlink(missing_ok=True)
+        return ReviewerRun(text="", returncode=-1, stderr=type(exc).__name__)
     text = Path(path).read_text() if Path(path).exists() else ""
     Path(path).unlink(missing_ok=True)
-    return text or result.stdout
+    return ReviewerRun(
+        text=text or result.stdout, returncode=result.returncode, stderr=result.stderr
+    )
 
 
 def parse_findings(text: str) -> list[dict]:
@@ -106,15 +132,36 @@ def parse_findings(text: str) -> list[dict]:
 
 def grade_codex(case: dict, keywords: dict[str, list[str]], runner=run_codex) -> dict:
     topics = "\n".join(f"- {t}: {', '.join(w)}" for t, w in keywords.items())
-    text = runner(REVIEW_PROMPT.format(topics=topics, diff=case["diff"]))
-    findings = parse_findings(text)
-    named = {str(f.get("topic")) for f in findings}
-    # A finding the reviewer labelled "other" still counts if its summary
-    # classifies under the expected topic by the policy's own rule.
-    classified = {
-        policy_mod.classify_finding(str(f.get("summary", "")), keywords) for f in findings
-    }
-    found = {t for t in case["expected_topics"] if t in named or t in classified}
+    ran = runner(REVIEW_PROMPT.format(topics=topics, diff=case["diff"]))
+    if isinstance(ran, str):
+        ran = ReviewerRun(text=ran, returncode=0)
+    if ran.returncode != 0 or not ran.text.strip():
+        error = (ran.stderr or ran.text or "no output").strip()[-500:]
+        return {
+            "id": case["id"],
+            "round": case["round"],
+            "expected_topics": sorted(case["expected_topics"]),
+            "found_topics": [],
+            "recall": None,
+            "status": "error",
+            "method": "codex exec review",
+            "error": f"reviewer exited {ran.returncode}: {error}",
+        }
+    findings = parse_findings(ran.text)
+    # Each finding is credited to exactly one topic: the one the reviewer
+    # named, or, only when it named none of ours ("other" or an unknown
+    # label), the topic its summary classifies under by the policy's own
+    # rule (Codex review of PR #72, finding 5).
+    credited: set[str] = set()
+    for f in findings:
+        label = str(f.get("topic"))
+        if label in keywords:
+            credited.add(label)
+        else:
+            fallback = policy_mod.classify_finding(str(f.get("summary", "")), keywords)
+            if fallback:
+                credited.add(fallback)
+    found = {t for t in case["expected_topics"] if t in credited}
     return score(
         case, found, detail={"method": "codex exec review", "reviewer_findings": findings[:20]}
     )
@@ -128,18 +175,23 @@ def score(case: dict, found: set[str], detail: dict) -> dict:
         "expected_topics": sorted(expected),
         "found_topics": sorted(found),
         "recall": round(len(found & expected) / len(expected), 4) if expected else None,
+        "status": "completed",
         **detail,
     }
 
 
 def summarize(results: list[dict]) -> dict:
-    scored = [r for r in results if r["recall"] is not None]
+    """Mean recall over completed reviews only; runs the reviewer could not
+    complete are counted in `errors`, never as recall 0."""
+    errors = [r for r in results if r.get("status") == "error"]
+    scored = [r for r in results if r["recall"] is not None and r.get("status") != "error"]
     per_topic: dict[str, list[int]] = {}
     for r in scored:
         for t in r["expected_topics"]:
             per_topic.setdefault(t, []).append(1 if t in r["found_topics"] else 0)
     return {
         "cases": len(scored),
+        "errors": len(errors),
         "mean_recall": round(sum(r["recall"] for r in scored) / len(scored), 4) if scored else None,
         "per_topic_recall": {t: round(sum(v) / len(v), 4) for t, v in sorted(per_topic.items())},
     }
@@ -169,9 +221,12 @@ def main(argv: list[str]) -> int:
         else:
             result = grade_keywords(case, keywords)
         results.append(result)
-        print(
-            f"  {result['id']}: recall {result['recall']}  expected {result['expected_topics']}  found {result['found_topics']}"
-        )
+        if result.get("status") == "error":
+            print(f"  {result['id']}: ERROR {result['error']}")
+        else:
+            print(
+                f"  {result['id']}: recall {result['recall']}  expected {result['expected_topics']}  found {result['found_topics']}"
+            )
     summary = summarize(results)
     report = {
         "grader": args.grader,
