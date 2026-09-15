@@ -245,3 +245,16 @@ def test_drafting_refuses_symlinks_and_never_deletes_its_inputs(tmp_path):
     diff = "+++ b/x\n@@ -1 +1 @@\n+++pipefail\n"
     run = subprocess.run([sys.executable, str(script)], input=diff, capture_output=True, text=True)
     assert "1 line(s)" in run.stdout
+
+
+def test_a_topic_folder_that_is_a_symlink_to_a_sibling_is_refused(tmp_path):
+    policy = policy_mod.builtin_policy()
+    rec = propose.topics_needing_a_tool(_archive(), policy, {"tools": []})[0]
+    out = tmp_path / "proposals"
+    human = out / "human-draft"
+    human.mkdir(parents=True)
+    (human / "README.md").write_text("a human wrote this")
+    (out / rec["topic"]).symlink_to(human)
+    with pytest.raises(PermissionError, match="symlink"):
+        propose.draft(rec["topic"], rec, _archive(), policy, out)
+    assert (human / "README.md").read_text() == "a human wrote this"

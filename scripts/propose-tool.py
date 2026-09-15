@@ -247,6 +247,12 @@ def draft(
         raise ValueError(f"topic name {topic!r} is not a safe filename component")
     keywords = policy_mod.topic_keywords(policy)
     words = [w.lower() for w in keywords[topic]]
+    # Check the UNRESOLVED path first: resolve() follows a link, and a
+    # `shell-semantics -> human-draft` link inside out-dir would pass the
+    # containment check and let drafting overwrite, then cleanup delete, a
+    # human's folder (Codex review of PR #61, round 5).
+    if (out_dir / topic).is_symlink():
+        raise PermissionError(f"{out_dir / topic} is a symlink; refusing to draft into it")
     folder = (out_dir / topic).resolve()
     if folder.parent != out_dir.resolve():
         raise ValueError(f"{topic!r} would write outside {out_dir}")
