@@ -293,21 +293,48 @@ _LOCATION_ROOTS = frozenset(
 )
 
 
-def strip_line_refs(word: str) -> str:
-    """Remove trailing :41, :41-43, :41:12 suffixes. Works on an index into
-    the original string, never copying it, so ':1:1:1…x' costs linear time
-    (Codex review of PR #56, rounds 7 and 8)."""
-    end = len(word)
+def line_ref_end(word: str, start: int, end: int) -> int:
+    """The end index of ``word[start:end]`` once trailing :41, :41-43, :41:12
+    suffixes are removed. Works on indexes into the original string, never
+    copying it, so ':1:1:1…x' costs linear time (Codex review of PR #56,
+    rounds 7 and 8)."""
     while True:
-        colon = word.rfind(":", 0, end)
-        if colon <= 0:
+        colon = word.rfind(":", start, end)
+        if colon <= start:
             break
         tail = word[colon + 1 : end]
         parts = tail.split("-")
         if not tail or len(parts) > 2 or not all(part.isdigit() for part in parts):
             break
         end = colon
-    return word[:end]
+    return end
+
+
+def strip_line_refs(word: str) -> str:
+    """Remove trailing :41, :41-43, :41:12 suffixes."""
+    return word[: line_ref_end(word, 0, len(word))]
+
+
+_LEADING_DECORATIONS = frozenset("()[]<>`'\"*_")
+_TRAILING_DECORATIONS = frozenset("()[]<>`'\",;.:!?*_")
+
+
+_FRAGMENT_CHARS = frozenset("l0123456789-")
+
+
+def _fragment_start(word: str, start: int, end: int) -> int | None:
+    """Index of a trailing #L41, #L41-L43, #41-43 fragment in
+    ``word[start:end]``, or None. Scans backwards over fragment characters
+    only, never the whole window, so a window without a fragment costs
+    O(1) per pass."""
+    i = end
+    while i > start and word[i - 1] in _FRAGMENT_CHARS:
+        i -= 1
+    hash_pos = i - 1
+    if hash_pos <= start or word[hash_pos] != "#":
+        return None
+    tail = word[i:end].lstrip("l").replace("-l", "-").replace("-", "")
+    return hash_pos if tail.isdigit() else None
 
 
 def is_location(word: str) -> bool:
@@ -319,22 +346,26 @@ def is_location(word: str) -> bool:
     #56, rounds 2 and 3)."""
     # Trailing punctuation only, and no leading dot: ".github/actions" is a
     # directory, not "github/actions" (Codex review of PR #56, round 5).
-    w = word.lower()
+    lowered = word.lower()
     # Decorations can nest: `allocator.py`:41, allocator.py#L41-L43, (x.py:3).
-    # Peel punctuation, line suffixes and fragments until nothing changes
-    # (Codex review of PR #56, round 9).
+    # Peel punctuation, line suffixes and fragments until nothing changes,
+    # moving a [start, end) window over the original string instead of
+    # copying it each pass, so nested decorations peel in linear time
+    # (Codex review of PR #56, rounds 9 and 10).
+    start, end = 0, len(lowered)
     while True:
-        before = w
-        w = w.lstrip("()[]<>`'\"*_").rstrip("()[]<>`'\",;.:!?*_")
-        w = strip_line_refs(w)
-        hash_pos = w.rfind("#")
-        if (
-            hash_pos > 0
-            and w[hash_pos + 1 :].lstrip("l").replace("-l", "-").replace("-", "").isdigit()
-        ):
-            w = w[:hash_pos]
-        if w == before:
+        before = (start, end)
+        while start < end and lowered[start] in _LEADING_DECORATIONS:
+            start += 1
+        while end > start and lowered[end - 1] in _TRAILING_DECORATIONS:
+            end -= 1
+        end = line_ref_end(lowered, start, end)
+        fragment = _fragment_start(lowered, start, end)
+        if fragment is not None:
+            end = fragment
+        if (start, end) == before:
             break
+    w = lowered[start:end]
     if not w:
         return False
     if "http://" in w or "https://" in w:

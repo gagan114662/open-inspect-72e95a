@@ -1648,3 +1648,20 @@ def test_decorated_file_references_are_still_locations():
     assert not (
         {"allocator"} & revise.tokenize("see allocator.py#L41 and `allocator.py`:41 for the crash")
     )
+
+
+def test_is_location_peels_nested_decorations_in_linear_time():
+    """Codex review of PR #56, round 10: peeling one decoration per pass and
+    copying the remainder was quadratic; a 480 KB finding took 2.2 s. The
+    peel now moves indexes over the original string, so a 1.2 MB tail of
+    nested decorations finishes well inside a second."""
+    import time
+
+    word = "allocator.py" + ':1`"' * 300_000
+    started = time.perf_counter()
+    assert revise.is_location(word)
+    elapsed = time.perf_counter() - started
+    assert elapsed < 3.0, f"is_location took {elapsed:.2f}s on {len(word)} chars"
+    # Fragment suffixes peel the same way and the answer is unchanged.
+    assert revise.is_location("(`allocator.py#L41-L43`):3")
+    assert not revise.is_location("(`deadlock/livelock`):3")
