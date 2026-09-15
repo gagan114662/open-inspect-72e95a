@@ -193,6 +193,10 @@ _SOURCE_QUOTED_VALUE = (
 # kept and the VALUE redacted; without it the annotation itself was taken
 # for the value (Codex review of PR #72, round 7).
 _SOURCE_TYPE_ANNOTATION = r"\s*:\s*[\w\[\]<>|?.]+(?:\s*[|,]\s*[\w\[\]<>|?.]+)*\s*=\s*"
+# A Python string prefix (`r"…"`, `b'…'`, `rb"…"`, `f"…"`) is part of the
+# literal's syntax, not a bare value: it stays, the literal goes (Codex
+# review of PR #72, round 8).
+_SOURCE_STRING_PREFIX = r"(?:[rRbBuUfF]{1,2}(?=[\"']))?"
 _SOURCE_ASSIGNMENT_SHAPE = re.compile(
     # `self.password`, `config.api_key`, `settings['db'].secret`: an attribute
     # or item prefix before the credential name is still that credential; so
@@ -201,8 +205,26 @@ _SOURCE_ASSIGNMENT_SHAPE = re.compile(
     + _CREDENTIAL_WORD
     + r"[a-z0-9_]*[\"']?\]?(?:"
     + _SOURCE_TYPE_ANNOTATION
-    + r"|\s*[=:]\s*))"
-    r"(" + _SOURCE_QUOTED_VALUE + r"|" + _SOURCE_CREDENTIAL_VALUE + r")"
+    + r"|\s*[=:]\s*)"
+    + _SOURCE_STRING_PREFIX
+    + r")"
+    # A lone `|` or `>` is a YAML block indicator, handled by the block
+    # shape above, not a value.
+    r"((?![|>][-+]?[ \t]*(?:\n|$))(?:"
+    + _SOURCE_QUOTED_VALUE
+    + r"|"
+    + _SOURCE_CREDENTIAL_VALUE
+    + r"))"
+)
+# A YAML block scalar under a credential key (`password: |` or `>`): every
+# following line indented deeper than the key is the value. Runs before the
+# assignment shape, which would otherwise take the `|` for the value and
+# leave the block untouched (Codex review of PR #72, round 8).
+_SOURCE_YAML_BLOCK_SHAPE = re.compile(
+    r"(?im)^(?P<keep>(?P<indent>[ \t]*)[\"']?[a-z0-9_-]*"
+    + _CREDENTIAL_WORD
+    + r"[a-z0-9_-]*[\"']?\s*:\s*[|>][-+]?[ \t]*\n)"
+    r"(?:(?P=indent)[ \t]+[^\n]*\n)*(?P=indent)[ \t]+[^\n]*"
 )
 # Short credential flags (`-a samplepass`, `-p VALUE`, `-pVALUE`, as in
 # redis-cli / mysql) kept their redaction in the prose scrubber; the source
@@ -216,6 +238,7 @@ _SOURCE_FLAG_SHAPE = re.compile(
     r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|(?!\$)(?!-)[^\s\"']+)"
 )
 _SOURCE_SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
+    _SOURCE_YAML_BLOCK_SHAPE,
     *(
         _SOURCE_ASSIGNMENT_SHAPE
         if p is _ASSIGNMENT_SHAPE
@@ -454,6 +477,10 @@ PROTECTED_OUTPUT_FILES: tuple[str, ...] = (
 EVAL_ANSWER_PATHS: tuple[str, ...] = (
     "evals",
     "docs/self-improvement-archive.jsonl",
+    # The policy and its history quote archived findings (`mined_from`), so
+    # they are answers too (Codex review of PR #72, round 8).
+    "docs/improvement-policy.json",
+    "docs/improvement-policy-history.jsonl",
     "docs/rsi",
     "skills",
     "proposals",

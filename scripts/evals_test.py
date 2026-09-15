@@ -717,3 +717,62 @@ def test_the_default_runner_receives_the_checkout_as_its_working_directory(tmp_p
     assert result["recall"] == 1.0
     cwd = Path((tmp_path / "cwd-record.txt").read_text())
     assert cwd.resolve() != repo.resolve() and not cwd.exists()
+
+
+def test_source_scrubbing_handles_string_prefixes_and_yaml_block_scalars():
+    """Codex review of PR #72, round 8, finding 1: a Python string prefix was
+    taken for a bare value, so `password = r"samplepass"` became
+    `password = [REDACTED]"samplepass"`; a YAML block scalar under
+    `password: |` kept every line of its contents."""
+    src = "\n".join(
+        [
+            'password = r"samplepass"',
+            "api_key = b'bytespass'",
+            'token = f"{prefix}fstringpass"',
+            'secret = rb"rawbytespass"',
+            "password: |",
+            "  firstline-secret",
+            "  secondline-secret",
+            "description: |",
+            "  keep this text",
+            "  and this",
+            "next_key: value",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("samplepass", "bytespass", "fstringpass", "rawbytespass"):
+        assert leaked not in out, leaked
+    assert "password = r[REDACTED]" in out, "the prefix stays, the literal goes"
+    assert "api_key = b[REDACTED]" in out
+    assert "firstline-secret" not in out and "secondline-secret" not in out
+    assert "password: |\n[REDACTED]\ndescription: |" in out, out
+    assert "  keep this text\n  and this\nnext_key: value" in out, "non-credential blocks survive"
+
+
+def test_policy_files_are_answer_paths_for_cases_and_checkouts(tmp_path, monkeypatch):
+    """Codex review of PR #72, round 8, finding 2: docs/improvement-policy.json
+    and docs/improvement-policy-history.jsonl carry finding text (mined_from),
+    so a policy-changing diff and a historical checkout still handed answers
+    to the reviewer."""
+    for path in ("docs/improvement-policy.json", "docs/improvement-policy-history.jsonl"):
+        assert policy_mod.is_answer_path(path), path
+    diff = _patch("scripts/x.py", "token = 'abc'") + _patch(
+        "docs/improvement-policy.json", '{"mined_from": [{"finding": "[P1] leaked token"}]}'
+    )
+    entry = {"round": 7, "source_sha": "s7", "findings": ["[P1] leaked token in scripts/x.py"]}
+    case = build.build_case(entry, "base", diff, KW, 60_000)
+    assert "improvement-policy" not in case["diff"]
+    assert case["answer_paths_removed"] == ["docs/improvement-policy.json"]
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "improvement-policy.json").write_text('{"mined_from": []}')
+    (repo / "docs" / "improvement-policy-history.jsonl").write_text('{"policy": {}}\n')
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "policy on main")
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    fake = _fake_codex(tmp_path, '{"findings": []}')
+    result = run.grade_codex(
+        dict(case, source_sha=head), KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd)
+    )
+    assert result["status"] != "error", result
+    assert "improvement-policy" not in result["reviewer_checkout"]
