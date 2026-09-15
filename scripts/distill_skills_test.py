@@ -98,7 +98,7 @@ def test_topic_names_cannot_escape_the_output_directory(tmp_path, monkeypatch):
     policy_path.write_text(json.dumps(policy))
     archive = tmp_path / "archive.jsonl"
     archive.write_text("")
-    monkeypatch.setattr(policy_mod, "validate_policy", lambda p: None)  # bypass to reach the guard
+    monkeypatch.setattr(policy_mod, "validate_policy", lambda _p: None)  # bypass to reach the guard
     out = tmp_path / "skills"
     with pytest.raises(ValueError, match="safe filename"):
         distill.main(["d", str(archive), "--policy", str(policy_path), "--out-dir", str(out)])
