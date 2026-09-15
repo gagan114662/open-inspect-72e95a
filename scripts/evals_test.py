@@ -508,7 +508,9 @@ def test_the_codex_grader_passes_the_real_clis_git_repo_check(tmp_path, monkeypa
     }
     for require in ("git", "flag", "either"):
         fake = _fake_codex(tmp_path, '{"findings": []}', require=require)
-        result = run.grade_codex(case, KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd))
+        result = run.grade_codex(
+            case, KW, lambda p, cwd=None, fake=fake: run.run_codex(p, str(fake), cwd)
+        )
         assert result["status"] != "error", (require, result)
     assert "NO GIT" not in (tmp_path / "git-log.txt").read_text(), "git log works in the checkout"
     assert (tmp_path / "git-log.txt").read_text().strip(), "the checkout has a commit"
