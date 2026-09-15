@@ -218,3 +218,18 @@ def test_scrub_secrets_covers_curl_user_password_arguments():
     )
     assert "FAKE_CURL_PW" not in out and "FAKE TWO" not in out
     assert "admin:" in out and "HTTP 403" in out
+
+
+def test_scrub_secrets_covers_attached_curl_users_and_long_opaque_tokens():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub(
+        "curl -uadmin:FAKE_ATTACHED_PW https://api; curl --user 'bob:FAKE TWO WORDS' https://y"
+    )
+    assert "FAKE_ATTACHED_PW" not in out and "TWO WORDS" not in out
+    out = scrub(
+        "request id 9f3kd02JQ8sd7fh2Kd93Ls0Qz rejected; see docs/plans/recursive-meta-improvement.md"
+    )
+    assert (
+        "9f3kd02JQ8sd7fh2Kd93Ls0Qz" not in out and "docs/plans/recursive-meta-improvement.md" in out
+    )
+    assert scrub("the session expired, log in again") == "the session expired, log in again"

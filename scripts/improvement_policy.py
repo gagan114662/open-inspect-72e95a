@@ -111,16 +111,22 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
         r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-p)(?:\s+|=)?)"
         r"(\"[^\"]*\"|'[^']*'|[^\s\"']{4,})"
     ),
-    # curl-style user:password arguments: -u user:PASS, --user user:PASS (round 43).
-    re.compile(
-        r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)[\"']?[^\s:\"']+:)[^\s\"']+"
-    ),
+    # curl-style user:password arguments, attached or not, quoted or not:
+    # -u user:PASS, -uuser:PASS, --user 'user:PASS WITH SPACES' (rounds 43-44).
+    re.compile(r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)?)(\"[^\"]*\"|'[^']*')"),
+    re.compile(r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)?[^\s:\"']+:)[^\s\"']+"),
     # Quoted JSON/YAML fields: {"password": "..."} (round 39).
     re.compile(
         r"(?i)(\"[a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\"\s*:\s*\")[^\"]{4,}"
     ),
     re.compile(r"\b(sk|ghp|gho|ghu|ghs|ghr|vcp|xox[abp]|npm_|pypi-|glpat-|AKIA)[A-Za-z0-9_-]{8,}"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),  # JWT
+    # Shape-agnostic last layer: any long token mixing letters and digits
+    # (API keys, encoded blobs, hashes). Topic keywords are words, so
+    # losing such tokens costs the evidence nothing (round 44).
+    re.compile(
+        r"(?<![\w/.-])(?=[A-Za-z0-9_+/=-]*\d)(?=[A-Za-z0-9_+/=-]*[A-Za-z])[A-Za-z0-9_+/=-]{20,}(?![\w/.-])"
+    ),
 )
 
 
