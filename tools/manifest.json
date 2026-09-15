@@ -54,7 +54,7 @@
       "script": "scripts/distill-skills.py",
       "purpose": "Turn resolved archive rounds into per-topic playbooks the next fix can load.",
       "inputs": ["archive path", "--policy", "--out-dir"],
-      "writes": ["agents/self-improver/skills/*.md"]
+      "writes": ["skills/*.md"]
     },
     {
       "name": "improvement_policy",

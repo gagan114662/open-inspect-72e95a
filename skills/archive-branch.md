@@ -37,8 +37,8 @@ Load this before changing anything that touches: `archive`, `branch`, `commit`, 
 
 ## Recurrence
 
-Recurred in 22 round(s): 8, 9, 10, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 29, 38, 39, 40,
-43, 48, 54. Mechanism-fix threshold: 3.
+Recurred in 27 round(s): 8, 9, 10, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 38, 39,
+40, 43, 48, 54, 64, 65, 66, 67. Mechanism-fix threshold: 3.
 
 ## How it was fixed
 

@@ -107,7 +107,7 @@ def test_topic_names_cannot_escape_the_output_directory(tmp_path, monkeypatch):
 
 def test_tool_registry_matches_the_scripts_directory():
     manifest = json.loads(
-        (REPO / "agents" / "self-improver" / "tools" / "manifest.json").read_text()
+        (REPO / "tools" / "manifest.json").read_text()
     )
     registered = {t["script"] for t in manifest["tools"]}
     for script in registered:
@@ -130,9 +130,9 @@ def test_tool_registry_matches_the_scripts_directory():
         }
     }
     assert loop_scripts <= registered, f"unregistered loop scripts: {loop_scripts - registered}"
-    agent = json.loads((REPO / "agents" / "self-improver" / "agent.json").read_text())
+    agent = json.loads((REPO / "agent.json").read_text())
     for rel in agent["schedules"] + agent["channels"]:
-        assert (REPO / "agents" / "self-improver" / rel).exists(), rel
+        assert (REPO / rel).exists(), rel
     # agent.json points at the policy and never copies its version or topics,
     # so a policy revision cannot leave the configuration stale (Codex review
     # of PR #45, finding 3).

@@ -171,6 +171,5 @@ CI runs lint, typecheck, and tests for all TypeScript and Python packages on eve
 
 ## The self-improvement agent
 
-Before fixing a Codex finding, load the matching playbook in `agents/self-improver/skills/` (one per
-policy topic, generated from the review archive). The agent's contract is
-`agents/self-improver/instructions.md`.
+Before fixing a Codex finding, load the matching playbook in `skills/` (one per policy topic,
+generated from the review archive). The agent's contract is `instructions.md`.
