@@ -351,6 +351,11 @@ PROTECTED_OUTPUT_PREFIXES: tuple[str, ...] = (
     "terraform/",
 )
 PROTECTED_OUTPUT_FILES: tuple[str, ...] = (
+    # The agent's root-level entry point and contract are code, not outputs
+    # (Codex review of PR #68, round 8).
+    "run.py",
+    "agent.json",
+    "instructions.md",
     "docs/self-improvement-archive.jsonl",
     "docs/improvement-policy.json",
     "docs/improvement-policy-history.jsonl",

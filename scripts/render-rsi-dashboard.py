@@ -43,6 +43,7 @@ def _load_sibling_module(name: str, filename: str):
 
 policy_mod = _load_sibling_module("improvement_policy", "improvement_policy.py")
 measure_mod = _load_sibling_module("measure_policy_validity", "measure-policy-validity.py")
+replay_mod = _load_sibling_module("replay_policy_history", "replay-policy-history.py")
 revise_mod = _load_sibling_module("revise_improvement_policy", "revise-improvement-policy.py")
 
 NAVY = "#0b2a5b"
@@ -182,6 +183,80 @@ def marker_epoch_index(epochs: list[dict], created_at: str | None) -> int:
         if ts is not None and ts <= created_ms:
             index = i
     return index
+
+
+def replay_chart(rows: list[dict]) -> str:
+    """Out-of-sample coverage (orange) and validity (navy) per policy
+    version: each version judged only on rounds archived after it existed.
+    A rising orange line is the improver improving on evidence it never saw
+    when it was revised."""
+    if not rows:
+        return "<p>No policy versions to replay.</p>"
+    w, h, pad_l, pad_r, pad_t, pad_b = 760, 260, 48, 48, 20, 40
+    n = len(rows)
+    xs = [pad_l + (w - pad_l - pad_r) * ((i + 0.5) / n) for i in range(n)]
+
+    def y(v: float) -> float:
+        return pad_t + (h - pad_t - pad_b) * (1 - v)
+
+    def y_validity(v: float) -> float:
+        v = max(-1.0, min(1.0, v))
+        return pad_t + (h - pad_t - pad_b) * (1 - (v + 1) / 2)
+
+    parts = [
+        f'<svg viewBox="0 0 {w} {h}" width="100%" role="img" aria-label="Out-of-sample replay per policy version">'
+    ]
+    for tick in (0, 0.25, 0.5, 0.75, 1.0):
+        parts.append(
+            f'<line x1="{pad_l}" y1="{y(tick):.1f}" x2="{w - pad_r}" y2="{y(tick):.1f}" stroke="#e3e7ee"/>'
+        )
+        parts.append(
+            f'<text x="{pad_l - 6}" y="{y(tick) + 4:.1f}" font-size="11" text-anchor="end" fill="{GREY}">{tick:.2f}</text>'
+        )
+    for tick in (-1.0, 0.0, 1.0):
+        parts.append(
+            f'<text x="{w - pad_r + 4}" y="{y_validity(tick) + 4:.1f}" font-size="11" text-anchor="start" fill="{NAVY}">{tick:+.0f}</text>'
+        )
+    # The line is drawn on the COMMON held-out set only, so versions are
+    # compared on the same rounds (Codex review of PR #70). Right after a
+    # revision that set is empty; the comparison is then shown as
+    # unavailable, never substituted with each version's own later rounds,
+    # which are different data sets (Codex review of PR #70, round 3).
+    key = "coverage_common"
+    has_common = any(r.get(key) is not None for r in rows)
+    cov = [(xs[i], y(r[key])) for i, r in enumerate(rows) if r.get(key) is not None]
+    if not has_common:
+        parts.append(
+            f'<text x="{(pad_l + w - pad_r) / 2:.1f}" y="{y(0.5) + 4:.1f}" font-size="12" text-anchor="middle" fill="{GREY}">no common held-out rounds yet: the newest version has no later rounds to be compared on</text>'
+        )
+    if len(cov) > 1:
+        parts.append(
+            '<path d="'
+            + " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{yy:.1f}" for i, (x, yy) in enumerate(cov))
+            + f'" fill="none" stroke="{ORANGE}" stroke-width="3"/>'
+        )
+    for i, r in enumerate(rows):
+        label = f"v{r['version']}"  # esc() below
+        parts.append(
+            f'<text x="{xs[i]:.1f}" y="{h - pad_b + 16}" font-size="11" text-anchor="middle" fill="{GREY}">{esc(label)} · {r["rounds_oos"]} later round(s)</text>'
+        )
+        if r.get(key) is not None:
+            parts.append(f'<circle cx="{xs[i]:.1f}" cy="{y(r[key]):.1f}" r="4.5" fill="{ORANGE}"/>')
+            parts.append(
+                f'<text x="{xs[i]:.1f}" y="{y(r[key]) - 8:.1f}" font-size="11" text-anchor="middle" fill="{ORANGE}">{r[key]:.2f}</text>'
+            )
+        if r.get("validity_oos") is not None:
+            parts.append(
+                f'<rect x="{xs[i] - 4:.1f}" y="{y_validity(r["validity_oos"]) - 4:.1f}" width="8" height="8" fill="{NAVY}"/>'
+            )
+            parts.append(
+                f'<text x="{xs[i] + 10:.1f}" y="{y_validity(r["validity_oos"]) + 4:.1f}" font-size="11" fill="{NAVY}">{r["validity_oos"]:.2f}</text>'
+            )
+    parts.append(
+        f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">orange: coverage on the common held-out rounds (left axis) · navy: validity on each version&#39;s own later rounds (right axis, -1..+1)</text>'
+    )
+    parts.append("</svg>")
+    return "".join(parts)
 
 
 def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage: float) -> str:
@@ -355,6 +430,20 @@ def render(
     kw_now = policy_mod.topic_keywords(policy)
     cur = after["current"]
     decision_now = revise_mod.decide(entries, policy, history, after, policy_mod.utc_now_iso())
+    replay_result = replay_mod.replay(entries, policy, history, evidence)
+    replay_rows = replay_result["versions"]
+    undated_note = (
+        f" {replay_result['undated_excluded']} undated finding(s) are excluded from every held-out set: without their own observation time they may have informed a revision."
+        if replay_result.get("undated_excluded")
+        else ""
+    )
+    replay_table = "".join(
+        f"<tr><td>v{esc(str(r['version']))}</td><td>{esc(str(r.get('origin')))}</td><td>{esc(str(r.get('created_at') or 'predates the archive'))}</td>"
+        f"<td>{fmt(r['rounds_oos'])}</td><td>{fmt(r.get('coverage_oos'))}</td><td>{fmt(r.get('validity_oos'))}</td>"
+        f"<td>{fmt(r.get('coverage_common'))}</td><td>{fmt(r.get('validity_common'))}</td>"
+        f"<td>{fmt(r.get('coverage_all'))}</td><td>{fmt(r.get('validity_all'))}</td></tr>"
+        for r in replay_rows
+    )
 
     def chip(text: str, color: str) -> str:
         return f'<span class="chip" style="background:{color}">{esc(text)}</span>'
@@ -484,6 +573,16 @@ def render(
   Fixed acceptance rule: revise when coverage &lt; {revise_mod.MIN_COVERAGE} or validity &lt; {revise_mod.MIN_VALIDITY}; roll back when a revision's coverage falls below its parent's after {revise_mod.MIN_ROUNDS_TO_JUDGE} further rounds.</p>
   {echo_note}
   <p><b>Decision if run now:</b> {esc(next_action)} — {esc(decision_now.get("reason", ""))}</p>
+</section>
+
+<section>
+  <h2>Did the improver improve? <small>— out-of-sample replay: each version judged only on rounds archived after it existed</small></h2>
+  {replay_chart(replay_rows)}
+  <div class="scroll"><table>
+    <tr><th>Version</th><th>Origin</th><th>Created</th><th>Later rounds</th><th>Coverage (own later rounds)</th><th>Validity (own later rounds)</th><th>Coverage (common held-out)</th><th>Validity (common held-out)</th><th>Coverage (all)</th><th>Validity (all)</th></tr>
+    {replay_table}
+  </table></div>
+  <p>The honest test of recursive self-improvement: a policy revised on the findings it had seen must predict the findings it had <em>not</em> seen. "Own later rounds" judges each version on the rounds after it existed; "common held-out" judges every version on the same rounds, the ones after the newest version existed, which is the only fair comparison between versions. Coverage rising on the common set is the improver improving; validity falling is the field anchor saying a mined topic was review-only noise, which is what the weight discount is for. A version with too few later rounds shows n/a.{undated_note}</p>
 </section>
 
 <section>

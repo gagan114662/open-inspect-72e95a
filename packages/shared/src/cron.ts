@@ -6,6 +6,49 @@
  */
 
 import { CronExpressionParser } from "cron-parser";
+import { Data, Effect } from "effect";
+
+type CronParseOptions = NonNullable<Parameters<typeof CronExpressionParser.parse>[1]>;
+
+/** A cron expression `cron-parser` refused, with its reason. */
+export class InvalidCronExpression extends Data.TaggedError("InvalidCronExpression")<{
+  readonly expression: string;
+  readonly reason: string;
+}> {}
+
+/** A time-zone name `Intl` does not know. */
+export class InvalidTimeZone extends Data.TaggedError("InvalidTimeZone")<{
+  readonly timeZone: string;
+}> {}
+
+function reasonOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+/**
+ * Parse a cron expression as an Effect. Fails with `InvalidCronExpression`
+ * instead of throwing; the sync wrappers below are built on it.
+ */
+export function parseCron(
+  expression: string,
+  options?: CronParseOptions
+): Effect.Effect<ReturnType<typeof CronExpressionParser.parse>, InvalidCronExpression> {
+  return Effect.try({
+    try: () => CronExpressionParser.parse(expression, options),
+    catch: (cause) => new InvalidCronExpression({ expression, reason: reasonOf(cause) }),
+  });
+}
+
+/** Validate an IANA time-zone name as an Effect; succeeds with the name. */
+export function validateTimeZone(timeZone: string): Effect.Effect<string, InvalidTimeZone> {
+  return Effect.try({
+    try: () => {
+      Intl.DateTimeFormat(undefined, { timeZone });
+      return timeZone;
+    },
+    catch: () => new InvalidTimeZone({ timeZone }),
+  });
+}
 
 /** Fastest schedule cadence supported by automation persistence and execution. */
 export const MIN_AUTOMATION_CRON_INTERVAL_MINUTES = 15;
@@ -30,12 +73,12 @@ export function isValidCron(expression: string): boolean {
   const parts = expression.trim().split(/\s+/);
   if (parts.length !== 5) return false;
 
-  try {
-    CronExpressionParser.parse(expression);
-    return true;
-  } catch {
-    return false;
-  }
+  return Effect.runSync(
+    parseCron(expression).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false)
+    )
+  );
 }
 
 /**
@@ -50,18 +93,19 @@ export function isValidCron(expression: string): boolean {
  * Used to enforce the 15-minute minimum interval.
  */
 export function cronIntervalMinutes(expression: string): number | null {
-  try {
+  const sampled = Effect.gen(function* () {
     // Fixed reference point (a Wednesday) for deterministic interval sampling.
-    const cron = CronExpressionParser.parse(expression, {
+    const cron = yield* parseCron(expression, {
       currentDate: new Date("2025-01-01T00:00:00Z"),
       tz: "UTC",
     });
 
-    // Sample the first 5 intervals
-    const times: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      times.push(cron.next().toDate().getTime());
-    }
+    // Sample the first 5 intervals. `next()` can throw past the parser's
+    // horizon, so it stays inside the typed boundary too.
+    const times = yield* Effect.try({
+      try: () => Array.from({ length: 6 }, () => cron.next().toDate().getTime()),
+      catch: (cause) => new InvalidCronExpression({ expression, reason: reasonOf(cause) }),
+    });
 
     const intervals = new Set<number>();
     for (let i = 1; i < times.length; i++) {
@@ -71,9 +115,8 @@ export function cronIntervalMinutes(expression: string): number | null {
     // Return the minimum observed interval (catches multi-value expressions
     // like "0,1 * * * *" whose shortest gap is 1 minute).
     return Math.min(...intervals);
-  } catch {
-    return null;
-  }
+  });
+  return Effect.runSync(sampled.pipe(Effect.orElseSucceed((): number | null => null)));
 }
 
 /**
@@ -90,12 +133,12 @@ export function validateAutomationCron(expression: string): string | null {
 
 /** Validate an IANA time-zone name without throwing. */
 export function isValidTimeZone(timeZone: string): boolean {
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone });
-    return true;
-  } catch {
-    return false;
-  }
+  return Effect.runSync(
+    validateTimeZone(timeZone).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false)
+    )
+  );
 }
 
 // ─── Preset descriptions ────────────────────────────────────────────────────
