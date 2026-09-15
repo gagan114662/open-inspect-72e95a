@@ -761,3 +761,42 @@ def test_stdout_carries_no_excerpts_or_commands_when_out_json_is_given(
     stdout = capsys.readouterr().out
     assert "excerpt" not in stdout and "3 failed" not in stdout and "---" not in stdout
     assert "excerpt" in out.read_text()
+
+
+def test_namespace_dedicated_to_the_repository_keeps_sessions_without_metadata(
+    tmp_path, monkeypatch, capsys
+):
+    def run(_bin, args):
+        if args[0] == "list":
+            return {"traces": [{"id": "r1", "agentId": "claude-code", "timestamp": 1}]}
+        if args[0] == "sync":
+            return {"traceId": args[1]}
+        if args[0] == "show":
+            return {"trace": {"id": "r1"}, "events": _events()}  # no folder, no git remote
+        raise AssertionError(args)
+
+    monkeypatch.setattr(mine, "run_traces_json", run)
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(policy_mod.builtin_policy()))
+    evidence = tmp_path / "e.json"
+    base = [
+        "m",
+        "--namespace",
+        "gagan114",
+        "--agents",
+        "claude-code",
+        "--policy",
+        str(policy),
+        "--history",
+        str(tmp_path / "h"),
+        "--save-evidence",
+        str(evidence),
+    ]
+    # Scoped by git remote: nothing to match on, so the session is excluded
+    # and the log says why instead of reporting an empty field.
+    assert mine.main([*base, "--match", "github.com/acme/service"]) == 0
+    assert json.loads(evidence.read_text())["sessions"] == []
+    assert "carried no folder or git remote" in capsys.readouterr().out
+    # A namespace dedicated to the repository: every session belongs to it.
+    assert mine.main([*base, "--namespace-is-repository"]) == 0
+    assert json.loads(evidence.read_text())["sessions"] == ["r1"]
