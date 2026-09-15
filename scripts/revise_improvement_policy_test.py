@@ -1371,3 +1371,51 @@ def test_a_recollected_but_unchanged_field_does_not_lift_the_rejection():
     legacy = {k: v for k, v in entry.items() if k != "evidence_digest"}
     assert revise.rejected_configuration(candidate, [legacy], measurement) is legacy
     assert revise.rejected_configuration(candidate, [legacy], later) is None
+
+
+def test_mining_from_field_failures_never_publishes_a_secret_or_the_redaction_marker():
+    # End to end: five failures carrying the same secret in three shapes go
+    # through the miner's records, field_blind_spots and mine_topics; the
+    # secret must not appear in mined_from or keywords, and "redacted"
+    # itself must not become a keyword (Codex review of PR #10, round 45).
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "mine_for_e2e", Path(__file__).parent / "mine-trace-failures.py"
+    )
+    mine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mine)
+    shapes = [
+        "psycopg2.OperationalError: config {'password': 'FAKE_DATABASE_PASSWORD'} refused",
+        "psycopg2.OperationalError: DATABASE_PASSWORD=FAKE_DATABASE_PASSWORD refused",
+        "psycopg2.OperationalError: postgres://app:FAKE_DATABASE_PASSWORD@db refused",
+        "psycopg2.OperationalError: --password FAKE_DATABASE_PASSWORD refused",
+        'psycopg2.OperationalError: {"password": "FAKE_DATABASE_PASSWORD"} refused',
+    ]
+    events = []
+    for i, shape in enumerate(shapes):
+        events.append(
+            {"type": "tool_call", "callId": f"c{i}", "args": {"command": f"python3 job{i}.py"}}
+        )
+        events.append(
+            {
+                "type": "tool_result",
+                "callId": f"c{i}",
+                "toolName": "Bash",
+                "status": "error",
+                "timestamp": i,
+                "eventNumber": 2 * i + 1,
+                "output": "Exit code 1\n" + shape,
+            }
+        )
+    mine.run_traces_json = lambda _b, a: {"events": events} if a[0] == "show" else {}
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    _, summary = mine.report(failures, {})
+    # An empty taxonomy: every failure is a blind spot and all five feed mining.
+    spots = revise.field_blind_spots({"blind_spots": summary["blind_spots"]}, {})
+    assert len(spots) == 5
+    mined = revise.mine_topics(spots, {})
+    assert mined, "five failures sharing 'psycopg2' and 'refused' must mine a topic"
+    blob = json.dumps(mined) + json.dumps(summary)
+    assert "FAKE_DATABASE_PASSWORD" not in blob
+    assert all("redacted" not in kw for m in mined for kw in m["keywords"])

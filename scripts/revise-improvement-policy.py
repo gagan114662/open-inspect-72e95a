@@ -249,6 +249,7 @@ def tokenize(text: str) -> set[str]:
         for tok in _TOKEN_RE.findall(text.lower())
         if len(tok) >= MIN_TOKEN_LENGTH
         and tok not in STOPWORDS
+        and tok != "redacted"  # the scrubber's marker is never a topic
         and not tok.startswith("http")
         and not tok.endswith("ly")  # adverbs name manner, never a class of problem
     }

@@ -233,3 +233,9 @@ def test_scrub_secrets_covers_attached_curl_users_and_long_opaque_tokens():
         "9f3kd02JQ8sd7fh2Kd93Ls0Qz" not in out and "docs/plans/recursive-meta-improvement.md" in out
     )
     assert scrub("the session expired, log in again") == "the session expired, log in again"
+
+
+def test_scrub_secrets_covers_single_quoted_dict_fields():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub("config {'password': 'FAKE_DATABASE_PASSWORD', 'host': 'db'} rejected")
+    assert "FAKE_DATABASE_PASSWORD" not in out and "'host': 'db'" in out
