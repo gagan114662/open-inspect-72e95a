@@ -217,11 +217,10 @@ def replay_chart(rows: list[dict]) -> str:
         parts.append(
             f'<text x="{w - pad_r + 4}" y="{y_validity(tick) + 4:.1f}" font-size="11" text-anchor="start" fill="{NAVY}">{tick:+.0f}</text>'
         )
-    cov = [
-        (xs[i], y(r["coverage_oos"]))
-        for i, r in enumerate(rows)
-        if r.get("coverage_oos") is not None
-    ]
+    # The line is drawn on the COMMON held-out set when one exists, so
+    # versions are compared on the same rounds (Codex review of PR #70).
+    key = "coverage_common" if any(r.get("coverage_common") is not None for r in rows) else "coverage_oos"
+    cov = [(xs[i], y(r[key])) for i, r in enumerate(rows) if r.get(key) is not None]
     if len(cov) > 1:
         parts.append(
             '<path d="'
@@ -233,12 +232,12 @@ def replay_chart(rows: list[dict]) -> str:
         parts.append(
             f'<text x="{xs[i]:.1f}" y="{h - pad_b + 16}" font-size="11" text-anchor="middle" fill="{GREY}">{esc(label)} · {r["rounds_oos"]} later round(s)</text>'
         )
-        if r.get("coverage_oos") is not None:
+        if r.get(key) is not None:
             parts.append(
-                f'<circle cx="{xs[i]:.1f}" cy="{y(r["coverage_oos"]):.1f}" r="4.5" fill="{ORANGE}"/>'
+                f'<circle cx="{xs[i]:.1f}" cy="{y(r[key]):.1f}" r="4.5" fill="{ORANGE}"/>'
             )
             parts.append(
-                f'<text x="{xs[i]:.1f}" y="{y(r["coverage_oos"]) - 8:.1f}" font-size="11" text-anchor="middle" fill="{ORANGE}">{r["coverage_oos"]:.2f}</text>'
+                f'<text x="{xs[i]:.1f}" y="{y(r[key]) - 8:.1f}" font-size="11" text-anchor="middle" fill="{ORANGE}">{r[key]:.2f}</text>'
             )
         if r.get("validity_oos") is not None:
             parts.append(
@@ -248,7 +247,7 @@ def replay_chart(rows: list[dict]) -> str:
                 f'<text x="{xs[i] + 10:.1f}" y="{y_validity(r["validity_oos"]) + 4:.1f}" font-size="11" fill="{NAVY}">{r["validity_oos"]:.2f}</text>'
             )
     parts.append(
-        f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">orange: out-of-sample coverage (left axis) · navy: out-of-sample validity (right axis, -1..+1) · each version judged only on rounds archived after it existed</text>'
+        f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">orange: coverage on the common held-out rounds (left axis) · navy: validity on each version's own later rounds (right axis, -1..+1)</text>'
     )
     parts.append("</svg>")
     return "".join(parts)
