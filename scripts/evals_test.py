@@ -359,3 +359,167 @@ def test_source_scrubbing_keeps_redacting_short_credential_flags():
     assert "-u root -p[REDACTED] mydb" in out
     assert "ls -la /tmp" in out, "an -l/-a combination is not a credential flag"
     assert "kubectl get pods -A" in out, "flags followed by nothing are untouched"
+
+
+def test_source_scrubbing_covers_attribute_assignments_and_numeric_credentials():
+    """Codex review of PR #72, round 5, finding 1: `self.password = 'demo123'`,
+    `config.api_key = 'samplepass'` and `redis-cli -a 123456 PING` survived
+    (attribute boundary, numeric-value exemption). A credential-named
+    assignment or flag is redacted whatever precedes the name and even when
+    the value is a number; ordinary numeric settings and expressions stay."""
+    src = "\n".join(
+        [
+            "self.password = 'demo123'",
+            "config.api_key = 'samplepass'",
+            "settings['db'].secret = \"s3\"",
+            "password = 123456",
+            "redis-cli -a 123456 PING",
+            "mysql -p123456 db",
+            "deploy --token 987654",
+            "timeout = 30",
+            "port = 8080",
+            "retries: 3",
+            "token_count = len(items)",
+            "auth = request.headers.get('Authorization')",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("demo123", "samplepass", '"s3"', "123456", "987654"):
+        assert leaked not in out, leaked
+    assert "self.password = [REDACTED]" in out
+    assert "config.api_key = [REDACTED]" in out
+    assert "redis-cli -a [REDACTED] PING" in out
+    for kept in (
+        "timeout = 30",
+        "port = 8080",
+        "retries: 3",
+        "token_count = len(items)",
+        "auth = request.headers.get('Authorization')",
+    ):
+        assert kept in out, kept
+
+
+def test_reviewer_output_is_scrubbed_before_it_is_saved_or_printed(tmp_path, capsys, monkeypatch):
+    """Codex review of PR #72, round 5, finding 2: reviewer-controlled text
+    (failure messages, malformed output, finding summaries) reached the
+    result JSON and stdout unredacted."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    leak = "password=demo123"
+
+    def reviewer_fails(_prompt):
+        return run.ReviewerRun(text="", returncode=1, stderr=f"login failed: {leak}")
+
+    def reviewer_babbles(_prompt):
+        return run.ReviewerRun(text=f"sorry, {leak} is not json", returncode=0)
+
+    def reviewer_finds(_prompt):
+        return run.ReviewerRun(
+            text=json.dumps(
+                {"findings": [{"topic": "credential-redaction", "summary": f"leaks {leak}"}]}
+            ),
+            returncode=0,
+        )
+
+    for reviewer in (reviewer_fails, reviewer_babbles, reviewer_finds):
+        result = run.grade_codex(cases[0], KW, reviewer)
+        assert leak not in json.dumps(result), reviewer.__name__
+        assert "[REDACTED]" in json.dumps(result), reviewer.__name__
+    # main() prints and saves only scrubbed text (the real runner needs a
+    # commit to check out, so the case points at a temporary repository).
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    real_case = dict(cases[0], source_sha=_git(repo, "rev-parse", "HEAD"))
+    cases_dir = tmp_path / "cases"
+    cases_dir.mkdir()
+    (cases_dir / f"{cases[0]['id']}.json").write_text(json.dumps(real_case))
+    out = tmp_path / "results"
+    exit_code = run.main(
+        [
+            "r",
+            "--cases",
+            str(cases_dir),
+            "--out",
+            str(out),
+            "--grader",
+            "codex",
+            "--codex-bin",
+            str(
+                _fake_codex(
+                    tmp_path, f'{{"findings": [{{"topic": "other", "summary": "{leak}"}}]}}'
+                )
+            ),
+        ]
+    )
+    assert exit_code == 0
+    printed = capsys.readouterr().out
+    saved = next(out.glob("codex-*.json")).read_text()
+    assert leak not in printed and leak not in saved
+    assert "[REDACTED]" in saved
+
+
+def _fake_codex(tmp_path, reply):
+    """A stand-in `codex` binary: records its cwd, writes `reply` to -o."""
+    binary = tmp_path / "fake-codex"
+    binary.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, sys\n"
+        "args = sys.argv[1:]\n"
+        "out = args[args.index('-o') + 1]\n"
+        f"open(os.path.join(os.getcwd(), 'reviewer-cwd.txt'), 'w').write(os.getcwd())\n"
+        f"open(out, 'w').write({reply!r})\n"
+        f"open({str(tmp_path / 'cwd-record.txt')!r}, 'w').write(os.getcwd())\n"
+    )
+    binary.chmod(0o755)
+    return binary
+
+
+def test_the_reviewer_runs_in_an_isolated_historical_checkout_without_answers(
+    tmp_path, monkeypatch
+):
+    """Codex review of PR #72, round 5, finding 3: the reviewer ran from the
+    repository root, where evals/cases and the review archive with the
+    expected answers are readable. It now runs in a checkout of the case's
+    own commit with every answer-bearing path removed."""
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    (repo / "evals" / "cases").mkdir(parents=True)
+    (repo / "evals" / "cases" / "round-001.json").write_text("{}")
+    (repo / "docs" / "rsi").mkdir(parents=True)
+    (repo / "docs" / "self-improvement-archive.jsonl").write_text('{"round": 1}\n')
+    (repo / "docs" / "rsi" / "measurement.json").write_text("{}")
+    (repo / "skills").mkdir()
+    (repo / "skills" / "x.md").write_text("answer")
+    (repo / "proposals").mkdir()
+    (repo / "proposals" / "y.md").write_text("answer")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "answers on main")
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    case = {
+        "id": "round-001",
+        "round": 1,
+        "source_sha": head,
+        "expected_topics": ["credential-redaction"],
+        "diff": "+x",
+        "scorable": True,
+    }
+    fake = _fake_codex(tmp_path, '{"findings": []}')
+    result = run.grade_codex(case, KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd))
+    assert result["status"] != "error", result
+    cwd = Path((tmp_path / "cwd-record.txt").read_text())
+    assert cwd.resolve() != repo.resolve(), "the reviewer must not run in the repository root"
+    assert not cwd.exists(), "the isolated checkout is removed afterwards"
+    # What the reviewer could see: the commit's tree minus the answers.
+    listing = result["reviewer_checkout"]
+    assert "a.txt" in listing and "first.py" in listing
+    for answer in (
+        "evals",
+        "docs/self-improvement-archive.jsonl",
+        "docs/rsi",
+        "skills",
+        "proposals",
+    ):
+        assert answer not in listing, answer
+    # An unreachable commit is an error, not a review from the wrong tree.
+    missing = run.grade_codex(
+        dict(case, source_sha="0" * 40), KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd)
+    )
+    assert missing["status"] == "error" and "checkout" in missing["error"]

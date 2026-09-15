@@ -171,16 +171,24 @@ _SOURCE_BARE_VALUE = (
     r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)(?!\d+(?:\.\d+)?(?![\w.]))"
     r"[^\s\"'(\[{,;)]+(?![\w(\[.])"
 )
+# The value of a CREDENTIAL-named assignment or flag: numbers are secrets
+# too (`password = 123456`), only expressions, references and literals such
+# as None/true survive (Codex review of PR #72, round 5).
+_SOURCE_CREDENTIAL_VALUE = (
+    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)[^\s\"'(\[{,;)]+(?![\w(\[.])"
+)
 _SOURCE_ASSIGNMENT_SHAPE = re.compile(
-    r"(?i)(?<![\w.])([a-z0-9_]*" + _CREDENTIAL_WORD + r"[a-z0-9_]*\s*[=:]\s*)"
-    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|" + _SOURCE_BARE_VALUE + r")"
+    # `self.password`, `config.api_key`, `settings['db'].secret`: an attribute
+    # or item prefix before the credential name is still that credential.
+    r"(?i)(?<![\w.])((?:[\w\[\]\"']+\.)*[a-z0-9_]*" + _CREDENTIAL_WORD + r"[a-z0-9_]*\s*[=:]\s*)"
+    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|" + _SOURCE_CREDENTIAL_VALUE + r")"
 )
 # Short credential flags (`-a samplepass`, `-p VALUE`, `-pVALUE`, as in
 # redis-cli / mysql) kept their redaction in the prose scrubber; the source
 # scrubber must keep it too (Codex review of PR #72, round 4).
 _SOURCE_SHORT_FLAG_SHAPE = re.compile(
     r"((?<!\S)-[pa](?:\s+|=)?)"
-    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|" + _SOURCE_BARE_VALUE + r")"
+    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|(?!-)" + _SOURCE_CREDENTIAL_VALUE + r")"
 )
 _SOURCE_FLAG_SHAPE = re.compile(
     r"(?i)((?<!\S)--?[a-z0-9-]*" + _CREDENTIAL_WORD + r"\b(?:\s+|=))"

@@ -24,13 +24,21 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
+import io
 import json
+import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CASES = REPO_ROOT / "evals" / "cases"
@@ -97,13 +105,67 @@ class ReviewerRun(NamedTuple):
     stderr: str = ""
 
 
-def run_codex(prompt: str, codex_bin: str = "codex") -> ReviewerRun:
+# Paths whose contents ARE the answers (expected findings, the archive the
+# cases were built from, generated playbooks and proposals). They never sit
+# in the reviewer's working directory (Codex review of PR #72, round 5).
+ANSWER_PATHS: tuple[str, ...] = (
+    "evals",
+    "docs/self-improvement-archive.jsonl",
+    "docs/rsi",
+    "skills",
+    "proposals",
+)
+
+
+class CheckoutUnavailable(RuntimeError):
+    """The case's commit cannot be materialised from this repository."""
+
+
+@contextmanager
+def historical_checkout(sha: str) -> Iterator[tuple[Path, list[str]]]:
+    """A temporary directory holding ONLY the tree of `sha` minus every
+    answer-bearing path, plus a shallow listing of what it holds. The
+    reviewer works there, never in the repository root, so it cannot read
+    the eval cases or the archive it is being scored against (Codex review
+    of PR #72, round 5, finding 3)."""
+    root = Path(tempfile.mkdtemp(prefix="eval-checkout-"))
+    try:
+        archived = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "archive", "--format=tar", sha],
+            capture_output=True,
+            timeout=120,
+        )
+        if archived.returncode != 0:
+            raise CheckoutUnavailable(f"commit {sha[:12]} is not available in this repository")
+        with tarfile.open(fileobj=io.BytesIO(archived.stdout)) as tar:
+            tar.extractall(root, filter="data")
+        for rel in ANSWER_PATHS:
+            target = root / rel
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
+            elif target.exists() or target.is_symlink():
+                target.unlink()
+        docs = root / "docs"
+        entries = [*root.iterdir(), *(docs.iterdir() if docs.is_dir() else [])]
+        listing = sorted(str(p.relative_to(root)) for p in entries)
+        yield root, listing
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def run_codex(prompt: str, codex_bin: str = "codex", cwd: str | Path | None = None) -> ReviewerRun:
     with tempfile.NamedTemporaryFile("w+", suffix=".md", delete=False) as out:
         path = out.name
+    # Never the repository root: without an isolated checkout the reviewer
+    # gets an empty folder rather than the answers.
+    scratch = None
+    if cwd is None:
+        scratch = tempfile.mkdtemp(prefix="eval-empty-")
+        cwd = scratch
     try:
         result = subprocess.run(
             [codex_bin, "exec", "-s", "read-only", "-o", path, prompt],
-            cwd=REPO_ROOT,
+            cwd=cwd,
             capture_output=True,
             text=True,
             timeout=600,
@@ -112,11 +174,27 @@ def run_codex(prompt: str, codex_bin: str = "codex") -> ReviewerRun:
     except (subprocess.TimeoutExpired, OSError) as exc:
         Path(path).unlink(missing_ok=True)
         return ReviewerRun(text="", returncode=-1, stderr=type(exc).__name__)
+    finally:
+        if scratch is not None:
+            shutil.rmtree(scratch, ignore_errors=True)
     text = Path(path).read_text() if Path(path).exists() else ""
     Path(path).unlink(missing_ok=True)
     return ReviewerRun(
         text=text or result.stdout, returncode=result.returncode, stderr=result.stderr
     )
+
+
+def scrubbed(value):
+    """Reviewer-controlled text is redacted before it is logged or saved:
+    every string in a finding, an error message or an output excerpt (Codex
+    review of PR #72, round 5, finding 2)."""
+    if isinstance(value, str):
+        return policy_mod.scrub_secrets(value)
+    if isinstance(value, list):
+        return [scrubbed(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): scrubbed(v) for k, v in value.items()}
+    return value
 
 
 def parse_findings(text: str) -> tuple[list[dict], str | None]:
@@ -145,35 +223,53 @@ def parse_findings(text: str) -> tuple[list[dict], str | None]:
     return findings, None
 
 
+def _wants_checkout(runner) -> bool:
+    """A runner that takes a working directory gets an isolated checkout of
+    the case's commit; a prompt-only runner (a stub that never runs a
+    process) needs none."""
+    try:
+        params = inspect.signature(runner).parameters
+    except (TypeError, ValueError):
+        return True
+    required = [p for p in params.values() if p.default is inspect.Parameter.empty]
+    return "cwd" in params or len(required) >= 2
+
+
+def _error(case: dict, message: str) -> dict:
+    return {
+        "id": case["id"],
+        "round": case["round"],
+        "expected_topics": sorted(case["expected_topics"]),
+        "found_topics": [],
+        "recall": None,
+        "status": "error",
+        "method": "codex exec review",
+        "error": scrubbed(message),
+    }
+
+
 def grade_codex(case: dict, keywords: dict[str, list[str]], runner=run_codex) -> dict:
     topics = "\n".join(f"- {t}: {', '.join(w)}" for t, w in keywords.items())
-    ran = runner(REVIEW_PROMPT.format(topics=topics, diff=case["diff"]))
+    prompt = REVIEW_PROMPT.format(topics=topics, diff=case["diff"])
+    sha = str(case.get("source_sha") or "")
+    listing: list[str] | None = None
+    if _wants_checkout(runner):
+        try:
+            with historical_checkout(sha) as (workdir, listing):
+                ran = runner(prompt, workdir)
+        except CheckoutUnavailable as exc:
+            return _error(case, f"no isolated checkout: {exc}")
+    else:
+        ran = runner(prompt)
     if isinstance(ran, str):
         ran = ReviewerRun(text=ran, returncode=0)
     if ran.returncode != 0 or not ran.text.strip():
         error = (ran.stderr or ran.text or "no output").strip()[-500:]
-        return {
-            "id": case["id"],
-            "round": case["round"],
-            "expected_topics": sorted(case["expected_topics"]),
-            "found_topics": [],
-            "recall": None,
-            "status": "error",
-            "method": "codex exec review",
-            "error": f"reviewer exited {ran.returncode}: {error}",
-        }
+        return _error(case, f"reviewer exited {ran.returncode}: {error}")
     findings, invalid = parse_findings(ran.text)
     if invalid:
-        return {
-            "id": case["id"],
-            "round": case["round"],
-            "expected_topics": sorted(case["expected_topics"]),
-            "found_topics": [],
-            "recall": None,
-            "status": "error",
-            "method": "codex exec review",
-            "error": f"{invalid}: {ran.text.strip()[-300:]}",
-        }
+        return _error(case, f"{invalid}: {ran.text.strip()[-300:]}")
+    findings = scrubbed(findings)
     # Each finding is credited to exactly one topic: the one the reviewer
     # named, or, only when it named none of ours ("other" or an unknown
     # label), the topic its summary classifies under by the policy's own
@@ -189,7 +285,13 @@ def grade_codex(case: dict, keywords: dict[str, list[str]], runner=run_codex) ->
                 credited.add(fallback)
     found = {t for t in case["expected_topics"] if t in credited}
     return score(
-        case, found, detail={"method": "codex exec review", "reviewer_findings": findings[:20]}
+        case,
+        found,
+        detail={
+            "method": "codex exec review",
+            "reviewer_findings": findings[:20],
+            "reviewer_checkout": listing,
+        },
     )
 
 
@@ -243,7 +345,9 @@ def main(argv: list[str]) -> int:
     results = []
     for case in cases:
         if args.grader == "codex":
-            result = grade_codex(case, keywords, lambda p: run_codex(p, args.codex_bin))
+            result = grade_codex(
+                case, keywords, lambda p, cwd=None: run_codex(p, args.codex_bin, cwd)
+            )
         else:
             result = grade_keywords(case, keywords)
         results.append(result)
