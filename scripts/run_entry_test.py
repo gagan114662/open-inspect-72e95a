@@ -298,6 +298,22 @@ def test_refresh_scratch_files_never_follow_a_planted_link(tmp_path, monkeypatch
     assert [p.name for p in (root / "docs" / "rsi" / ".refresh").iterdir() if p.is_dir()] == [], (
         "the per-run scratch folder is removed when nothing was applied"
     )
+    # Codex review of PR #68, round 7: a SUCCESSFUL refresh (sessions observed,
+    # blind spots handed to the decision) used to keep its scratch folder for
+    # ever. It is removed once the decision has run, also when a step fails.
+    (root / "scripts" / "mine-trace-failures.py").write_text(
+        "import sys, json\na=sys.argv\n"
+        "open(a[a.index('--save-evidence')+1],'w').write(json.dumps({'sessions': ['s1'], 'topics': {}}))\n"
+        "open(a[a.index('--out-json')+1],'w').write('[]')\nprint('1 distinct failure(s)')\n"
+    )
+    (root / "docs" / "rsi" / ".refresh" / "trace-evidence.json").unlink()
+    (root / "docs" / "rsi" / ".refresh" / "field-failures.json").unlink()
+    assert run.main(["run.py", "--refresh", "--repo-dir", str(tmp_path)]) == 1, (
+        "measurement is missing in this fixture, so the pass fails after the refresh"
+    )
+    assert [p.name for p in (root / "docs" / "rsi" / ".refresh").iterdir() if p.is_dir()] == [], (
+        "the scratch folder is gone after a successful refresh, even when a later step failed"
+    )
     (root / "docs" / "rsi" / ".refresh").rmdir() if False else None
     linked = root / "elsewhere"
     linked.mkdir()

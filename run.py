@@ -118,6 +118,7 @@ def main(argv: list[str]) -> int:
     args.repo_dir = str(Path(args.repo_dir or ROOT).expanduser().resolve())
 
     field_failures: list[str] = []
+    scratch: Path | None = None
     if args.refresh:
         # Mine into scratch files first: a refresh that observed no session
         # must never replace the committed snapshot, and the mined blind
@@ -154,8 +155,19 @@ def main(argv: list[str]) -> int:
             print(f"[ok] refresh: {observed} session(s) observed; evidence snapshot replaced")
         else:
             print("[skip] refresh: no session observed; the committed evidence snapshot is kept")
-        if not field_failures:
-            shutil.rmtree(tmp, ignore_errors=True)
+        scratch = tmp
+    try:
+        return run_decision(args, field_failures)
+    finally:
+        # The scratch folder lives until the decision has used the mined
+        # blind spots, then goes, on success and on failure alike (Codex
+        # review of PR #68, round 7).
+        if scratch is not None:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+
+def run_decision(args: argparse.Namespace, field_failures: list[str]) -> int:
+    """Measure, decide, render, distill and propose on the checkout in ROOT."""
     evidence = ["--trace-evidence", EVIDENCE] if (ROOT / EVIDENCE).exists() else []
     verifier = (
         ["--verifier-evidence", VERIFIER_EVIDENCE] if (ROOT / VERIFIER_EVIDENCE).exists() else []
