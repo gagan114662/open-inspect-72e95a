@@ -1630,3 +1630,11 @@ def test_line_reference_stripping_is_linear():
         revise.strip_line_refs("a.py:41:12-15") == "a.py"
         and revise.strip_line_refs("http://x:8080") == "http://x"
     )
+
+
+def test_line_reference_stripping_stays_linear_when_every_suffix_matches():
+    import time
+
+    start = time.perf_counter()
+    assert revise.strip_line_refs("a.py" + ":1" * 20000) == "a.py"
+    assert time.perf_counter() - start < 1.0

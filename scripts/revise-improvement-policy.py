@@ -294,17 +294,20 @@ _LOCATION_ROOTS = frozenset(
 
 
 def strip_line_refs(word: str) -> str:
-    """Remove trailing :41, :41-43, :41:12 suffixes with a linear scan (a
-    regex with a repeated group went quadratic on ':1:1:1…x')."""
+    """Remove trailing :41, :41-43, :41:12 suffixes. Works on an index into
+    the original string, never copying it, so ':1:1:1…x' costs linear time
+    (Codex review of PR #56, rounds 7 and 8)."""
+    end = len(word)
     while True:
-        colon = word.rfind(":")
+        colon = word.rfind(":", 0, end)
         if colon <= 0:
-            return word
-        tail = word[colon + 1 :]
-        digits = tail.split("-", 1)
-        if not tail or not all(part.isdigit() for part in digits) or len(digits) > 2:
-            return word
-        word = word[:colon]
+            break
+        tail = word[colon + 1 : end]
+        parts = tail.split("-")
+        if not tail or len(parts) > 2 or not all(part.isdigit() for part in parts):
+            break
+        end = colon
+    return word[:end]
 
 
 def is_location(word: str) -> bool:
