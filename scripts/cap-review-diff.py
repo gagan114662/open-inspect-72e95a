@@ -50,21 +50,48 @@ def cap(diff: str, max_chars: int) -> tuple[str, list[str]]:
     return "".join(kept), omitted
 
 
+def _notice(total: int, max_chars: int, omitted: int) -> str:
+    return (
+        f"\n\nDIFF TRUNCATED: {total:,} characters exceed the {max_chars:,} cap; "
+        f"{omitted} file(s) omitted — open them in the checkout:\n"
+    )
+
+
+def render(diff: str, max_chars: int) -> str:
+    """The complete prompt fragment, body AND notice, within `max_chars`:
+    the omitted-file list is itself budgeted, and what does not fit is
+    counted instead of listed (Codex review of PR #72, round 4)."""
+    body, omitted = cap(diff, max_chars)
+    if not omitted:
+        return body
+    more = "  … and {:,} more (run `git diff --stat` for the full list)\n"
+    reserve = len(_notice(len(diff), max_chars, len(omitted))) + len(more.format(len(omitted)))
+    if len(body) + reserve > max_chars:
+        # Leave room for the notice itself, then re-cap the body.
+        body, omitted = cap(diff, max(0, max_chars - reserve))
+    header = _notice(len(diff), max_chars, len(omitted))
+    budget = max_chars - len(body) - len(header) - len(more.format(len(omitted)))
+    listed: list[str] = []
+    used = 0
+    for path in omitted:
+        line = f"  - {path}\n"
+        if used + len(line) > budget:
+            break
+        listed.append(line)
+        used += len(line)
+    rest = len(omitted) - len(listed)
+    out = body + header + "".join(listed) + (more.format(rest) if rest else "")
+    # A cap smaller than the notice itself gets the notice, cut: still honest.
+    return out[:max_chars]
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path")
     parser.add_argument("--max-chars", type=int, default=900_000)
     args = parser.parse_args(argv[1:])
     diff = Path(args.path).read_text(errors="replace")
-    body, omitted = cap(diff, args.max_chars)
-    sys.stdout.write(body)
-    if omitted:
-        sys.stdout.write(
-            f"\n\nDIFF TRUNCATED: {len(diff):,} characters exceed the {args.max_chars:,} cap; "
-            f"{len(omitted)} file(s) omitted — open them in the checkout:\n"
-        )
-        for path in omitted:
-            sys.stdout.write(f"  - {path}\n")
+    sys.stdout.write(render(diff, args.max_chars))
     return 0
 
 

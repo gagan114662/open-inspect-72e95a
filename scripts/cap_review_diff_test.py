@@ -36,7 +36,7 @@ def test_cli_appends_the_omitted_list(tmp_path):
     path = tmp_path / "diff.txt"
     path.write_text(diff)
     run = subprocess.run(
-        [sys.executable, str(_MODULE_PATH), str(path), "--max-chars", "80"],
+        [sys.executable, str(_MODULE_PATH), str(path), "--max-chars", "260"],
         capture_output=True,
         text=True,
         check=True,
@@ -50,3 +50,23 @@ def test_cli_appends_the_omitted_list(tmp_path):
         check=True,
     )
     assert run.stdout == diff
+
+
+def test_the_whole_output_including_the_omitted_list_stays_under_the_cap():
+    """Codex review of PR #72, round 4, finding 2: only the kept diff counted
+    towards the cap; 6,000 omitted pathnames pushed the output to 1.69M
+    characters against a 900k cap. The notice is budgeted too."""
+    diff = "".join(
+        _file(f"packages/web/src/very/long/path/component-{i:05d}.tsx", "+x" * 40)
+        for i in range(6000)
+    )
+    assert len(diff) > 900_000
+    out = capmod.render(diff, 900_000)
+    assert len(out) <= 900_000
+    assert "DIFF TRUNCATED" in out and "more (run `git diff --stat`" in out
+    # A tiny cap still yields a bounded, honest output.
+    out = capmod.render(diff, 500)
+    assert len(out) <= 500 and "DIFF TRUNCATED" in out and "more (run" in out
+    # Nothing omitted: no notice at all.
+    small = _file("a.py", "+a")
+    assert capmod.render(small, 10_000) == small

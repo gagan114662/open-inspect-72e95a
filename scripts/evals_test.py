@@ -337,3 +337,25 @@ def test_malformed_reviewer_output_is_an_error_not_an_empty_review():
     assert ok["status"] == "completed" and ok["recall"] == 0.0
     summary = run.summarize([ok, run.grade_codex(cases[0], KW, lambda _p: "garbage")])
     assert summary["errors"] == 1 and summary["cases"] == 1
+
+
+def test_source_scrubbing_keeps_redacting_short_credential_flags():
+    """Codex review of PR #72, round 4, finding 1: replacing the flag shape
+    dropped `-a VALUE`, `-p VALUE` and `-pVALUE`, so `redis-cli -a samplepass
+    PING` kept the password in a serialized eval case."""
+    src = "\n".join(
+        [
+            "redis-cli -a samplepass PING",
+            "mysql -u root -pS3cretPw mydb",
+            'mysql -p "quoted pass" mydb',
+            "ls -la /tmp",
+            "kubectl get pods -A",
+            "curl -a 8080",
+        ]
+    )
+    out = build.scrub_source(src)
+    assert "samplepass" not in out and "S3cretPw" not in out and "quoted pass" not in out
+    assert "redis-cli -a [REDACTED] PING" in out
+    assert "-u root -p[REDACTED] mydb" in out
+    assert "ls -la /tmp" in out, "an -l/-a combination is not a credential flag"
+    assert "kubectl get pods -A" in out, "flags followed by nothing are untouched"

@@ -175,17 +175,27 @@ _SOURCE_ASSIGNMENT_SHAPE = re.compile(
     r"(?i)(?<![\w.])([a-z0-9_]*" + _CREDENTIAL_WORD + r"[a-z0-9_]*\s*[=:]\s*)"
     r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|" + _SOURCE_BARE_VALUE + r")"
 )
+# Short credential flags (`-a samplepass`, `-p VALUE`, `-pVALUE`, as in
+# redis-cli / mysql) kept their redaction in the prose scrubber; the source
+# scrubber must keep it too (Codex review of PR #72, round 4).
+_SOURCE_SHORT_FLAG_SHAPE = re.compile(
+    r"((?<!\S)-[pa](?:\s+|=)?)"
+    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|" + _SOURCE_BARE_VALUE + r")"
+)
 _SOURCE_FLAG_SHAPE = re.compile(
     r"(?i)((?<!\S)--?[a-z0-9-]*" + _CREDENTIAL_WORD + r"\b(?:\s+|=))"
     r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|(?!\$)(?!-)[^\s\"']+)"
 )
-_SOURCE_SECRET_SHAPES: tuple[re.Pattern[str], ...] = tuple(
-    _SOURCE_ASSIGNMENT_SHAPE
-    if p is _ASSIGNMENT_SHAPE
-    else _SOURCE_FLAG_SHAPE
-    if p is _FLAG_SHAPE
-    else p
-    for p in _SECRET_SHAPES
+_SOURCE_SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
+    *(
+        _SOURCE_ASSIGNMENT_SHAPE
+        if p is _ASSIGNMENT_SHAPE
+        else _SOURCE_FLAG_SHAPE
+        if p is _FLAG_SHAPE
+        else p
+        for p in _SECRET_SHAPES
+    ),
+    _SOURCE_SHORT_FLAG_SHAPE,
 )
 
 
