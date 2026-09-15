@@ -217,14 +217,18 @@ def replay_chart(rows: list[dict]) -> str:
         parts.append(
             f'<text x="{w - pad_r + 4}" y="{y_validity(tick) + 4:.1f}" font-size="11" text-anchor="start" fill="{NAVY}">{tick:+.0f}</text>'
         )
-    # The line is drawn on the COMMON held-out set when one exists, so
-    # versions are compared on the same rounds (Codex review of PR #70).
-    key = (
-        "coverage_common"
-        if any(r.get("coverage_common") is not None for r in rows)
-        else "coverage_oos"
-    )
+    # The line is drawn on the COMMON held-out set only, so versions are
+    # compared on the same rounds (Codex review of PR #70). Right after a
+    # revision that set is empty; the comparison is then shown as
+    # unavailable, never substituted with each version's own later rounds,
+    # which are different data sets (Codex review of PR #70, round 3).
+    key = "coverage_common"
+    has_common = any(r.get(key) is not None for r in rows)
     cov = [(xs[i], y(r[key])) for i, r in enumerate(rows) if r.get(key) is not None]
+    if not has_common:
+        parts.append(
+            f'<text x="{(pad_l + w - pad_r) / 2:.1f}" y="{y(0.5) + 4:.1f}" font-size="12" text-anchor="middle" fill="{GREY}">no common held-out rounds yet: the newest version has no later rounds to be compared on</text>'
+        )
     if len(cov) > 1:
         parts.append(
             '<path d="'
@@ -426,7 +430,13 @@ def render(
     kw_now = policy_mod.topic_keywords(policy)
     cur = after["current"]
     decision_now = revise_mod.decide(entries, policy, history, after, policy_mod.utc_now_iso())
-    replay_rows = replay_mod.replay(entries, policy, history, evidence)["versions"]
+    replay_result = replay_mod.replay(entries, policy, history, evidence)
+    replay_rows = replay_result["versions"]
+    undated_note = (
+        f" {replay_result['undated_excluded']} undated finding(s) are excluded from every held-out set: without their own observation time they may have informed a revision."
+        if replay_result.get("undated_excluded")
+        else ""
+    )
     replay_table = "".join(
         f"<tr><td>v{esc(str(r['version']))}</td><td>{esc(str(r.get('origin')))}</td><td>{esc(str(r.get('created_at') or 'predates the archive'))}</td>"
         f"<td>{fmt(r['rounds_oos'])}</td><td>{fmt(r.get('coverage_oos'))}</td><td>{fmt(r.get('validity_oos'))}</td>"
@@ -572,7 +582,7 @@ def render(
     <tr><th>Version</th><th>Origin</th><th>Created</th><th>Later rounds</th><th>Coverage (own later rounds)</th><th>Validity (own later rounds)</th><th>Coverage (common held-out)</th><th>Validity (common held-out)</th><th>Coverage (all)</th><th>Validity (all)</th></tr>
     {replay_table}
   </table></div>
-  <p>The honest test of recursive self-improvement: a policy revised on the findings it had seen must predict the findings it had <em>not</em> seen. "Own later rounds" judges each version on the rounds after it existed; "common held-out" judges every version on the same rounds, the ones after the newest version existed, which is the only fair comparison between versions. Coverage rising on the common set is the improver improving; validity falling is the field anchor saying a mined topic was review-only noise, which is what the weight discount is for. A version with too few later rounds shows n/a.</p>
+  <p>The honest test of recursive self-improvement: a policy revised on the findings it had seen must predict the findings it had <em>not</em> seen. "Own later rounds" judges each version on the rounds after it existed; "common held-out" judges every version on the same rounds, the ones after the newest version existed, which is the only fair comparison between versions. Coverage rising on the common set is the improver improving; validity falling is the field anchor saying a mined topic was review-only noise, which is what the weight discount is for. A version with too few later rounds shows n/a.{undated_note}</p>
 </section>
 
 <section>

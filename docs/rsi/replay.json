@@ -3,6 +3,7 @@
   "evidence_digest": "4bd5d9402889d1cc",
   "common_window_after": "2026-09-15T13:46:14Z",
   "common_rounds": 14,
+  "undated_excluded": 2,
   "versions": [
     {
       "coverage_common": 0.4091,

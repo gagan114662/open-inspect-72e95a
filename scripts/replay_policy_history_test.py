@@ -108,3 +108,27 @@ def test_out_json_is_guarded_like_every_other_output(tmp_path):
         replay.main(
             ["r", str(archive), "--history", str(tmp_path / "h"), "--out-json", str(archive)]
         )
+
+
+def test_undated_findings_never_enter_a_held_out_set():
+    """Codex review of PR #70, round 3: an undated entry used to inherit its
+    round's earliest time, so a finding that informed a revision could be
+    counted as unseen evidence once a later, dated result line arrived.
+    Undated entries are now excluded from every held-out set and counted."""
+    v1, v2 = _versions()
+    history = [{"version": 2, "policy": v2, "replaced_policy_hash": policy_mod.policy_hash(v1)}]
+    entries = [
+        *_entries(),
+        # Same round as entry 3 (after the v2 cutoff), but its own time is unknown.
+        {"round": 3, "source_sha": "c", "findings": ["[P2] quartz renderer leaked a secret"]},
+        # A whole round with no time at all.
+        {"round": 5, "source_sha": "e", "findings": ["[P1] token exposed in log"]},
+    ]
+    result = replay.replay(entries, v2, history, None)
+    rows = {r["version"]: r for r in result["versions"]}
+    assert rows[2]["rounds_oos"] == 2, "undated round 5 is not later evidence for v2"
+    assert rows[2]["findings_oos"] == 2, "the undated finding of round 3 is excluded too"
+    assert result["undated_excluded"] == 2
+    assert result["common_rounds"] == 2
+    kept = replay.rounds_after(entries, "2026-09-14T13:00:00Z")
+    assert all(e.get("occurred_at") for e in kept)

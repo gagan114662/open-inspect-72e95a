@@ -290,3 +290,23 @@ def test_dashboard_carries_the_out_of_sample_replay():
     html = render.render(_archive(), policy_mod.builtin_policy(), [], None, None, "abc123")
     assert "Did the improver improve?" in html and "Out-of-sample replay per policy version" in html
     assert "later round(s)" in html
+
+
+def test_replay_chart_shows_no_common_comparison_when_no_common_rounds_exist():
+    """Codex review of PR #70, round 3: right after a revision the common
+    held-out set is empty; the chart used to fall back to each version's own
+    later rounds under the "common held-out" label, showing an apparent
+    0.50 -> 1.00 improvement measured on different rounds."""
+    rows = [
+        {"version": 1, "rounds_oos": 4, "coverage_oos": 0.5, "coverage_common": None},
+        {"version": 2, "rounds_oos": 2, "coverage_oos": 1.0, "coverage_common": None},
+    ]
+    svg = render.replay_chart(rows)
+    assert "no common held-out rounds yet" in svg
+    assert 'stroke="#' not in svg.split("</text>", 1)[0] or "<path" not in svg
+    assert "<circle" not in svg, "no coverage points are drawn from a different data set"
+    assert "1.00" not in svg.split("later round(s)")[-1], "no own-set number is plotted"
+    # With a common set the line is back.
+    rows[0]["coverage_common"], rows[1]["coverage_common"] = 0.4, 0.7
+    svg = render.replay_chart(rows)
+    assert "<circle" in svg and "no common held-out rounds yet" not in svg

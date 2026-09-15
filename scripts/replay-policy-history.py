@@ -64,26 +64,25 @@ def versions_in_order(policy: dict, history: list[dict]) -> list[dict]:
     return out
 
 
+def is_undated(entry: dict) -> bool:
+    return measure_mod.parse_timestamp_ms(entry.get("occurred_at")) is None
+
+
 def rounds_after(entries: list[dict], created_at: str | None) -> list[dict]:
     """Archive entries recorded after `created_at`, judged by EACH ENTRY's
     own timestamp: a later result line for a round must not drag that
     round's earlier findings into the held-out set (Codex review of PR
-    #70). Undated entries fall back to their round's earliest known time.
-    Every entry when the version predates the archive."""
+    #70). An undated entry is never held-out evidence: without its own
+    observation time it may have informed the revision, so inheriting its
+    round's earliest time would count seen findings as unseen (Codex
+    review of PR #70, round 3). Every entry when the version predates the
+    archive."""
     cutoff = measure_mod.parse_timestamp_ms(created_at) if created_at else None
     if cutoff is None:
         return list(entries)
-    earliest: dict[str, int] = {}
-    for e in entries:
-        ts = measure_mod.parse_timestamp_ms(e.get("occurred_at"))
-        if ts is not None:
-            key = policy_mod.round_key(e)
-            earliest[key] = min(ts, earliest.get(key, ts))
     kept = []
     for e in entries:
         ts = measure_mod.parse_timestamp_ms(e.get("occurred_at"))
-        if ts is None:
-            ts = earliest.get(policy_mod.round_key(e))
         if ts is not None and ts > cutoff:
             kept.append(e)
     return kept
@@ -146,12 +145,17 @@ def replay(entries: list[dict], policy: dict, history: list[dict], evidence: dic
         "evidence_digest": measure_mod.evidence_digest(evidence),
         "common_window_after": newest_created,
         "common_rounds": len({policy_mod.round_key(e) for e in common}),
+        "undated_excluded": sum(1 for e in entries if is_undated(e)),
         "versions": rows,
     }
 
 
 def summary_lines(result: dict) -> list[str]:
     lines = ["out-of-sample replay (each version judged only on rounds archived after it existed):"]
+    if result.get("undated_excluded"):
+        lines.append(
+            f"  {result['undated_excluded']} undated finding(s) excluded from every held-out set"
+        )
     for r in result["versions"]:
         cov = "n/a" if r["coverage_oos"] is None else f"{r['coverage_oos']:.2f}"
         val = "n/a" if r["validity_oos"] is None else f"{r['validity_oos']:.2f}"
