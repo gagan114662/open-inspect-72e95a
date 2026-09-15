@@ -305,7 +305,9 @@ def is_location(word: str) -> bool:
     w = _LINE_REF_RE.sub("", w)
     if not w:
         return False
-    if w.startswith(("http://", "https://", "/", "./", "../", "~/")):
+    if "http://" in w or "https://" in w:
+        return True  # a URL glued to other characters is still a URL
+    if w.startswith(("/", "./", "../", "~/")):
         return True
     segments = w.split("/")
     if any(seg.endswith(_LOCATION_EXTENSIONS) for seg in segments):
@@ -322,7 +324,13 @@ MAX_BACKGROUND_SHARE = 0.2
 MIN_BACKGROUND_OCCURRENCES = 10
 
 
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
+
+
 def tokenize(text: str) -> set[str]:
+    # A markdown link keeps its text and drops its target: the target is a
+    # location by definition (Codex review of PR #56, round 4).
+    text = _MARKDOWN_LINK_RE.sub(r"\1 ", text)
     text = " ".join(w for w in text.lower().split() if not is_location(w))
     return {
         tok.strip("-_")

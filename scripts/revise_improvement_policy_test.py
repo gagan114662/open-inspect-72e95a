@@ -1588,3 +1588,12 @@ def test_location_detection_handles_punctuation_line_ranges_and_prose_with_many_
     assert {"deadlock", "livelock", "starvation"} <= revise.tokenize(
         "deadlock/livelock/starvation in the pool"
     )
+
+
+def test_markdown_links_keep_their_text_and_drop_their_target():
+    toks = revise.tokenize(
+        "see [details](https://github.com/acme/project/pull/42) and [x](scripts/a.py) for deadlock"
+    )
+    assert {"details", "deadlock"} <= toks
+    assert not ({"github", "acme", "project", "pull", "scripts"} & toks)
+    assert revise.is_location("details](https://github.com/acme/x)")
