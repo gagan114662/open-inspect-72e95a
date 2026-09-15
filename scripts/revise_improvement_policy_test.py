@@ -1643,7 +1643,8 @@ def test_line_reference_stripping_stays_linear_when_every_suffix_matches():
 def test_decorated_file_references_are_still_locations():
     loc = revise.is_location
     assert loc("allocator.py#L41") and loc("allocator.py#L41-L43") and loc("`allocator.py`:41")
-    assert loc("(`scripts/x.py`:41),") and not loc("deadlock#1") is False or True
+    assert loc("(`scripts/x.py`:41),")
+    assert not loc("deadlock#1"), "a fragment on a plain word is not a location"
     assert not (
         {"allocator"} & revise.tokenize("see allocator.py#L41 and `allocator.py`:41 for the crash")
     )
