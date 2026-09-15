@@ -211,22 +211,39 @@ def trace_metadata(traces_bin: str, trace_id: str) -> dict:
     return data.get("trace") or {}
 
 
+def normalize_repo(url: str) -> str:
+    """A repository identity without scheme, credentials, `.git` or case:
+    https://github.com/Acme/Service.git, ssh://git@github.com/acme/service
+    and git@github.com:acme/service all become github.com/acme/service."""
+    u = url.strip().lower().rstrip("/")
+    if "://" in u:
+        u = u.split("://", 1)[1]
+    elif "@" in u and ":" in u.split("@", 1)[1]:  # scp-like git@host:owner/repo
+        host, path = u.split("@", 1)[1].split(":", 1)
+        u = f"{host}/{path.lstrip('/')}"
+    if "@" in u.split("/", 1)[0]:
+        u = u.split("@", 1)[1]  # user@host/...
+    if u.endswith(".git"):
+        u = u[:-4]
+    return u.rstrip("/")
+
+
 def session_belongs_to(meta: dict, needle: str) -> bool:
-    """Whether a session worked on THIS repository: its git remote contains
-    the needle (e.g. github.com/owner/repo) or its working directory's last
-    path segment equals the needle's. A namespace holds every project its
-    owner shares; other projects' failures must not shape this
-    repository's policy (Codex review of PR #10, round 46)."""
-    needle = needle.strip().lower().rstrip("/")
+    """Whether a session worked on THIS repository. A needle with a host
+    (github.com/owner/repo) must EQUAL the session's normalized git remote;
+    a bare folder name must equal the session's working-directory basename.
+    Substring matching would accept owner/repo-other, and a directory
+    fallback for repository needles would accept elsewhere/repo (Codex
+    review of PR #10, rounds 46 and 47)."""
+    needle = needle.strip()
     if not needle:
         return False
-    remote = str(meta.get("gitRemoteUrl") or "").lower().rstrip("/")
-    if remote.endswith(".git"):
-        remote = remote[:-4]
-    if needle in remote:
-        return True
+    first = needle.split("/", 1)[0]
+    if "/" in needle and "." in first:
+        remote = str(meta.get("gitRemoteUrl") or "")
+        return bool(remote) and normalize_repo(remote) == normalize_repo(needle)
     directory = str(meta.get("directory") or "").rstrip("/")
-    return bool(directory) and directory.rsplit("/", 1)[-1].lower() == needle.rsplit("/", 1)[-1]
+    return bool(directory) and directory.rsplit("/", 1)[-1].lower() == needle.lower()
 
 
 def iter_events(traces_bin: str, trace_id: str):

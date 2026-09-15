@@ -103,17 +103,19 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     # The whole header value, scheme included (round 41).
     re.compile(r"(?i)\b(authorization\s*[:=]\s*[\"']?(?:[a-z]+\s+)?)[^\s\"']+"),
     re.compile(
-        r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"[^\"]*\"|'[^']*'|[^\s\"']{4,})"
+        r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
     ),
     # Command-line flags: --password VALUE, --token=VALUE, -p VALUE, -pVALUE,
     # and whole quoted values with spaces (rounds 40-42).
     re.compile(
         r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-p)(?:\s+|=)?)"
-        r"(\"[^\"]*\"|'[^']*'|[^\s\"']{4,})"
+        r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
     ),
     # curl-style user:password arguments, attached or not, quoted or not:
     # -u user:PASS, -uuser:PASS, --user 'user:PASS WITH SPACES' (rounds 43-44).
-    re.compile(r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)?)(\"[^\"]*\"|'[^']*')"),
+    re.compile(
+        r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)?)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*')"
+    ),
     re.compile(r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)?[^\s:\"']+:)[^\s\"']+"),
     # Quoted JSON / Python-dict / YAML fields, either quote style, matched to
     # the ACTUAL enclosing delimiter so a value containing the other quote or

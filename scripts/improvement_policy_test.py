@@ -248,3 +248,12 @@ def test_scrub_secrets_redacts_quoted_values_containing_the_other_quote():
     )
     assert "FAKE_DATABASE_PASSWORD" not in out and "FAKE_TOK" not in out and "FAKE_ESC" not in out
     assert out.count("[REDACTED]") == 3
+
+
+def test_scrub_secrets_handles_escaped_quotes_inside_flag_and_assignment_values():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub(
+        "run --password \"prefix\\\"FAKE_PASSWORD_SUFFIX\" now; PASSWORD='a\\'FAKE_TWO' done"
+    )
+    assert "FAKE_PASSWORD_SUFFIX" not in out and "FAKE_TWO" not in out
+    assert "now" in out and "done" in out

@@ -460,7 +460,7 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
             "--match",
             "github.com/gagan114662/open-inspect-72e95a",
             "--match",
-            "w/scratch-folder",
+            "scratch-folder",
             "--agents",
             "claude-code",
             "--traces-key",
@@ -483,12 +483,18 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
         "remote-3 belongs to another repository; remote-4 matches the second needle"
     )
     assert saved["listing_complete"] is True
-    assert mine.session_belongs_to(
-        {"directory": "/x/open-inspect-72e95a"}, "github.com/o/open-inspect-72e95a"
+    belongs = mine.session_belongs_to
+    repo = "github.com/acme/service"
+    assert belongs(
+        {"gitRemoteUrl": "git@github.com:Acme/Service.git", "directory": "/w/other-name"}, repo
     )
-    assert not mine.session_belongs_to(
-        {"directory": "/x/background agents"}, "github.com/o/open-inspect-72e95a"
+    assert belongs({"gitRemoteUrl": "ssh://git@github.com/acme/service"}, repo)
+    assert not belongs({"gitRemoteUrl": "https://github.com/acme/service-other"}, repo)
+    assert not belongs({"directory": "/elsewhere/service"}, repo), (
+        "no directory fallback for repo needles"
     )
+    assert belongs({"directory": "/x/background agents"}, "background agents")
+    assert not belongs({"directory": "/x/background agents"}, "agents")
     assert mine.main(["m", "--namespace", "gagan114", "--policy", str(policy)]) == 1
     assert "tr_secret" not in capsys.readouterr().out
 
