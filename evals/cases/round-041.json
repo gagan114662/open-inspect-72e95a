@@ -1,0 +1,28 @@
+{
+  "id": "round-041",
+  "round": 41,
+  "source_sha": "f9d573f19c7aff0c7fcb6c9a4a5f5def24a8233c",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-14T22:44:30.799213+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** [Field-only triggers never start topic mining](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:694). The trigger string starts with a number (`\"5 field failures...\"`), but both mining conditions require `startswith(\"field\")`. With healthy coverage and five recurring field failures, `decide()` returns no change even though `mine_topics()` produces a valid candidate. Use a boolean or structured trigger type.",
+      "topic": null
+    },
+    {
+      "finding": "**[P2]** [Successful shell output becomes false failure evidence](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:177). Pattern matching counts successful `cat`/`rg` output containing error examples as actual failures. It also classifies `\"10 passed, 0 failed\"` as a test failure. This contaminates the anchor used to adjust policy weights and trigger rollbacks. Distinguish command failures from printed content and require positive failure counts.",
+      "topic": "shell-semantics"
+    },
+    {
+      "finding": "**[P2]** [Deduplication discards commands needed for classification](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:225). Failures are merged by `(tool, excerpt)`, although topic matching also uses the command. Two commands returning identical `Permission denied` messages retain only the first command. Reproducing this with synthetic `cat ordinary.txt` and `cat auth.json` events loses the authentication-topic evidence entirely. Include the command in the deduplication key or preserve all contributing commands.",
+      "topic": "auth-lifecycle"
+    }
+  ],
+  "expected_topics": [
+    "auth-lifecycle",
+    "shell-semantics"
+  ],
+  "diff": "diff --git a/scripts/revise-improvement-policy.py b/scripts/revise-improvement-policy.py\nindex 36992ad7..2a903aad 100644\n--- a/scripts/revise-improvement-policy.py\n+++ b/scripts/revise-improvement-policy.py\n@@ -102,6 +102,32 @@ STOPWORDS = frozenset(\n         \"cannot\",\n         \"check\",\n         \"checks\",\n+        \"traceback\",\n+        \"recent\",\n+        \"call\",\n+        \"last\",\n+        \"line\",\n+        \"module\",\n+        \"string\",\n+        \"stdin\",\n+        \"exit\",\n+        \"passed\",\n+        \"tool\",\n+        \"input\",\n+        \"json\",\n+        \"true\",\n+        \"false\",\n+        \"none\",\n+        \"required\",\n+        \"found\",\n+        \"such\",\n+        \"directory\",\n+        \"usage\",\n+        \"error\",\n+        \"errors\",\n+        \"warning\",\n+        \"please\",\n+        \"reason\",\n         \"existing\",\n         \"compares\",\n         \"compare\",\n@@ -530,7 +556,9 @@ def field_blind_spots(field_failures: dict | None, keywords: dict[str, list[str]\n     seen: set[str] = set()\n     items: list[dict] = []\n     for failure in field_failures.get(\"blind_spots\", []):\n-        text = f\"{failure.get('command', '')} {failure.get('excerpt', '')}\".strip()\n+        # The output, not the command: command text is full of paths and\n+        # repository names that would name topics after folders.\n+        text = f\"{failure.get('kind', '')}: {failure.get('excerpt', '')}\".strip(\": \")\n         if not text or text in seen:\n             continue\n         if policy_mod.classify_finding(text, keywords) is not None:\n",
+  "diff_truncated": false,
+  "diff_chars": 1505
+}

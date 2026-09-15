@@ -1,0 +1,21 @@
+{
+  "id": "round-033",
+  "round": 33,
+  "source_sha": "b102abbe7702a739a8d0aadebe36dd923c009f80",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-14T21:50:17.187547+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `main()`: `--out-policy docs/improvement-policy-history.jsonl` passes the write guard. When a revision occurs, the script appends its history entry, then overwrites the entire history with the policy JSON. This destroys rollback snapshots and breaks subsequent history loading. Enforce separate, role-specific destinations before writing.",
+      "topic": null
+    },
+    {
+      "finding": "**[P2]** `scripts/render-rsi-dashboard.py`, `trigger_chart()`: History entries\u2019 `version` values are interpolated directly into SVG markup without validation or escaping. A supplied `--history` file containing a version such as `</text><script>alert(1)</script><text>` produces executable markup in the dashboard. Escape these values at interpolation and validate history metadata.",
+      "topic": null
+    }
+  ],
+  "expected_topics": [],
+  "diff": "diff --git a/.github/workflows/revise-improvement-policy.yml b/.github/workflows/revise-improvement-policy.yml\nindex 3d223fd2..ce1cb335 100644\n--- a/.github/workflows/revise-improvement-policy.yml\n+++ b/.github/workflows/revise-improvement-policy.yml\n@@ -147,7 +147,11 @@ jobs:\n           git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/\n           git commit -m \"chore(rsi): ${ACTION} of the improvement policy (v${version})\"\n           git push --force origin \"$branch\"\n-          existing_pr=$(gh pr list --head \"$branch\" --state open --json number --jq '.[0].number // empty')\n+          # Same-repository PRs only: `--head` matches by branch name alone, so\n+          # a fork PR using this branch name must not be mistaken for the\n+          # bot's own proposal (Codex review of PR #10, round 19).\n+          existing_pr=$(gh pr list --head \"$branch\" --base \"$default_branch\" --state open \\\n+            --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')\n           if [ -n \"$existing_pr\" ]; then\n             gh pr comment \"$existing_pr\" --body \"Superseded by a newer archive round at \\`${SOURCE_SHA}\\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version}).\"\n             echo \"Updated the open proposal PR #$existing_pr in place.\"\n",
+  "diff_truncated": false,
+  "diff_chars": 1374
+}

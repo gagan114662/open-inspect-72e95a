@@ -1,0 +1,17 @@
+{
+  "id": "round-013",
+  "round": 13,
+  "source_sha": "6977b69e6d2475f859358b5577c30f308c0a41fb",
+  "target": "PR #6 diff",
+  "occurred_at": "2026-09-14T18:11:29.917655+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** In `pull-request-analytics-store.ts`, the review query checks titles but never restricts `spawn_source`. A user or automation session titled `GitHub: Review PR #18` therefore increments the GitHub review metrics without being a bot review. Add `spawn_source = 'github-bot'` and test that matching titles from other sources are excluded.",
+      "topic": null
+    }
+  ],
+  "expected_topics": [],
+  "diff": "diff --git a/packages/control-plane/src/db/analytics-dashboard-store.test.ts b/packages/control-plane/src/db/analytics-dashboard-store.test.ts\nindex 83f490cc..235e16cb 100644\n--- a/packages/control-plane/src/db/analytics-dashboard-store.test.ts\n+++ b/packages/control-plane/src/db/analytics-dashboard-store.test.ts\n@@ -36,8 +36,10 @@ describe(\"AnalyticsDashboardStore\", () => {\n     });\n \n     expect(batch).toHaveBeenCalledTimes(1);\n-    expect(statements).toHaveLength(12);\n-    expect(batchedStatements).toHaveLength(12);\n+    // 13, not 12: PullRequestAnalyticsStore.prepare() now includes the\n+    // reviewSessions-by-repo query alongside the original 7 PR statements.\n+    expect(statements).toHaveLength(13);\n+    expect(batchedStatements).toHaveLength(13);\n     expect(batchedStatements.every((statement) => statements.includes(statement))).toBe(true);\n     expect(response).toMatchObject({\n       generatedAt: 1_700_000_000_000,\n",
+  "diff_truncated": false,
+  "diff_chars": 939
+}

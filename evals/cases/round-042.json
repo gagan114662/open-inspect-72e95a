@@ -1,0 +1,27 @@
+{
+  "id": "round-042",
+  "round": 42,
+  "source_sha": "c4556709b8c91b1d83a7696e764036f91495c273",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-14T22:50:36.693276+00:00",
+  "expected": [
+    {
+      "finding": "**[P1]** [codex-review.yml:118](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/.github/workflows/codex-review.yml:118) executes PR-controlled Python outside the sandbox. Running `python3 -m pip` from the checkout loads a root-level `pip.py` supplied by the PR. That code can install hooks to capture credentials in later steps or tamper with review processing. A reproduction executed the substitute module successfully. Use `python3 -I -m pip` from a trusted directory.",
+      "topic": "credential-redaction"
+    },
+    {
+      "finding": "**[P2]** [measure-policy-validity.py:205](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/measure-policy-validity.py:205) retains the old evidence collector in the documented refresh path. `--repo-dir \u2026 --save-evidence \u2026` searches all matching tool results, including successful file reads, without checking execution failures. Following the workflow\u2019s refresh instructions therefore replaces the failure-based snapshot with potentially echoed review text, affecting validity and weight decisions. Route refreshes through the failure miner and update the documented commands.",
+      "topic": null
+    },
+    {
+      "finding": "**[P2]** [mine-trace-failures.py:186](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:186) mistakes displayed exit-code text for an actual failed execution. A successful Bash result containing an example transcript with `Exit code 1` and `HTTP 401 Unauthorized` is classified as an authentication failure. Reading logs or fixtures can consequently fabricate field evidence and trigger policy changes. Use execution-status metadata or a reliably distinguished tool wrapper instead of searching arbitrary output.",
+      "topic": null
+    }
+  ],
+  "expected_topics": [
+    "credential-redaction"
+  ],
+  "diff": "diff --git a/scripts/mine-trace-failures.py b/scripts/mine-trace-failures.py\nindex f2dd7357..090634ea 100644\n--- a/scripts/mine-trace-failures.py\n+++ b/scripts/mine-trace-failures.py\n@@ -63,7 +63,8 @@ EXCERPT_CHARS = 160\n FAILURE_PATTERNS: dict[str, re.Pattern[str]] = {\n     \"traceback\": re.compile(r\"Traceback \\(most recent call last\\)\"),\n     \"nonzero-exit\": re.compile(r\"^Exit code [1-9]\\d*\", re.M),\n-    \"test-failure\": re.compile(r\"\\b\\d+ failed\\b|^FAILED \", re.M),\n+    # \"0 failed\" is a pass; only a positive count is a failure.\n+    \"test-failure\": re.compile(r\"\\b[1-9]\\d* failed\\b|^FAILED \", re.M),\n     \"permission\": re.compile(\n         r\"Permission denied|EACCES|denied by the .* classifier|Operation not permitted\"\n     ),\ndiff --git a/scripts/mine_trace_failures_test.py b/scripts/mine_trace_failures_test.py\nindex c7168452..7cd71b26 100644\n--- a/scripts/mine_trace_failures_test.py\n+++ b/scripts/mine_trace_failures_test.py\n@@ -308,3 +308,20 @@ def test_same_output_from_different_commands_are_distinct_failures(monkeypatch):\n     evidence = mine.build_evidence(failures, keywords, \"/repo\", None)\n     assert [t[\"id\"] for t in evidence[\"topics\"][\"archive-branch\"]] == [\"t1\"]\n     assert [t[\"id\"] for t in evidence[\"topics\"][\"credential-redaction\"]] == [\"t1\"]\n+\n+\n+def test_zero_failed_is_not_a_test_failure():\n+    passing = {\n+        \"type\": \"tool_result\",\n+        \"toolName\": \"Bash\",\n+        \"status\": \"error\",\n+        \"output\": \"Exit code 1\\n10 passed, 0 failed\",\n+    }\n+    assert mine.failure_kind(passing) == \"nonzero-exit\"\n+    failing = {\n+        \"type\": \"tool_result\",\n+        \"toolName\": \"Bash\",\n+        \"status\": \"error\",\n+        \"output\": \"Exit code 1\\n2 failed, 8 passed\",\n+    }\n+    assert mine.failure_kind(failing) == \"test-failure\"\n",
+  "diff_truncated": false,
+  "diff_chars": 1774
+}

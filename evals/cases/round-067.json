@@ -1,0 +1,24 @@
+{
+  "id": "round-067",
+  "round": 67,
+  "source_sha": "022424e8238ddb0d85d246242bad398a671b46af",
+  "target": "PR #45 diff",
+  "occurred_at": "2026-09-15T15:31:13.638031+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** **Generation can overwrite or delete handwritten files.** [distill-skills.py:165](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill-skills.py:165) overwrites existing files without checking ownership: a valid topic named `README` replaces `README.md`. Cleanup also deletes any Markdown file containing the footer substring\u2014even documentation quoting that footer. Both cases reproduced. Reject collisions with handwritten files and identify generated files using a strict marker.",
+      "topic": "shell-semantics"
+    },
+    {
+      "finding": "**[P2]** **The workflow regenerates Markdown that violates repository formatting.** [distill-skills.py:123](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill-skills.py:123) emits long, unwrapped prose, while `.prettierrc` requires wrapping at 100 columns. The new workflow commits this output directly, undoing the checked-in wrapping and creating formatting churn. Subsequent CI runs that execute `format:check` will flag these files. Format generated output or exclude it from Prettier.",
+      "topic": "archive-branch"
+    }
+  ],
+  "expected_topics": [
+    "archive-branch",
+    "shell-semantics"
+  ],
+  "diff": "diff --git a/scripts/distill_skills_test.py b/scripts/distill_skills_test.py\nindex e56f144b..b2305e19 100644\n--- a/scripts/distill_skills_test.py\n+++ b/scripts/distill_skills_test.py\n@@ -98,7 +98,7 @@ def test_topic_names_cannot_escape_the_output_directory(tmp_path, monkeypatch):\n     policy_path.write_text(json.dumps(policy))\n     archive = tmp_path / \"archive.jsonl\"\n     archive.write_text(\"\")\n-    monkeypatch.setattr(policy_mod, \"validate_policy\", lambda p: None)  # bypass to reach the guard\n+    monkeypatch.setattr(policy_mod, \"validate_policy\", lambda _p: None)  # bypass to reach the guard\n     out = tmp_path / \"skills\"\n     with pytest.raises(ValueError, match=\"safe filename\"):\n         distill.main([\"d\", str(archive), \"--policy\", str(policy_path), \"--out-dir\", str(out)])\n",
+  "diff_truncated": false,
+  "diff_chars": 789
+}

@@ -1,0 +1,23 @@
+{
+  "id": "round-072",
+  "round": 72,
+  "source_sha": "cc9846d8b28c0cd6b5630b64089765e21410b56f",
+  "target": "PR #56 diff",
+  "occurred_at": "2026-09-15T16:00:07.156533+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** The new Markdown regex has quadratic runtime on unmatched opening brackets ([line 327](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:327)). Each `[` causes another scan of the remaining input. Tokenizing 8,000, 16,000, and 32,000 brackets took 0.228, 0.899, and 3.600 seconds respectively. Long findings can stall policy revision; the existing long-word test misses this case. Use a linear scanner and test unmatched delimiters.",
+      "topic": "credential-redaction"
+    },
+    {
+      "finding": "**[P2]** Punctuation stripping breaks recognition of `.github` paths ([line 304](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:304)). Removing the leading dot prevents matching the `.github` directory root. Consequently, `.github/actions` and `.github/CODEOWNERS` leak location tokens: two findings containing either path produce an `actions` or `codeowners` topic. Preserve leading dots when normalizing paths.",
+      "topic": "credential-redaction"
+    }
+  ],
+  "expected_topics": [
+    "credential-redaction"
+  ],
+  "diff": "diff --git a/scripts/revise-improvement-policy.py b/scripts/revise-improvement-policy.py\nindex 19b98d13..49e5d07b 100644\n--- a/scripts/revise-improvement-policy.py\n+++ b/scripts/revise-improvement-policy.py\n@@ -305,7 +305,9 @@ def is_location(word: str) -> bool:\n     w = _LINE_REF_RE.sub(\"\", w)\n     if not w:\n         return False\n-    if w.startswith((\"http://\", \"https://\", \"/\", \"./\", \"../\", \"~/\")):\n+    if \"http://\" in w or \"https://\" in w:\n+        return True  # a URL glued to other characters is still a URL\n+    if w.startswith((\"/\", \"./\", \"../\", \"~/\")):\n         return True\n     segments = w.split(\"/\")\n     if any(seg.endswith(_LOCATION_EXTENSIONS) for seg in segments):\n@@ -322,7 +324,13 @@ MAX_BACKGROUND_SHARE = 0.2\n MIN_BACKGROUND_OCCURRENCES = 10\n \n \n+_MARKDOWN_LINK_RE = re.compile(r\"\\[([^\\]]*)\\]\\(([^)]*)\\)\")\n+\n+\n def tokenize(text: str) -> set[str]:\n+    # A markdown link keeps its text and drops its target: the target is a\n+    # location by definition (Codex review of PR #56, round 4).\n+    text = _MARKDOWN_LINK_RE.sub(r\"\\1 \", text)\n     text = \" \".join(w for w in text.lower().split() if not is_location(w))\n     return {\n         tok.strip(\"-_\")\ndiff --git a/scripts/revise_improvement_policy_test.py b/scripts/revise_improvement_policy_test.py\nindex 9e3a8303..542657bc 100644\n--- a/scripts/revise_improvement_policy_test.py\n+++ b/scripts/revise_improvement_policy_test.py\n@@ -1588,3 +1588,12 @@ def test_location_detection_handles_punctuation_line_ranges_and_prose_with_many_\n     assert {\"deadlock\", \"livelock\", \"starvation\"} <= revise.tokenize(\n         \"deadlock/livelock/starvation in the pool\"\n     )\n+\n+\n+def test_markdown_links_keep_their_text_and_drop_their_target():\n+    toks = revise.tokenize(\n+        \"see [details](https://github.com/acme/project/pull/42) and [x](scripts/a.py) for deadlock\"\n+    )\n+    assert {\"details\", \"deadlock\"} <= toks\n+    assert not ({\"github\", \"acme\", \"project\", \"pull\", \"scripts\"} & toks)\n+    assert revise.is_location(\"details](https://github.com/acme/x)\")\n",
+  "diff_truncated": false,
+  "diff_chars": 2032
+}

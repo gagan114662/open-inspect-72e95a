@@ -1,0 +1,28 @@
+{
+  "id": "round-043",
+  "round": 43,
+  "source_sha": "e065954b5a540fdf7897c3e238b52ea34865a39f",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-14T23:06:38.860008+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** Failure labels suppress field blind spots. In [revise-improvement-policy.py:561](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:561), prepending `tool-error` makes otherwise unclassified failures match the shell topic\u2019s `-e` keyword. A reproduction produced five collector blind spots, zero reviser blind spots, and no revision. Classify the failure content before adding descriptive labels.",
+      "topic": "shell-semantics"
+    },
+    {
+      "finding": "**[P2]** Evidence refreshes discard older definitions of reused topic names. [measure-policy-validity.py:150](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/measure-policy-validity.py:150) retains only one definition per name. Mining can generate `archive-branch` with different keyword lists after a rollback. Refreshing then loses the earlier definition, making its evidence unknown during ancestor comparisons. Preserve evidence by name and definition, or prevent historical name reuse.",
+      "topic": "archive-branch"
+    },
+    {
+      "finding": "**[P2]** Clean reviews cannot advance the policy evaluation period. The new gate in [revise-improvement-policy.py:669](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:669) requires two stamped rounds, but `archive-round.py` discards reviews without findings. Two successful clean reviews still leave the counter at zero, blocking subsequent field-driven revisions indefinitely if reviews remain clean. Persist completed clean rounds with their policy stamps.",
+      "topic": "archive-branch"
+    }
+  ],
+  "expected_topics": [
+    "archive-branch",
+    "shell-semantics"
+  ],
+  "diff": "diff --git a/.github/workflows/archive-and-recommend.yml b/.github/workflows/archive-and-recommend.yml\nindex fc306370..2227a8ba 100644\n--- a/.github/workflows/archive-and-recommend.yml\n+++ b/.github/workflows/archive-and-recommend.yml\n@@ -59,7 +59,12 @@ on:\n     types: [completed]\n   push:\n     branches: [main]\n-    paths: [\"docs/self-improvement-archive.jsonl\"]\n+    paths:\n+      - \"docs/self-improvement-archive.jsonl\"\n+      # A revised policy (new topic, restored weight) can cross the\n+      # mechanism-fix threshold on the existing archive; re-evaluate then\n+      # too (Codex review of PR #10, round 31).\n+      - \"docs/improvement-policy.json\"\n \n permissions:\n   contents: write\ndiff --git a/scripts/revise-improvement-policy.py b/scripts/revise-improvement-policy.py\nindex 8e8641a7..ab3d128d 100644\n--- a/scripts/revise-improvement-policy.py\n+++ b/scripts/revise-improvement-policy.py\n@@ -842,7 +842,14 @@ def main(argv: list[str]) -> int:\n \n     if args.out_json:\n         policy_mod.assert_safe_output(\n-            args.out_json, inputs=[args.archive_path, args.measurement, args.policy, args.history]\n+            args.out_json,\n+            inputs=[\n+                args.archive_path,\n+                args.measurement,\n+                args.policy,\n+                args.history,\n+                args.field_failures,\n+            ],\n         )\n     entries = measure_mod.load_archive(args.archive_path)\n     policy = policy_mod.load_policy(args.policy)\ndiff --git a/scripts/revise_improvement_policy_test.py b/scripts/revise_improvement_policy_test.py\nindex 69f558c6..ce6c3480 100644\n--- a/scripts/revise_improvement_policy_test.py\n+++ b/scripts/revise_improvement_policy_test.py\n@@ -883,6 +883,36 @@ def test_rollback_check_does_not_clobber_full_archive_coverage():\n     assert decision[\"action\"] == \"revise\" or \"coverage\" in decision[\"reason\"]\n \n \n+def test_out_json_may_not_overwrite_the_field_failures_input(tmp_path):\n+    archive = tmp_path / \"archive.jsonl\"\n+    archive.write_text(\"\\n\".join(json.dumps(e) for e in _archive()) + \"\\n\")\n+    policy_path = tmp_path / \"policy.json\"\n+    policy_path.write_text(json.dumps(policy_mod.builtin_policy()))\n+    m_path = tmp_path / \"m.json\"\n+    m_path.write_text(json.dumps(measure.measure(_archive(), policy_mod.builtin_policy(), None)))\n+    failures = tmp_path / \"failures.json\"\n+    failures.write_text(json.dumps({\"blind_spots\": []}))\n+    with pytest.raises(PermissionError, match=\"input of this run\"):\n+        revise.main(\n+            [\n+                \"r\",\n+                str(archive),\n+                \"--measurement\",\n+                str(m_path),\n+                \"--policy\",\n+                str(policy_path),\n+                \"--history\",\n+                str(tmp_path / \"h.jsonl\"),\n+                \"--field-failures\",\n+                str(failures),\n+                \"--dry-run\",\n+                \"--out-json\",\n+                str(failures),\n+            ]\n+        )\n+    assert json.loads(failures.read_text()) == {\"blind_spots\": []}\n+\n+\n def test_accepted_revision_never_regresses_validity():\n     policy = _four_topic_policy([0.5, 1, 1, 1])\n     measurement = measure.measure(_four_topic_archive(), policy, _four_topic_evidence([3, 1, 3, 1]))\n",
+  "diff_truncated": false,
+  "diff_chars": 3239
+}

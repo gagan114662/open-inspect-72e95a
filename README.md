@@ -131,6 +131,7 @@ tools/             the scripts it can call (a test keeps the registry in sync wi
 skills/            one playbook per policy topic, distilled from the review archive
 channels/          where it talks: pull requests, issues, Codex review comments
 schedules/         when it runs on its own: hourly, and after every review
+evals/             the archive as an eval set, and the scores of each grader
 ```
 
 Nothing here is a second implementation: every file points at the scripts and workflows that already

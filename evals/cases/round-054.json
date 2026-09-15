@@ -1,0 +1,24 @@
+{
+  "id": "round-054",
+  "round": 54,
+  "source_sha": "c37f576869c974780bc3e3ac9328fa57793491fe",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-15T01:34:00.166188+00:00",
+  "expected": [
+    {
+      "finding": "**[P1]** Credential redaction leaks short-option passwords and quoted values. In [improvement_policy.py:108](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/improvement_policy.py:108), the flag regex omits `-p` and stops at whitespace inside quotes. A synthetic trace retained `-pFAKE_PASSWORD_123` unchanged and turned `--password [REDACTED]` into `--password [REDACTED]`. These excerpts can reach workflow logs and mined policy evidence. Handle short credential options and redact entire quoted values before exporting trace text.",
+      "topic": "credential-redaction"
+    },
+    {
+      "finding": "**[P2]** Rollback history compares coverage from different datasets. In [revise-improvement-policy.py:724](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:724), `coverage_before` uses the current policy\u2019s own rounds, while `coverage_after` uses the entire archive. A reproduction recorded **0.50 \u2192 0.33**, although the restored policy scored **1.00** on those same rounds. This makes history and dashboard regression statistics misleading. Record both figures over the same rounds and label any whole-archive figures separately.",
+      "topic": "archive-branch"
+    }
+  ],
+  "expected_topics": [
+    "archive-branch",
+    "credential-redaction"
+  ],
+  "diff": "diff --git a/scripts/improvement_policy.py b/scripts/improvement_policy.py\nindex 36f3e4ca..76c4aad3 100644\n--- a/scripts/improvement_policy.py\n+++ b/scripts/improvement_policy.py\n@@ -99,14 +99,15 @@ VALID_ORIGINS = frozenset({\"init\", \"revision\", \"rollback\"})\n # is pushed (Codex review of PR #10, round 38).\n _SECRET_SHAPES: [REDACTED] ...] = (\n     re.compile(r\"(?i)\\b([a-z][a-z0-9+.-]*://[^/\\s:@]+:)[^@\\s]+@\"),  # scheme://user:[REDACTED]@\n-    re.compile(r\"(?i)\\b(bearer\\s+)[a-z0-9._~+/=-]{8,}\"),\n-    re.compile(r\"(?i)\\b(authorization\\s*[:=]\\s*)\\S+\"),\n+    re.compile(r\"(?i)\\b((?:bearer|basic|token|digest)\\s+)[a-z0-9._~+/=-]{8,}\"),\n+    # The whole header value, scheme included (round 41).\n+    re.compile(r\"(?i)\\b(authorization\\s*[:=]\\s*[\\\"']?(?:[a-z]+\\s+)?)[^\\s\\\"']+\"),\n     re.compile(\n         r\"(?i)\\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\\s*[=:]\\s*[\\\"']?)[^\\s\\\"']{4,}\"\n     ),\n     # Command-line flags: --password [REDACTED] --token=[REDACTED] -p [REDACTED] (round 40).\n     re.compile(\n-        r\"(?i)(--?(?:[a-z0-9-]*)(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\\b(?:\\s+|=))[^\\s\\\"']{4,}\"\n+        r\"(?i)(--?(?:[a-z0-9-]*)(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\\b(?:\\s+|=)[\\\"']?)[^\\s\\\"']{4,}\"\n     ),\n     # Quoted JSON/YAML fields: {\"password\": \"[REDACTED]\"} (round 39).\n     re.compile(\ndiff --git a/scripts/improvement_policy_test.py b/scripts/improvement_policy_test.py\nindex 1e24194e..ab81313c 100644\n--- a/scripts/improvement_policy_test.py\n+++ b/scripts/improvement_policy_test.py\n@@ -188,3 +188,12 @@ def test_scrub_secrets_covers_command_line_flag_forms():\n     assert \"FAKE_FLAG_PW\" not in out and \"FAKE_TOK_1234\" not in out\n     assert \"--user admin\" in out and \"--host db\" in out\n     assert scrub(\"git --no-pager log --oneline -3\") == \"git --no-pager log --oneline -3\"\n+\n+\n+def test_scrub_secrets_covers_basic_auth_and_quoted_flag_values():\n+    scrub = improvement_policy.scrub_secrets\n+    out = scrub(\"curl -H 'Authorization: [REDACTED] [REDACTED]' https://api; HTTP 401\")\n+    assert \"[REDACTED]\" not in out and \"HTTP 401\" in out\n+    out = scrub('tool --api-key [REDACTED] --region us; token [REDACTED] rejected')\n+    assert \"FAKE_QUOTED_KEY_1\" not in out and \"FAKEBARE_TOKEN_22\" not in out\n+    assert \"--region us\" in out\n",
+  "diff_truncated": false,
+  "diff_chars": 2391
+}

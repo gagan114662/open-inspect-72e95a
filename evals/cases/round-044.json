@@ -1,0 +1,23 @@
+{
+  "id": "round-044",
+  "round": 44,
+  "source_sha": "0621dd6c2b40e9ab1138bf4005cdf90095249702",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-14T23:18:08.606513+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** [archive-round.py:109](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/archive-round.py:109) now treats unsuccessful reviews as clean rounds. The workflow also posts comments for crashes, timeouts, and missing credentials; these contain no findings and now receive a policy stamp. They incorrectly count toward the policy\u2019s evaluation period. Once archived, SHA deduplication also discards a successful retry\u2019s findings. Require an explicit completed-review status before archiving an empty round.",
+      "topic": "credential-redaction"
+    },
+    {
+      "finding": "**[P2]** [revise-improvement-policy.py:434](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:434) overwrites evidence counts belonging to another keyword definition. When the current policy resolves a topic through `name@old`, its count is exposed under the plain topic name. Overlaying that onto `anchor_evidence` replaces the plain name\u2019s distinct count while retaining its original definition. Evaluating another policy then uses mismatched evidence, potentially producing incorrect acceptance or rollback decisions. Resolve each candidate topic directly against the evidence-wide definitions and counts.",
+      "topic": "credential-redaction"
+    }
+  ],
+  "expected_topics": [
+    "credential-redaction"
+  ],
+  "diff": "diff --git a/docs/plans/recursive-meta-improvement.md b/docs/plans/recursive-meta-improvement.md\nindex fccbaf73..322eb948 100644\n--- a/docs/plans/recursive-meta-improvement.md\n+++ b/docs/plans/recursive-meta-improvement.md\n@@ -87,12 +87,16 @@ should fail the suite, not wait for a reviewer.\n    undated traces in historical epochs are _unknown_, never zero.\n 3. **Evidence outlives the topic.** Refreshes keep searching every topic any recorded policy version\n    ever had, and candidates are judged against the evidence-wide counts, so a rolled-back topic\n-   keeps the adverse evidence that stops it being re-mined on the same archive and snapshot.\n+   keeps the adverse evidence that stops it being re-mined on the same archive and snapshot. A name\n+   reused with different keywords keeps every definition (older ones under `name@tag` keys), and\n+   each policy version is judged on the evidence searched with its own keywords.\n 4. **Measurements are pinned.** A decision refuses a measurement whose policy hash or archive digest\n    differs from what it is deciding on; topic order is part of the hash.\n 5. **Rounds are stamped.** Each archived round records the policy version and hash that decided it;\n    a revision is judged only on rounds stamped with its own version and hash, and no further\n-   revision is layered on one that has not yet run for `MIN_ROUNDS_TO_JUDGE` rounds.\n+   revision is layered on one that has not yet run for `MIN_ROUNDS_TO_JUDGE` rounds. Clean reviews\n+   are archived as rounds with no findings, so a policy that eliminates findings still accumulates\n+   the rounds needed to judge it.\n 6. **Ancestry is followed through rollbacks.** Rollback compares the current policy with every\n    unjudged ancestor, following a rollback to the ancestry of the version it restored, and rolls\n    back to the best-scoring ancestor; the recorded coverage is the restored policy's own.\n",
+  "diff_truncated": false,
+  "diff_chars": 1909
+}

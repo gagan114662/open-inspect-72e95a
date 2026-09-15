@@ -1,0 +1,28 @@
+{
+  "id": "round-038",
+  "round": 38,
+  "source_sha": "87898d2d68f27ab4731b6e025885b64b233c234b",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-14T22:21:42.929925+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** Rollback evaluates rounds from before the revision. In [revise-improvement-policy.py:541](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:541), policy stamps only control the waiting period; the comparison still uses the entire evidence-covered archive. A reproduction rolled back a revision whose validity improved from \u22120.866 to +0.866 on its own rounds because older rounds made the combined signal constant. Filter the evaluation set by the revision\u2019s version and hash before comparing policies.",
+      "topic": "archive-branch"
+    },
+    {
+      "finding": "**[P2]** History coverage values can inject HTML into the dashboard. [render-rsi-dashboard.py:347](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/render-rsi-dashboard.py:347) interpolates `fmt()` results without escaping, and history loading does not validate their types. Setting `coverage_before` to an HTML event-handler payload and `coverage_after` to `null` produces raw executable markup. Escape formatted values and validate numeric history fields.",
+      "topic": null
+    },
+    {
+      "finding": "**[P2]** The command timeout exhausts the entire job budget. [codex-review.yml:230](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/.github/workflows/codex-review.yml:230) allows Codex 900 seconds while the job allows only 15 minutes, including checkout and installation. A stalled review therefore reaches job cancellation before the command\u2019s timeout handler, bypassing controlled redaction and failure-status reporting. Shorten the command timeout or increase the job budget.",
+      "topic": "credential-redaction"
+    }
+  ],
+  "expected_topics": [
+    "archive-branch",
+    "credential-redaction"
+  ],
+  "diff": "diff --git a/.github/workflows/codex-review.yml b/.github/workflows/codex-review.yml\nindex 9efa3444..e589164d 100644\n--- a/.github/workflows/codex-review.yml\n+++ b/.github/workflows/codex-review.yml\n@@ -49,7 +49,13 @@ concurrency:\n jobs:\n   codex-review:\n     name: Codex independent review\n-    runs-on: ubuntu-latest\n+    # ubuntu-22.04, not ubuntu-latest: Codex's Linux sandbox is bubblewrap,\n+    # which needs an unprivileged user namespace to build its network\n+    # namespace. Ubuntu 24.04 images ship with AppArmor restricting that\n+    # (`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`), which\n+    # is why every earlier review reported its shell failing to start. 22.04\n+    # images predate the restriction, so the full sandbox starts unchanged.\n+    runs-on: ubuntu-22.04\n     timeout-minutes: 15\n     steps:\n       # persist-credentials: false \u2014 this job's own GITHUB_TOKEN\n",
+  "diff_truncated": false,
+  "diff_chars": 905
+}

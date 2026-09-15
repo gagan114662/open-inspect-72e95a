@@ -1,0 +1,27 @@
+{
+  "id": "round-017",
+  "round": 17,
+  "source_sha": "9ce0abe6b06a2540283afdd958b2520cb80f1a52",
+  "target": "PR #10 diff",
+  "occurred_at": "2026-09-14T20:05:27.350747+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`: **Undefined candidate validity passes the acceptance rule.** Reweighting is rejected only when both scores are non-null. For recurrence `[2,1,1,1,1]` and anchor counts `[0,1,2,3,4]`, discounting the first topic changes validity from approximately `-0.7071` to `None`, because weighted recurrence becomes constant. The revision is accepted, subsequent validity triggers stop firing, and the rollback comparison also skips it. Reject candidates that turn a defined validity score into an undefined one.",
+      "topic": null
+    },
+    {
+      "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`: **The early return prevents corroborated topics from regaining weight.** Restoration runs only when coverage or validity is below its threshold. A topic recurring in four rounds with weight `0.5` can have perfect rank agreement with newly corroborating evidence, yet remain below the mechanism threshold (`2 < 3`) indefinitely. Evaluate supported weight restorations before returning for healthy scores, retaining the non-regression check.",
+      "topic": null
+    },
+    {
+      "finding": "**[P2]** `.github/workflows/revise-improvement-policy.yml`, measurement step: **Configuring the Traces key never enables evidence collection.** Neither measurement command supplies `--repo-dir`; both ignore the installed CLI and key. With the committed empty snapshot, automated validity remains null regardless of new working-session evidence, disabling validity-driven revision and rollback. Add an explicit refresh path using the configured repository scope when a key is available.",
+      "topic": "archive-branch"
+    }
+  ],
+  "expected_topics": [
+    "archive-branch"
+  ],
+  "diff": "diff --git a/docs/plans/recursive-meta-improvement.md b/docs/plans/recursive-meta-improvement.md\nindex 10cc6215..89076f3e 100644\n--- a/docs/plans/recursive-meta-improvement.md\n+++ b/docs/plans/recursive-meta-improvement.md\n@@ -76,11 +76,11 @@ archive:\n \n Measured against the archive as of round 10 with policy v1: coverage 0.61, anchor empty (no working\n sessions for this repository are indexed in Traces yet). The rule fired on coverage and proposed v2:\n-one mined topic covering 5 of the 11 blind-spot findings, coverage 0.61 \u2192 0.79 (the remaining blind\n-spots are single-occurrence findings no bounded rule may claim). A second pass under v2 proposes\n-nothing. With the verifier's own review sessions counted as the anchor, validity reads 0.95: the\n-number agrees with the review signal because it _is_ the review signal, which is why the default\n-excludes them.\n+one mined topic covering 8 of the 11 blind-spot findings, coverage 0.61 \u2192 0.89 (the remaining three\n+are single-occurrence findings no bounded rule may claim). A second pass under v2 proposes nothing.\n+With the verifier's own review sessions counted as the anchor, validity reads 0.95: the number\n+agrees with the review signal because it _is_ the review signal, which is why the default excludes\n+them.\n \n Reproduce:\n \n",
+  "diff_truncated": false,
+  "diff_chars": 1289
+}

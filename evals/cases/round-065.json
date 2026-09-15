@@ -1,0 +1,28 @@
+{
+  "id": "round-065",
+  "round": 65,
+  "source_sha": "fd1e17881ede203fad825b3cbe6c97b4f1fb8832",
+  "target": "PR #49 diff",
+  "occurred_at": "2026-09-15T15:24:20.248151+00:00",
+  "expected": [
+    {
+      "finding": "**[P1]** Concurrent archive updates can be silently lost. The rebuild job uses a different concurrency group from `analyze`, but both force-push the same branches. If `analyze` publishes a new round after the rebuild reads the branch, the [unconditional force-push](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/.github/workflows/archive-and-recommend.yml:345) deletes that round. Reproduced locally. Coordinate both writers or use explicit expected-SHA leases with refetch-and-merge retries in both paths.",
+      "topic": "archive-branch"
+    },
+    {
+      "finding": "**[P2]** The query does not enumerate every open archive PR. [`gh pr list`](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/.github/workflows/archive-and-recommend.yml:328) defaults to 30 results, and the archive-branch filter runs afterward. Older archive PRs can remain conflicted indefinitely, even when fewer than 30 archive PRs exist. Paginate the complete result set.",
+      "topic": "archive-branch"
+    },
+    {
+      "finding": "**[P2]** A redundant archive branch aborts the remaining rebuilds. When all its rounds already exist on main, but main contains additional rounds, the comparison against the standing archive permits rebuilding. After resetting to main, [the commit](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/.github/workflows/archive-and-recommend.yml:344) has no changes and exits 1; `set -e` stops the entire loop. Reproduced locally. Handle an empty staged diff explicitly and continue processing subsequent branches.",
+      "topic": "shell-semantics"
+    }
+  ],
+  "expected_topics": [
+    "archive-branch",
+    "shell-semantics"
+  ],
+  "diff": "diff --git a/.github/workflows/archive-and-recommend.yml b/.github/workflows/archive-and-recommend.yml\nindex ec3626a3..4eeee292 100644\n--- a/.github/workflows/archive-and-recommend.yml\n+++ b/.github/workflows/archive-and-recommend.yml\n@@ -289,6 +289,64 @@ jobs:\n               console.log(`Opened tracking issue for topic \"${item.topic}\".`);\n             }\n \n+  rebuild-archive-branches:\n+    name: Rebuild open archive branches on the merged archive\n+    runs-on: ubuntu-latest\n+    if: github.event_name == 'push'\n+    # When one archive PR merges, every other open archive-rounds-pr-* branch\n+    # still claims the round number that just landed and shows a conflict\n+    # that would never clear (its own PR may already be merged, so no review\n+    # run will rebuild it). Rebuild each on the new default branch with\n+    # scripts/merge-archive-rounds.py; a branch that would not change is\n+    # left alone.\n+    permissions:\n+      contents: write\n+      pull-requests: read\n+    concurrency:\n+      group: archive-and-recommend-rebuild\n+      cancel-in-progress: false\n+    steps:\n+      - name: Checkout (default branch \u2014 trusted)\n+        uses: actions/checkout@v4\n+        with:\n+          fetch-depth: 0\n+\n+      - name: Set up Python\n+        uses: actions/setup-python@v5\n+        with:\n+          python-version: \"3.12\"\n+\n+      - name: Rebuild each open archive branch\n+        env:\n+          GH_TOKEN: ${{ github.token }}\n+        run: |\n+          set -euo pipefail\n+          git config user.name \"github-actions[bot]\"\n+          git config user.email \"[REDACTED][bot]@users.noreply.github.com\"\n+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)\n+          : > \"$RUNNER_TEMP/empty.jsonl\"\n+          for branch in $(gh pr list --state open --base \"$default_branch\" \\\n+              --json headRefName,isCrossRepository \\\n+              --jq '.[] | select(.isCrossRepository == false) | .headRefName | select(startswith(\"archive-rounds-pr-\"))'); do\n+            git fetch origin \"$branch\"\n+            git show FETCH_HEAD:docs/self-improvement-archive.jsonl > \"$RUNNER_TEMP/standing.jsonl\" || : > \"$RUNNER_TEMP/standing.jsonl\"\n+            python3 scripts/merge-archive-rounds.py \\\n+              docs/self-improvement-archive.jsonl \"$RUNNER_TEMP/standing.jsonl\" \\\n+              \"$RUNNER_TEMP/empty.jsonl\" \"$RUNNER_TEMP/merged.jsonl\" > \"$RUNNER_TEMP/merge-result.json\"\n+            if cmp -s \"$RUNNER_TEMP/merged.jsonl\" \"$RUNNER_TEMP/standing.jsonl\"; then\n+              echo \"$branch: already on the current archive.\"\n+              continue\n+            fi\n+            rounds=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))[\"rounds\"]))' \"$RUNNER_TEMP/merge-result.json\")\n+            git checkout -B \"$branch\" \"origin/$default_branch\"\n+            cp \"$RUNNER_TEMP/merged.jsonl\" docs/self-improvement-archive.jsonl\n+            git add docs/self-improvement-archive.jsonl\n+            git commit -m \"chore: archive ${rounds} review round(s) (rebuilt on the current default branch)\"\n+            git push --force origin \"$branch\"\n+            git checkout -q \"origin/$default_branch\"\n+            echo \"$branch: rebuilt with ${rounds} round(s).\"\n+          done\n+\n   reevaluate-on-merge:\n     name: Re-evaluate thresholds after an archive-round PR merges\n     runs-on: ubuntu-latest\n",
+  "diff_truncated": false,
+  "diff_chars": 3369
+}
