@@ -174,51 +174,57 @@ jobs:
           SOURCE_SHA: ${{ steps.fetch-comment.outputs.head-sha }}
           PR_NUMBER: ${{ steps.fetch-comment.outputs.pr-number }}
         run: |
+          set -euo pipefail
           if git diff --quiet -- docs/self-improvement-archive.jsonl; then
             echo "No archive changes to propose (already processed, or no findings)."
             exit 0
           fi
 
-          branch="archive-round-${SOURCE_SHA:0:12}"
+          # ONE standing branch per reviewed pull request, rebuilt from the
+          # default branch on every run by scripts/merge-archive-rounds.py:
+          # the default branch's archive, then the rounds this branch already
+          # holds, then this round, renumbered in order and identified by the
+          # reviewed commit. Fifty reviews of one PR in a day are fifty lines
+          # in one PR, never fifty PRs, and the branch never needs "Update
+          # branch" because it is always the default branch plus lines.
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          branch="archive-rounds-pr-${PR_NUMBER}"
+          tail -n 1 docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/new-round.jsonl"
+          git checkout -- docs/self-improvement-archive.jsonl
+          if git fetch origin "$branch" 2>/dev/null; then
+            git show FETCH_HEAD:docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/standing.jsonl" || : > "$RUNNER_TEMP/standing.jsonl"
+          else
+            : > "$RUNNER_TEMP/standing.jsonl"
+          fi
+          python3 scripts/merge-archive-rounds.py \
+            docs/self-improvement-archive.jsonl "$RUNNER_TEMP/standing.jsonl" \
+            "$RUNNER_TEMP/new-round.jsonl" "$RUNNER_TEMP/merged.jsonl" > "$RUNNER_TEMP/merge-result.json"
+          cat "$RUNNER_TEMP/merge-result.json"
+          if [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["changed"])' "$RUNNER_TEMP/merge-result.json")" != "True" ]; then
+            echo "The standing branch already holds this round — nothing to push."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -B "$branch"
+            cp "$RUNNER_TEMP/merged.jsonl" docs/self-improvement-archive.jsonl
+            git add docs/self-improvement-archive.jsonl
+            rounds=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["rounds"]))' "$RUNNER_TEMP/merge-result.json")
+            git commit -m "chore: archive ${rounds} review round(s) of PR #${PR_NUMBER}"
+            git push --force origin "$branch"
+          fi
 
-          # Idempotency: a prior run may have already opened this exact PR
-          # (e.g. a rerun of this workflow for the same review comment).
-          existing_pr=$(gh pr list --head "$branch" --json number --jq '.[0].number // empty')
+          # Same-repository PRs only (a fork branch of the same name is not ours).
+          existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+            --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           if [ -n "$existing_pr" ]; then
-            echo "PR #$existing_pr already proposes this round — skipping."
+            echo "PR #$existing_pr carries PR #${PR_NUMBER}'s archived rounds; updated in place."
             exit 0
           fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Real finding from a Codex review of this exact step: pushing the
-          # branch before calling `gh pr create`, then swallowing a create
-          # failure, left a remote branch with no open PR on a prior partial
-          # failure. A retry then generated a NEW commit (a fresh
-          # occurred_at timestamp) and tried to push it to that same
-          # branch -- rejected as non-fast-forward, blocking both PR
-          # creation and the tracking-issue step below on every subsequent
-          # run. Fix: only create+push the branch if it doesn't already
-          # exist remotely; if it does (a prior run got as far as pushing
-          # but not as far as opening the PR), reuse it as-is and retry
-          # just the PR creation. Also no longer swallows a genuine
-          # creation failure -- a failed step is a truthful signal that
-          # something needs attention, not something to paper over.
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            echo "Remote branch $branch already exists with no open PR — a prior run likely pushed it but failed before creating the PR. Retrying PR creation against the existing branch without re-pushing."
-          else
-            git checkout -b "$branch"
-            git add docs/self-improvement-archive.jsonl
-            git commit -m "chore: archive round from PR #${PR_NUMBER} review"
-            git push origin "$branch"
-          fi
-
           gh pr create \
-            --title "chore: archive round from PR #${PR_NUMBER} review" \
-            --body "Automatically proposed by [\`archive-and-recommend.yml\`](../blob/main/.github/workflows/archive-and-recommend.yml) after the Codex review on PR #${PR_NUMBER} (commit \`${SOURCE_SHA}\`). This is an append-only audit-log entry — no code or workflow behavior changes. A human still reviews and merges it, same as every other change in this repo." \
+            --title "chore: archive review rounds of PR #${PR_NUMBER}" \
+            --body "Automatically proposed by [\`archive-and-recommend.yml\`](../blob/main/.github/workflows/archive-and-recommend.yml): every Codex review of PR #${PR_NUMBER} appends one round here (latest: commit \`${SOURCE_SHA}\`). Append-only audit-log entries — no code or workflow behavior changes. Rebuilt from the default branch on every run, so it never needs updating; a human still reviews and merges it, same as every other change in this repo." \
             --label "self-improvement-archive" \
-            --base "$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)" \
+            --base "$default_branch" \
             --head "$branch"
 
       - name: Open a tracking issue for each newly-crossed topic
