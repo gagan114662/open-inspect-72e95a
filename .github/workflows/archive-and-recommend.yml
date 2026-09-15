@@ -543,14 +543,23 @@ jobs:
           branch="tool-proposals"
           withdraw_stale_pr() {
             # A standing proposal PR whose topics are no longer eligible is
-            # withdrawn, not left open (Codex review of PR #61, finding 2).
+            # withdrawn, not left open (Codex review of PR #61, finding 2),
+            # but only when the branch holds nothing else: human changes
+            # outside the drafts (notes, fixes) stay on an open PR and an
+            # intact branch until a person merges or closes it (Codex review
+            # of PR #61, round 12).
             local stale_pr
             stale_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
               --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
-            if [ -n "$stale_pr" ]; then
+            if [ -z "$stale_pr" ]; then
+              return 0
+            fi
+            if git diff --quiet "origin/$default_branch" HEAD; then
               gh pr close "$stale_pr" --delete-branch \
                 --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
               echo "Closed the stale tool-proposal PR #$stale_pr."
+            else
+              echo "::notice::No tool proposals remain, but $branch still differs from $default_branch (human changes). PR #$stale_pr stays open for a person to merge or close."
             fi
           }
           git config user.name "github-actions[bot]"
@@ -656,6 +665,13 @@ jobs:
             --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           if [ -n "$existing_pr" ]; then
             echo "The open tool-proposal PR #$existing_pr tracks $branch."
+            exit 0
+          fi
+          if git diff --quiet "origin/$default_branch" HEAD; then
+            # The drafts are already on the default branch (a merged
+            # proposal): there is nothing to propose and `gh pr create`
+            # would fail on an empty diff (Codex review of PR #61, round 12).
+            echo "$branch has no changes against $default_branch; nothing to propose."
             exit 0
           fi
           gh pr create \

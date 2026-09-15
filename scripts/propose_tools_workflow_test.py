@@ -353,3 +353,51 @@ def test_a_symlinked_proposals_folder_on_the_branch_is_refused(tmp_path):
     run = _run_step(ws2, env, tmp_path)
     assert run.returncode != 0, "a planted output link must fail the job loudly"
     assert not (ws2 / "scripts" / "shell-semantics").exists()
+
+
+def test_withdrawal_keeps_a_branch_that_holds_human_changes(tmp_path):
+    """Codex review of PR #61, round 12: withdrawal counted draft folders
+    only, so when the last draft became ineligible a branch with unmerged
+    human notes was closed and deleted."""
+    origin, seed, env = _first_run(tmp_path)
+    human = _human_clone(tmp_path, origin, env)
+    (human / "proposals" / "NOTES.md").write_text("human notes\n")
+    _git(human, "add", "-A", env=env)
+    _git(human, "commit", "-q", "-m", "notes", env=env)
+    _git(human, "push", "-q", "origin", "tool-proposals", env=env)
+    _advance_main(
+        seed,
+        env,
+        {
+            "tools/manifest.json": json.dumps(
+                {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+            )
+        },
+    )
+    ws2 = tmp_path / "ws2"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws2), env=env)
+    run = _run_step(ws2, env, tmp_path, {"GH_OPEN_PR": "41"})
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "closed" not in (tmp_path / "gh.log").read_text(), "the PR with human work was closed"
+    assert "human changes" in run.stdout
+    _git(ws2, "fetch", "-q", "origin", env=env)
+    tree = _git(ws2, "ls-tree", "-r", "--name-only", "origin/tool-proposals", env=env)
+    assert "proposals/NOTES.md" in tree and "shell-semantics" not in tree
+
+
+def test_already_merged_proposals_do_not_open_an_empty_pr(tmp_path):
+    """Codex review of PR #61, round 12: after a proposal merged, its
+    folders sit on main; a later archive update that leaves the drafts
+    unchanged reached `gh pr create` with an empty diff and failed."""
+    origin, seed, env = _first_run(tmp_path)
+    # Merge the proposal branch into main, as a human would.
+    _git(seed, "fetch", "-q", "origin", env=env)
+    _git(seed, "merge", "-q", "--no-edit", "origin/tool-proposals", env=env)
+    _git(seed, "push", "-q", "origin", "main", env=env)
+    (tmp_path / "gh.log").unlink(missing_ok=True)
+    ws2 = tmp_path / "ws2"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws2), env=env)
+    run = _run_step(ws2, env, tmp_path)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "nothing to propose" in run.stdout
+    assert not (tmp_path / "gh.log").exists() or "created" not in (tmp_path / "gh.log").read_text()
