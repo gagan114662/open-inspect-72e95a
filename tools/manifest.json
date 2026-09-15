@@ -64,6 +64,22 @@
       "writes": []
     },
     {
+      "name": "build_evals",
+      "script": "scripts/build-evals.py",
+      "purpose": "Turn archived review rounds into eval cases: the reviewed diff (scrubbed) plus the findings as expected outcomes.",
+      "inputs": ["archive path", "--policy", "--out-dir"],
+      "writes": ["evals/cases/*.json"],
+      "covers": []
+    },
+    {
+      "name": "run_evals",
+      "script": "scripts/run-evals.py",
+      "purpose": "Score a reviewer on the eval cases: keyword baseline (no model) or codex exec; recall of expected topics per case.",
+      "inputs": ["--cases", "--grader keywords|codex", "--limit"],
+      "writes": ["evals/results/*.json"],
+      "covers": []
+    },
+    {
       "name": "replay_policy_history",
       "script": "scripts/replay-policy-history.py",
       "purpose": "Judge every policy version out of sample: coverage and validity on rounds archived after the version existed.",

@@ -97,20 +97,29 @@ VALID_ORIGINS = frozenset({"init", "revision", "rollback"})
 # that reaches a report, a log, or the policy's `mined_from` evidence passes
 # through scrub_secrets first, because a proposal PR is public the moment it
 # is pushed (Codex review of PR #10, round 38).
+# `name = value` where the name says credential. In prose and command output
+# any value is suspect; in source code the value is usually an expression
+# (`token_count = len(items)`), so the source variant below only redacts
+# quoted string literals (Codex review of PR #72, finding 3).
+_ASSIGNMENT_SHAPE = re.compile(
+    r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
+)
+_LITERAL_ASSIGNMENT_SHAPE = re.compile(
+    r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"(?:\\.|[^\"\\]){8,}\"|'(?:\\.|[^'\\]){8,}')"
+)
+# Command-line flags: --password VALUE, --token=VALUE, -p VALUE, -pVALUE,
+# and whole quoted values with spaces (rounds 40-42).
+_FLAG_SHAPE = re.compile(
+    r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-[pa])(?:\s+|=)?)"
+    r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
+)
 _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s]+@"),  # scheme://user:PASS@
     re.compile(r"(?i)\b((?:bearer|basic|token|digest)\s+)[a-z0-9._~+/=-]{8,}"),
     # The whole header value, scheme included (round 41).
     re.compile(r"(?i)\b(authorization\s*[:=]\s*[\"']?(?:[a-z]+\s+)?)[^\s\"']+"),
-    re.compile(
-        r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*)(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
-    ),
-    # Command-line flags: --password VALUE, --token=VALUE, -p VALUE, -pVALUE,
-    # and whole quoted values with spaces (rounds 40-42).
-    re.compile(
-        r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-[pa])(?:\s+|=)?)"
-        r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
-    ),
+    _ASSIGNMENT_SHAPE,
+    _FLAG_SHAPE,
     # curl-style user:password arguments, attached or not, quoted or not:
     # -u user:PASS, -uuser:PASS, --user 'user:PASS WITH SPACES' (rounds 43-44).
     re.compile(
@@ -135,15 +144,127 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
 )
 
 
-def scrub_secrets(text: str) -> str:
+def scrub_secrets(text: str, shapes: tuple[re.Pattern[str], ...] = _SECRET_SHAPES) -> str:
     """Replace credential-shaped substrings with [REDACTED], keeping the
     surrounding words so the failure stays classifiable."""
-    for pattern in _SECRET_SHAPES:
+    for pattern in shapes:
         if not pattern.groups:
             text = pattern.sub("[REDACTED]", text)
         else:
             text = pattern.sub(_redact_match, text)
     return text
+
+
+# Source code is redacted with the same shapes except the two that treat any
+# bare word after `name =` / `--flag` as a secret: in code those are usually
+# expressions and variable references. In their place, a value whose NAME says
+# credential is redacted whatever its shape or length (quoted `'demo123'`,
+# YAML `password: samplepass`, `--password "samplepass"`, `--token=tok1`),
+# while an expression (`len(items)`, `request.headers.get(...)`), a number, a
+# keyword (None/true/null) or a `$reference` after such a name survives
+# (Codex review of PR #72, findings 3 and round-3 2).
+_CREDENTIAL_WORD = (
+    r"(?:password|passwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key"
+    r"|auth|credential|bearer)"
+)
+_SOURCE_BARE_VALUE = (
+    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)(?!\d+(?:\.\d+)?(?![\w.]))"
+    r"[^\s\"'(\[{,;)}\]]+(?![\w(\[.])"
+)
+# The value of a CREDENTIAL-named assignment or flag: numbers are secrets
+# too (`password = 123456`), only expressions, references and literals such
+# as None/true survive (Codex review of PR #72, round 5).
+# A bare value followed by `=` is a type annotation (`token_count: int =
+# len(items)`), not a credential (Codex review of PR #72, round 7).
+_SOURCE_CREDENTIAL_VALUE = (
+    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)[^\s\"'(\[{,;)}\]]+(?![\w(\[.])(?!\s*=)"
+)
+# String literals a credential can hide in: triple-quoted first (a
+# `"""..."""` is not an empty `""`), then single-line quoted (Codex review
+# of PR #72, round 6).
+_SOURCE_QUOTED_VALUE = (
+    # Triple-quoted literals span lines (Codex review of PR #72, round 7).
+    r"\"\"\"(?:(?!\"\"\")[\s\S])*\"\"\"|"
+    r"'''(?:(?!''')[\s\S])*'''"
+    r"|\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'"
+)
+# A type annotation between a credential name and its `=`:
+# `const password: string = "x"`, `api_key: str = "x"`. The annotation is
+# kept and the VALUE redacted; without it the annotation itself was taken
+# for the value (Codex review of PR #72, round 7).
+_SOURCE_TYPE_ANNOTATION = r"\s*:\s*[\w\[\]<>|?.]+(?:\s*[|,]\s*[\w\[\]<>|?.]+)*\s*=\s*"
+# A Python string prefix (`r"…"`, `b'…'`, `rb"…"`, `f"…"`) is part of the
+# literal's syntax, not a bare value: it stays, the literal goes (Codex
+# review of PR #72, round 8).
+_SOURCE_STRING_PREFIX = r"(?:[rRbBuUfF]{1,2}(?=[\"']))?"
+_SOURCE_ASSIGNMENT_SHAPE = re.compile(
+    # `self.password`, `config.api_key`, `settings['db'].secret`: an attribute
+    # or item prefix before the credential name is still that credential; so
+    # is a quoted key, `config["password"] =` or `{"password":` (round 6).
+    r"(?i)(?<![\w.])((?:[\w\[\]\"']+\.)*[\"']?[a-z0-9_]*"
+    + _CREDENTIAL_WORD
+    + r"[a-z0-9_]*[\"']?\]?(?:"
+    + _SOURCE_TYPE_ANNOTATION
+    + r"|\s*[=:]\s*)"
+    + _SOURCE_STRING_PREFIX
+    + r")"
+    # A lone `|` or `>` is a YAML block indicator, handled by the block
+    # shape above, not a value.
+    r"((?![|>][-+]?[ \t]*(?:\n|$))(?:"
+    + _SOURCE_QUOTED_VALUE
+    + r"|"
+    + _SOURCE_CREDENTIAL_VALUE
+    + r"))"
+)
+# A YAML block scalar under a credential key (`password: |` or `>`): every
+# following line indented deeper than the key is the value. Runs before the
+# assignment shape, which would otherwise take the `|` for the value and
+# leave the block untouched (Codex review of PR #72, round 8).
+# Each line may start with one unified-diff marker (`+`, `-` or a space):
+# build_case() scrubs diffs, not files, and a patch adding `password: |`
+# kept its block (Codex review of PR #72, round 9). The first block line's
+# marker is kept in front of the redaction so the hunk stays a hunk.
+# When the key line carries a `+`/`-` marker every block line must carry
+# exactly one marker too (`+`, `-` or the context space), so a following
+# context line such as ` replicas: 3` is never mistaken for an indented
+# block line. A context key line's own space reads as indentation.
+_SOURCE_YAML_BLOCK_SHAPE = re.compile(
+    r"(?im)^(?P<keep>(?P<mark>[+\-])?(?P<indent>[ \t]*)[\"']?[a-z0-9_-]*"
+    + _CREDENTIAL_WORD
+    + r"[a-z0-9_-]*[\"']?\s*:\s*[|>][-+]?[ \t]*\n(?(mark)[+\- ]|))"
+    r"(?P=indent)[ \t]+[^\n]*(?:\n(?(mark)[+\- ]|)(?P=indent)[ \t]+[^\n]*)*"
+)
+# Short credential flags (`-a samplepass`, `-p VALUE`, `-pVALUE`, as in
+# redis-cli / mysql) kept their redaction in the prose scrubber; the source
+# scrubber must keep it too (Codex review of PR #72, round 4).
+# `-a`/`-p` need a separator; the glued `-pVALUE` form only after a space,
+# so a removed diff line `-api_key: >` or `-password: x` is not read as a
+# short flag with a glued value (Codex review of PR #72, round 9).
+_SOURCE_SHORT_FLAG_SHAPE = re.compile(
+    r"((?:(?<!\S)-[pa](?:\s+|=)|(?<=[ \t])-p(?=\S)))"
+    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|(?!-)" + _SOURCE_CREDENTIAL_VALUE + r")"
+)
+_SOURCE_FLAG_SHAPE = re.compile(
+    r"(?i)((?<!\S)--?[a-z0-9-]*" + _CREDENTIAL_WORD + r"\b(?:\s+|=))"
+    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|(?!\$)(?!-)[^\s\"']+)"
+)
+_SOURCE_SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
+    _SOURCE_YAML_BLOCK_SHAPE,
+    *(
+        _SOURCE_ASSIGNMENT_SHAPE
+        if p is _ASSIGNMENT_SHAPE
+        else _SOURCE_FLAG_SHAPE
+        if p is _FLAG_SHAPE
+        else p
+        for p in _SECRET_SHAPES
+    ),
+    _SOURCE_SHORT_FLAG_SHAPE,
+)
+
+
+def scrub_source_secrets(text: str) -> str:
+    """scrub_secrets for source code and diffs: expressions survive."""
+    return scrub_secrets(text, _SOURCE_SECRET_SHAPES)
 
 
 def _redact_match(m: re.Match[str]) -> str:
@@ -360,6 +481,27 @@ PROTECTED_OUTPUT_FILES: tuple[str, ...] = (
     "docs/improvement-policy.json",
     "docs/improvement-policy-history.jsonl",
 )
+# Paths whose contents ARE the eval answers (expected findings, the archive
+# the cases were built from, generated playbooks and proposals). Never in the
+# reviewer's working directory, never in a case's diff (Codex review of PR
+# #72, rounds 5 and 7).
+EVAL_ANSWER_PATHS: tuple[str, ...] = (
+    "evals",
+    "docs/self-improvement-archive.jsonl",
+    # The policy and its history quote archived findings (`mined_from`), so
+    # they are answers too (Codex review of PR #72, round 8).
+    "docs/improvement-policy.json",
+    "docs/improvement-policy-history.jsonl",
+    "docs/rsi",
+    "skills",
+    "proposals",
+)
+
+
+def is_answer_path(path: str) -> bool:
+    return any(path == a or path.startswith(a + "/") for a in EVAL_ANSWER_PATHS)
+
+
 # The committed field anchors: only a deliberate evidence refresh may write
 # them, never a report or decision output (Codex review of PR #10, round 15).
 CANONICAL_EVIDENCE_FILES: tuple[str, ...] = (

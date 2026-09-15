@@ -1,0 +1,558 @@
+{
+  "grader": "keywords",
+  "policy_version": 3,
+  "policy_hash": "11e8243663fa",
+  "ran_at": "2026-09-15T21:32:25+00:00",
+  "summary": {
+    "cases": 40,
+    "errors": 0,
+    "mean_recall": 0.9625,
+    "per_topic_recall": {
+      "archive-branch": 1.0,
+      "auth-lifecycle": 0.75,
+      "credential-redaction": 1.0,
+      "env-var-precedence": 1.0,
+      "fork-pr-permissions": 1.0,
+      "shell-semantics": 0.6667
+    }
+  },
+  "results": [
+    {
+      "id": "round-009",
+      "round": 9,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-012",
+      "round": 12,
+      "expected_topics": [
+        "auth-lifecycle"
+      ],
+      "found_topics": [],
+      "recall": 0.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-014",
+      "round": 14,
+      "expected_topics": [
+        "archive-branch",
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "archive-branch",
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-015",
+      "round": 15,
+      "expected_topics": [
+        "archive-branch",
+        "credential-redaction",
+        "env-var-precedence"
+      ],
+      "found_topics": [
+        "archive-branch",
+        "credential-redaction",
+        "env-var-precedence"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-016",
+      "round": 16,
+      "expected_topics": [
+        "archive-branch",
+        "auth-lifecycle",
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "archive-branch",
+        "auth-lifecycle",
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-017",
+      "round": 17,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-019",
+      "round": 19,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-020",
+      "round": 20,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-021",
+      "round": 21,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-022",
+      "round": 22,
+      "expected_topics": [
+        "archive-branch",
+        "auth-lifecycle"
+      ],
+      "found_topics": [
+        "archive-branch",
+        "auth-lifecycle"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-025",
+      "round": 25,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-029",
+      "round": 29,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-032",
+      "round": 32,
+      "expected_topics": [
+        "fork-pr-permissions"
+      ],
+      "found_topics": [
+        "fork-pr-permissions"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-036",
+      "round": 36,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-039",
+      "round": 39,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-043",
+      "round": 43,
+      "expected_topics": [
+        "archive-branch",
+        "shell-semantics"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 0.5,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-044",
+      "round": 44,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-050",
+      "round": 50,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-051",
+      "round": 51,
+      "expected_topics": [
+        "auth-lifecycle",
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "auth-lifecycle",
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-052",
+      "round": 52,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-053",
+      "round": 53,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-055",
+      "round": 55,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-056",
+      "round": 56,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-057",
+      "round": 57,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-059",
+      "round": 59,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-060",
+      "round": 60,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-061",
+      "round": 61,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-064",
+      "round": 64,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-065",
+      "round": 65,
+      "expected_topics": [
+        "archive-branch",
+        "shell-semantics"
+      ],
+      "found_topics": [
+        "archive-branch",
+        "shell-semantics"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-066",
+      "round": 66,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-067",
+      "round": 67,
+      "expected_topics": [
+        "archive-branch",
+        "shell-semantics"
+      ],
+      "found_topics": [
+        "archive-branch",
+        "shell-semantics"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-069",
+      "round": 69,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-072",
+      "round": 72,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-074",
+      "round": 74,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-076",
+      "round": 76,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-078",
+      "round": 78,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-091",
+      "round": 91,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-098",
+      "round": 98,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-099",
+      "round": 99,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-101",
+      "round": 101,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    }
+  ]
+}

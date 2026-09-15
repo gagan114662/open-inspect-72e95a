@@ -1,0 +1,843 @@
+"""Tests for build-evals.py and run-evals.py."""
+
+import importlib.util
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def _load(name, filename):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).parent / filename)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+build = _load("build_evals", "build-evals.py")
+run = _load("run_evals", "run-evals.py")
+policy_mod = sys.modules["improvement_policy"]
+KW = policy_mod.topic_keywords(policy_mod.builtin_policy())
+
+
+def _entries():
+    return [
+        {
+            "round": 1,
+            "source_sha": "aaa",
+            "findings": ["[P1] leaked credential token FAKE_TOK_1 in log"],
+        },
+        {"round": 2, "source_sha": "bbb", "findings": ["[P2] pipefail missing; bash -e trap"]},
+        {"round": 3, "source_sha": "gone", "findings": ["[P2] whatever"]},
+        {"round": 4, "findings": ["[P2] no sha"]},
+    ]
+
+
+def _diffs(sha):
+    return {"aaa": "+ print(token)\n+ token = 'FAKE_TOK_1'\n", "bbb": "+ set -uo pipefail\n"}.get(
+        sha
+    )
+
+
+def _diffs_with_base(sha):
+    diff = _diffs(sha)
+    return ("base", diff) if diff is not None else None
+
+
+def test_build_makes_one_case_per_reachable_round_and_scrubs_secrets():
+    cases, skipped = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    assert [c["id"] for c in cases] == ["round-001", "round-002"] and skipped == 2
+    assert cases[0]["expected_topics"] == ["credential-redaction"]
+    assert "FAKE_TOK_1" not in json.dumps(cases[0])
+
+
+def test_keyword_grader_measures_what_a_prepush_check_could_catch():
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    r1 = run.grade_keywords(cases[0], KW)
+    r2 = run.grade_keywords(cases[1], KW)
+    assert r1["recall"] == 1.0, "the diff mentions 'token'"
+    assert r2["recall"] == 1.0, "the diff mentions 'pipefail'"
+    summary = run.summarize([r1, r2])
+    assert summary["cases"] == 2 and summary["mean_recall"] == 1.0
+
+
+def test_codex_grader_scores_recall_from_the_reviewers_json():
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+
+    def reviewer_labels_other(_prompt):
+        return (
+            '{"findings": [{"topic": "other", "summary": "A secret token is printed to the log."}]}'
+        )
+
+    def reviewer_babbles(_prompt):
+        return "not json at all"
+
+    result = run.grade_codex(cases[0], KW, reviewer_labels_other)
+    assert result["recall"] == 1.0, (
+        "an 'other' finding still counts when its summary classifies under the topic"
+    )
+    # Prose instead of the documented JSON is a reviewer that did not review
+    # (Codex review of PR #72, round 3, finding 5), not an empty review.
+    babbled = run.grade_codex(cases[1], KW, reviewer_babbles)
+    assert babbled["status"] == "error" and babbled["recall"] is None
+
+
+def test_main_writes_a_result_file_outside_protected_paths(tmp_path):
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    cases_dir = tmp_path / "cases"
+    cases_dir.mkdir()
+    for c in cases:
+        (cases_dir / f"{c['id']}.json").write_text(json.dumps(c))
+    out = tmp_path / "results"
+    assert run.main(["r", "--cases", str(cases_dir), "--out", str(out), "--limit", "1"]) == 0
+    written = list(out.glob("keywords-*.json"))
+    assert len(written) == 1 and json.loads(written[0].read_text())["summary"]["cases"] == 1
+
+
+# ── Codex review of PR #72 ───────────────────────────────────────────────────
+
+
+def _git(repo, *args):
+    import os
+    import subprocess
+
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@x",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@x",
+            "PATH": os.environ["PATH"],
+        },
+    ).stdout.strip()
+
+
+def _repo_with_a_merged_branch(tmp_path):
+    """main: A; branch: B, C (two files); merge commit M on main."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "a.txt").write_text("a\n")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "A")
+    a = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-qb", "feature")
+    (repo / "first.py").write_text("token_count = len(items)\n")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "B")
+    (repo / "second.py").write_text("print(token_count)\n")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "C")
+    c = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "M", "feature")
+    return repo, a, c
+
+
+def test_case_diff_covers_the_whole_reviewed_branch_not_just_the_last_commit(tmp_path):
+    """Finding 1: the review ran on `origin/main...HEAD`; a case built from
+    `HEAD~1..HEAD` alone contains only the last commit's change."""
+    repo, base, head = _repo_with_a_merged_branch(tmp_path)
+    found_base, diff = build.reviewed_diff(head, repo=repo, main_ref="main")
+    assert found_base == base
+    assert "first.py" in diff and "second.py" in diff
+    # A commit that sits on main's own first-parent line has no recoverable
+    # reviewed base: the case is built but is not scorable.
+    assert build.reviewed_diff(base, repo=repo, main_ref="main") == (None, None)
+
+
+def test_a_round_without_a_recoverable_base_is_kept_but_not_scorable():
+    entries = [{"round": 7, "source_sha": "onmain", "findings": ["[P2] leaked token FAKE_1"]}]
+    cases, skipped = build.build(entries, KW, lambda _sha: (None, None), 60_000)
+    assert skipped == 0 and cases[0]["scorable"] is False
+    assert "base" in cases[0]["not_scorable_reason"]
+    assert run.load_cases_from(cases) == [], "the runner skips non-scorable cases"
+
+
+def _patch(path, body):
+    return f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1 @@\n+{body}\n"
+
+
+def test_truncation_keeps_the_files_the_findings_reference_or_marks_the_case_unscorable():
+    """Finding 2: a truncated diff must still contain every file an expected
+    finding talks about, otherwise recall on it is meaningless."""
+    big = _patch("noise.txt", "x" * 500)
+    small = _patch("scripts/thing.py", "token = read()")
+    entry = {"round": 1, "source_sha": "s", "findings": ["[P2] scripts/thing.py leaks the token"]}
+    # The referenced file comes after 500 chars of noise; a naive prefix cut
+    # would drop it. Referenced files are kept first, whole.
+    case = build.build_case(entry, "base", big + small, KW, max_diff_chars=len(small) + 10)
+    assert case["diff_truncated"] is True and case["scorable"] is True
+    assert "scripts/thing.py" in case["diff"] and "noise.txt" not in case["diff"]
+    assert case["omitted_files"] == ["noise.txt"]
+    # When even the referenced file does not fit, the case is not scorable.
+    case = build.build_case(entry, "base", big + small, KW, max_diff_chars=20)
+    assert case["scorable"] is False and "scripts/thing.py" in case["not_scorable_reason"]
+    # Findings that name no file give nothing to check: a truncated case is
+    # then not scorable either.
+    vague = {"round": 2, "source_sha": "s", "findings": ["[P2] the token leaks somewhere"]}
+    case = build.build_case(vague, "base", big + small, KW, max_diff_chars=len(small) + 10)
+    assert case["scorable"] is False
+
+
+def test_referenced_files_keep_dot_directories_and_ignore_runner_paths():
+    refs = build.referenced_files(
+        [
+            "In `.github/workflows/archive-and-recommend.yml` the marker is last.",
+            "[scripts/distill-skills.py:52](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill-skills.py:52) fails.",
+            "See ./docs/plan.md too.",
+        ]
+    )
+    assert refs == [
+        ".github/workflows/archive-and-recommend.yml",
+        "scripts/distill-skills.py",
+        "docs/plan.md",
+    ]
+
+
+def test_source_scrubbing_keeps_expressions_and_removes_real_secrets():
+    """Finding 3: `token_count = len(items)` is code, not a credential."""
+    src = "\n".join(
+        [
+            "token_count = len(items)",
+            "auth = request.headers.get('Authorization')",
+            'GITHUB_TOKEN = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"',
+            "password = 'hunter2hunter2hunter2'",
+        ]
+    )
+    out = build.scrub_source(src)
+    assert "token_count = len(items)" in out
+    assert "auth = request.headers.get('Authorization')" in out
+    assert "ghp_ABC" not in out and "hunter2" not in out
+    assert "[REDACTED]" in out
+
+
+def test_reviewer_execution_failure_is_an_error_not_zero_recall():
+    """Finding 4: a reviewer that could not run (auth failure, exit 1) has
+    not reviewed anything; its case must not count as recall 0."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+
+    def reviewer_cannot_run(_prompt):
+        return run.ReviewerRun(text="", returncode=1, stderr="not logged in")
+
+    result = run.grade_codex(cases[0], KW, reviewer_cannot_run)
+    assert result["status"] == "error" and result["recall"] is None
+    assert "not logged in" in result["error"]
+    summary = run.summarize([result, run.grade_keywords(cases[1], KW)])
+    assert summary["errors"] == 1 and summary["cases"] == 1 and summary["mean_recall"] == 1.0
+
+
+def test_a_finding_labelled_with_a_valid_topic_is_credited_once():
+    """Finding 5: the keyword fallback exists for findings the reviewer
+    labelled `other`; a finding already filed under a valid topic must not
+    also be credited to a second topic its summary happens to mention."""
+    case = {
+        "id": "round-099",
+        "round": 99,
+        "expected_topics": ["fork-pr-permissions", "credential-redaction"],
+        "diff": "",
+        "scorable": True,
+    }
+
+    def reviewer(_prompt):
+        return (
+            '{"findings": [{"topic": "fork-pr-permissions", '
+            '"summary": "A fork PR cannot read the token secret, so credentials are missing."}]}'
+        )
+
+    result = run.grade_codex(case, KW, reviewer)
+    assert result["found_topics"] == ["fork-pr-permissions"] and result["recall"] == 0.5
+
+
+def test_source_scrubbing_redacts_credential_literals_of_any_shape_and_length():
+    """Codex review of PR #72, round 3, finding 2: `password = 'demo123'`,
+    YAML `password: samplepass` and `--password "samplepass"` survived the
+    source scrubber (8-char minimum, bare values excluded, flags dropped).
+    A value whose name says credential is redacted whatever its shape or
+    length; expressions and references still survive."""
+    src = "\n".join(
+        [
+            "password = 'demo123'",
+            "password: samplepass",
+            'run: deploy --password "samplepass" --token=tok1 --api-key abc',
+            "token_count = len(items)",
+            "timeout = 30",
+            "auth = request.headers.get('Authorization')",
+            "token: ${{ secrets.GITHUB_TOKEN }}",
+            "secret = None",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("demo123", "samplepass", "tok1", "--api-key abc"):
+        assert leaked not in out, out
+    for kept in (
+        "token_count = len(items)",
+        "timeout = 30",
+        "auth = request.headers.get('Authorization')",
+        "token: ${{ secrets.GITHUB_TOKEN }}",
+        "secret = None",
+    ):
+        assert kept in out, out
+    assert out.count("[REDACTED]") == 5
+
+
+def test_rebuilding_removes_obsolete_generated_cases_only(tmp_path):
+    """Codex review of PR #72, round 3, finding 3: a case whose round is no
+    longer produced (commit unreachable, entry removed) stayed on disk and
+    the runner kept scoring it."""
+    out_dir = tmp_path / "cases"
+    out_dir.mkdir()
+    (out_dir / "round-099.json").write_text('{"id": "round-099", "stale": true}')
+    (out_dir / "notes.md").write_text("human notes")
+    (out_dir / "round-001.json").write_text("{}")
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    removed = build.write_cases(cases, out_dir, inputs=[])
+    assert removed == ["round-099.json"]
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "notes.md",
+        "round-001.json",
+        "round-002.json",
+    ]
+    assert json.loads((out_dir / "round-001.json").read_text())["id"] == "round-001"
+
+
+def test_a_finding_naming_a_file_absent_from_the_diff_is_not_scorable_even_uncapped():
+    """Codex review of PR #72, round 3, finding 4: an uncapped diff was
+    scorable without checking the files the findings name, and the capped
+    path dropped absent references before validating them."""
+    entry = {"round": 1, "source_sha": "s", "findings": ["[P2] missing.py leaks the token"]}
+    diff = _patch("other.py", "token = read()")
+    case = build.build_case(entry, "base", diff, KW, max_diff_chars=60_000)
+    assert case["scorable"] is False and "missing.py" in case["not_scorable_reason"]
+    # The capped path validates the same way.
+    case = build.build_case(entry, "base", diff + _patch("noise.txt", "x" * 500), KW, 200)
+    assert case["scorable"] is False and "missing.py" in case["not_scorable_reason"]
+    # A present reference stays scorable on both paths.
+    present = {"round": 2, "source_sha": "s", "findings": ["[P2] other.py leaks the token"]}
+    assert build.build_case(present, "base", diff, KW, 60_000)["scorable"] is True
+
+
+def test_malformed_reviewer_output_is_an_error_not_an_empty_review():
+    """Codex review of PR #72, round 3, finding 5: non-JSON output became a
+    completed review with recall 0, and {"findings": null} raised TypeError
+    and aborted the run before results were saved."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    for bad in (
+        "I could not review this.",
+        '{"findings": null}',
+        '{"findings": [1, 2]}',
+        '{"nope": []}',
+    ):
+        result = run.grade_codex(cases[0], KW, lambda _p, bad=bad: bad)
+        assert result["status"] == "error" and result["recall"] is None, bad
+        assert "reviewer output" in result["error"], bad
+    ok = run.grade_codex(cases[0], KW, lambda _p: '{"findings": []}')
+    assert ok["status"] == "completed" and ok["recall"] == 0.0
+    summary = run.summarize([ok, run.grade_codex(cases[0], KW, lambda _p: "garbage")])
+    assert summary["errors"] == 1 and summary["cases"] == 1
+
+
+def test_source_scrubbing_keeps_redacting_short_credential_flags():
+    """Codex review of PR #72, round 4, finding 1: replacing the flag shape
+    dropped `-a VALUE`, `-p VALUE` and `-pVALUE`, so `redis-cli -a samplepass
+    PING` kept the password in a serialized eval case."""
+    src = "\n".join(
+        [
+            "redis-cli -a samplepass PING",
+            "mysql -u root -pS3cretPw mydb",
+            'mysql -p "quoted pass" mydb',
+            "ls -la /tmp",
+            "kubectl get pods -A",
+            "curl -a 8080",
+        ]
+    )
+    out = build.scrub_source(src)
+    assert "samplepass" not in out and "S3cretPw" not in out and "quoted pass" not in out
+    assert "redis-cli -a [REDACTED] PING" in out
+    assert "-u root -p[REDACTED] mydb" in out
+    assert "ls -la /tmp" in out, "an -l/-a combination is not a credential flag"
+    assert "kubectl get pods -A" in out, "flags followed by nothing are untouched"
+
+
+def test_source_scrubbing_covers_attribute_assignments_and_numeric_credentials():
+    """Codex review of PR #72, round 5, finding 1: `self.password = 'demo123'`,
+    `config.api_key = 'samplepass'` and `redis-cli -a 123456 PING` survived
+    (attribute boundary, numeric-value exemption). A credential-named
+    assignment or flag is redacted whatever precedes the name and even when
+    the value is a number; ordinary numeric settings and expressions stay."""
+    src = "\n".join(
+        [
+            "self.password = 'demo123'",
+            "config.api_key = 'samplepass'",
+            "settings['db'].secret = \"s3\"",
+            "password = 123456",
+            "redis-cli -a 123456 PING",
+            "mysql -p123456 db",
+            "deploy --token 987654",
+            "timeout = 30",
+            "port = 8080",
+            "retries: 3",
+            "token_count = len(items)",
+            "auth = request.headers.get('Authorization')",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("demo123", "samplepass", '"s3"', "123456", "987654"):
+        assert leaked not in out, leaked
+    assert "self.password = [REDACTED]" in out
+    assert "config.api_key = [REDACTED]" in out
+    assert "redis-cli -a [REDACTED] PING" in out
+    for kept in (
+        "timeout = 30",
+        "port = 8080",
+        "retries: 3",
+        "token_count = len(items)",
+        "auth = request.headers.get('Authorization')",
+    ):
+        assert kept in out, kept
+
+
+def test_reviewer_output_is_scrubbed_before_it_is_saved_or_printed(tmp_path, capsys, monkeypatch):
+    """Codex review of PR #72, round 5, finding 2: reviewer-controlled text
+    (failure messages, malformed output, finding summaries) reached the
+    result JSON and stdout unredacted."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    leak = "password=demo123"
+
+    def reviewer_fails(_prompt):
+        return run.ReviewerRun(text="", returncode=1, stderr=f"login failed: {leak}")
+
+    def reviewer_babbles(_prompt):
+        return run.ReviewerRun(text=f"sorry, {leak} is not json", returncode=0)
+
+    def reviewer_finds(_prompt):
+        return run.ReviewerRun(
+            text=json.dumps(
+                {"findings": [{"topic": "credential-redaction", "summary": f"leaks {leak}"}]}
+            ),
+            returncode=0,
+        )
+
+    for reviewer in (reviewer_fails, reviewer_babbles, reviewer_finds):
+        result = run.grade_codex(cases[0], KW, reviewer)
+        assert leak not in json.dumps(result), reviewer.__name__
+        assert "[REDACTED]" in json.dumps(result), reviewer.__name__
+    # main() prints and saves only scrubbed text (the real runner needs a
+    # commit to check out, so the case points at a temporary repository).
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    real_case = dict(cases[0], source_sha=_git(repo, "rev-parse", "HEAD"))
+    cases_dir = tmp_path / "cases"
+    cases_dir.mkdir()
+    (cases_dir / f"{cases[0]['id']}.json").write_text(json.dumps(real_case))
+    out = tmp_path / "results"
+    exit_code = run.main(
+        [
+            "r",
+            "--cases",
+            str(cases_dir),
+            "--out",
+            str(out),
+            "--grader",
+            "codex",
+            "--codex-bin",
+            str(
+                _fake_codex(
+                    tmp_path, f'{{"findings": [{{"topic": "other", "summary": "{leak}"}}]}}'
+                )
+            ),
+        ]
+    )
+    assert exit_code == 0
+    printed = capsys.readouterr().out
+    saved = next(out.glob("codex-*.json")).read_text()
+    assert leak not in printed and leak not in saved
+    assert "[REDACTED]" in saved
+
+
+REPO_CHECK_MESSAGE = "Not inside a trusted directory and --skip-git-repo-check was not specified."
+
+
+def _fake_codex(tmp_path, reply, require="either"):
+    """A stand-in `codex` binary: records its cwd, writes `reply` to -o.
+    Like the real CLI it refuses to run outside a git repository unless
+    `--skip-git-repo-check` is passed (Codex review of PR #72, round 6):
+    `require` narrows that to "git" (a .git in cwd) or "flag" only."""
+    binary = tmp_path / "fake-codex"
+    binary.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, sys, subprocess\n"
+        "args = sys.argv[1:]\n"
+        f"require = {require!r}\n"
+        "has_flag = '--skip-git-repo-check' in args\n"
+        "in_repo = os.path.isdir('.git')\n"
+        "ok = {'either': has_flag or in_repo, 'git': in_repo, 'flag': has_flag}[require]\n"
+        "if not ok:\n"
+        f"    sys.stderr.write({REPO_CHECK_MESSAGE!r})\n"
+        "    sys.exit(1)\n"
+        "out = args[args.index('-o') + 1]\n"
+        "log = subprocess.run(['git', 'log', '--oneline'], capture_output=True, text=True)\n"
+        f"open({str(tmp_path / 'git-log.txt')!r}, 'w').write(log.stdout if log.returncode == 0 else 'NO GIT')\n"
+        f"open(os.path.join(os.getcwd(), 'reviewer-cwd.txt'), 'w').write(os.getcwd())\n"
+        f"open(out, 'w').write({reply!r})\n"
+        f"open({str(tmp_path / 'cwd-record.txt')!r}, 'w').write(os.getcwd())\n"
+    )
+    binary.chmod(0o755)
+    return binary
+
+
+def test_the_codex_grader_passes_the_real_clis_git_repo_check(tmp_path, monkeypatch):
+    """Codex review of PR #72, round 6, finding 1: the isolated checkout came
+    from `git archive`, so it had no .git, and `codex exec` was run without
+    `--skip-git-repo-check`; the real CLI refused with "Not inside a trusted
+    directory" and every codex-graded case was an error. The checkout is now
+    a real repository (one commit, so `git log`/`git diff` work) AND the flag
+    is passed; either alone satisfies the CLI, so both are pinned."""
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    case = {
+        "id": "round-001",
+        "round": 1,
+        "source_sha": head,
+        "expected_topics": ["credential-redaction"],
+        "diff": "+x",
+        "scorable": True,
+    }
+    for require in ("git", "flag", "either"):
+        fake = _fake_codex(tmp_path, '{"findings": []}', require=require)
+        result = run.grade_codex(
+            case, KW, lambda p, cwd=None, fake=fake: run.run_codex(p, str(fake), cwd)
+        )
+        assert result["status"] != "error", (require, result)
+    assert "NO GIT" not in (tmp_path / "git-log.txt").read_text(), "git log works in the checkout"
+    assert (tmp_path / "git-log.txt").read_text().strip(), "the checkout has a commit"
+
+
+def test_the_reviewer_runs_in_an_isolated_historical_checkout_without_answers(
+    tmp_path, monkeypatch
+):
+    """Codex review of PR #72, round 5, finding 3: the reviewer ran from the
+    repository root, where evals/cases and the review archive with the
+    expected answers are readable. It now runs in a checkout of the case's
+    own commit with every answer-bearing path removed."""
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    (repo / "evals" / "cases").mkdir(parents=True)
+    (repo / "evals" / "cases" / "round-001.json").write_text("{}")
+    (repo / "docs" / "rsi").mkdir(parents=True)
+    (repo / "docs" / "self-improvement-archive.jsonl").write_text('{"round": 1}\n')
+    (repo / "docs" / "rsi" / "measurement.json").write_text("{}")
+    (repo / "skills").mkdir()
+    (repo / "skills" / "x.md").write_text("answer")
+    (repo / "proposals").mkdir()
+    (repo / "proposals" / "y.md").write_text("answer")
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "answers on main")
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    case = {
+        "id": "round-001",
+        "round": 1,
+        "source_sha": head,
+        "expected_topics": ["credential-redaction"],
+        "diff": "+x",
+        "scorable": True,
+    }
+    fake = _fake_codex(tmp_path, '{"findings": []}')
+    result = run.grade_codex(case, KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd))
+    assert result["status"] != "error", result
+    cwd = Path((tmp_path / "cwd-record.txt").read_text())
+    assert cwd.resolve() != repo.resolve(), "the reviewer must not run in the repository root"
+    assert not cwd.exists(), "the isolated checkout is removed afterwards"
+    # What the reviewer could see: the commit's tree minus the answers.
+    listing = result["reviewer_checkout"]
+    assert "a.txt" in listing and "first.py" in listing
+    for answer in (
+        "evals",
+        "docs/self-improvement-archive.jsonl",
+        "docs/rsi",
+        "skills",
+        "proposals",
+    ):
+        assert answer not in listing, answer
+    # An unreachable commit is an error, not a review from the wrong tree.
+    missing = run.grade_codex(
+        dict(case, source_sha="0" * 40), KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd)
+    )
+    assert missing["status"] == "error" and "checkout" in missing["error"]
+
+
+def test_source_scrubbing_covers_item_assignments_triple_quotes_and_quoted_keys():
+    """Codex review of PR #72, round 6, finding 2: `config["password"] =
+    "demo123"`, a triple-quoted `password = ...` and `{"password": 123456}`
+    survived into serialized eval cases (item assignment, triple-quoted value,
+    numeric value under a quoted key). Ordinary settings keep their values."""
+    triple = '"' * 3
+    src = "\n".join(
+        [
+            'config["password"] = "demo123"',
+            "config['api_key'] = 'samplekey'",
+            f"password = {triple}secondpass{triple}",
+            "token = " + "'" * 3 + "thirdtok" + "'" * 3,
+            '{"password": 123456}',
+            "{'token': 'abcdef', 'timeout': 30}",
+            'creds = {"secret": "s3cr3t", "user": "bob"}',
+            '{"timeout": 30}',
+            'config["port"] = 8080',
+            "token_count = len(items)",
+            "settings['retries'] = 3",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("demo123", "samplekey", "secondpass", "thirdtok", "123456", "abcdef", "s3cr3t"):
+        assert leaked not in out, leaked
+    assert 'config["password"] = [REDACTED]' in out
+    assert "password = [REDACTED]" in out
+    assert '{"password": [REDACTED]}' in out, "the closing brace survives"
+    assert "'timeout': 30}" in out
+    for kept in (
+        '{"timeout": 30}',
+        'config["port"] = 8080',
+        "token_count = len(items)",
+        "settings['retries'] = 3",
+        '"user": "bob"',
+    ):
+        assert kept in out, kept
+
+
+def test_source_scrubbing_covers_multiline_triple_quotes_and_typed_assignments():
+    """Codex review of PR #72, round 7, finding 1: a triple-quoted password
+    spanning lines and a typed assignment (`const password: string = "x"`)
+    survived; the typed form even redacted the type instead of the value."""
+    src = "\n".join(
+        [
+            'password = """first line',
+            'second line"""',
+            'const password: string = "syntheticpass";',
+            "let token: string = 'tok-abc-123';",
+            'api_key: str = "pyKey_9"',
+            "timeout: number = 30;",
+            "token_count: int = len(items)",
+        ]
+    )
+    out = build.scrub_source(src)
+    for secret in ("first line", "second line", "syntheticpass", "tok-abc-123", "pyKey_9"):
+        assert secret not in out, (secret, out)
+    assert "const password: string = " in out, "the type annotation is kept"
+    assert "let token: string = " in out
+    assert "api_key: str = " in out
+    assert "timeout: number = 30;" in out and "token_count: int = len(items)" in out
+
+
+def test_unexpected_finding_fields_are_dropped_before_saving_or_printing(tmp_path, capsys):
+    """Codex review of PR #72, round 7, finding 2: values were scrubbed but a
+    finding carrying an extra `"password": "syntheticpass"` property passed
+    validation and kept the credential. Only the documented fields survive."""
+    reply = json.dumps(
+        {
+            "findings": [
+                {
+                    "topic": "credential-redaction",
+                    "summary": "a token is logged",
+                    "password": "syntheticpass",
+                    "nested": {"secret": "syntheticpass"},
+                }
+            ]
+        }
+    )
+    findings, invalid = run.parse_findings(reply)
+    assert invalid is None
+    assert findings == [{"topic": "credential-redaction", "summary": "a token is logged"}]
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    result = run.grade_codex(cases[0], KW, lambda _p: reply)
+    assert "syntheticpass" not in json.dumps(result)
+    print(json.dumps(result))
+    assert "syntheticpass" not in capsys.readouterr().out
+
+
+def test_answer_bearing_patches_are_removed_from_the_case_diff():
+    """Codex review of PR #72, round 7, finding 3: the prompt carried the
+    whole reviewed diff, so a branch that itself updated the review archive
+    (or evals, docs/rsi, skills, proposals) handed the answers to the
+    reviewer. Those patches are dropped from the case and recorded."""
+    diff = (
+        _patch("scripts/x.py", "token = 'abc'")
+        + _patch("docs/self-improvement-archive.jsonl", '{"findings": ["[P1] leaked token"]}')
+        + _patch("evals/cases/round-001.json", '{"expected": []}')
+        + _patch("docs/rsi/measurement.json", "{}")
+    )
+    entry = {"round": 5, "source_sha": "s5", "findings": ["[P1] leaked token in scripts/x.py"]}
+    case = build.build_case(entry, "base", diff, KW, 60_000)
+    assert "scripts/x.py" in case["diff"]
+    for answer in ("self-improvement-archive", "evals/cases", "docs/rsi"):
+        assert answer not in case["diff"], answer
+    assert case["answer_paths_removed"] == [
+        "docs/rsi/measurement.json",
+        "docs/self-improvement-archive.jsonl",
+        "evals/cases/round-001.json",
+    ]
+    assert case["scorable"]
+    # A finding whose only evidence was an answer path has nothing left to score.
+    only_answers = {
+        "round": 6,
+        "source_sha": "s6",
+        "findings": ["[P2] bad archive entry in docs/self-improvement-archive.jsonl"],
+    }
+    case = build.build_case(only_answers, "base", diff, KW, 60_000)
+    assert not case["scorable"] and "answer" in case["not_scorable_reason"]
+
+
+def test_the_default_runner_receives_the_checkout_as_its_working_directory(tmp_path, monkeypatch):
+    """Codex review of PR #72, round 7, finding 4: `runner(prompt, workdir)`
+    handed the checkout to run_codex's second positional parameter, the
+    binary path, so the default runner failed with PermissionError."""
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    fake = _fake_codex(
+        tmp_path, '{"findings": [{"topic": "credential-redaction", "summary": "s"}]}'
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "codex").write_bytes(fake.read_bytes())
+    (bin_dir / "codex").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    case = {
+        "id": "round-001",
+        "round": 1,
+        "source_sha": head,
+        "expected_topics": ["credential-redaction"],
+        "diff": "+x",
+        "scorable": True,
+    }
+    result = run.grade_codex(case, KW)  # the DEFAULT runner
+    assert result["status"] != "error", result
+    assert result["recall"] == 1.0
+    cwd = Path((tmp_path / "cwd-record.txt").read_text())
+    assert cwd.resolve() != repo.resolve() and not cwd.exists()
+
+
+def test_source_scrubbing_handles_string_prefixes_and_yaml_block_scalars():
+    """Codex review of PR #72, round 8, finding 1: a Python string prefix was
+    taken for a bare value, so `password = r"samplepass"` became
+    `password = [REDACTED]"samplepass"`; a YAML block scalar under
+    `password: |` kept every line of its contents."""
+    src = "\n".join(
+        [
+            'password = r"samplepass"',
+            "api_key = b'bytespass'",
+            'token = f"{prefix}fstringpass"',
+            'secret = rb"rawbytespass"',
+            "password: |",
+            "  firstline-secret",
+            "  secondline-secret",
+            "description: |",
+            "  keep this text",
+            "  and this",
+            "next_key: value",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("samplepass", "bytespass", "fstringpass", "rawbytespass"):
+        assert leaked not in out, leaked
+    assert "password = r[REDACTED]" in out, "the prefix stays, the literal goes"
+    assert "api_key = b[REDACTED]" in out
+    assert "firstline-secret" not in out and "secondline-secret" not in out
+    assert "password: |\n[REDACTED]\ndescription: |" in out, out
+    assert "  keep this text\n  and this\nnext_key: value" in out, "non-credential blocks survive"
+
+
+def test_policy_files_are_answer_paths_for_cases_and_checkouts(tmp_path, monkeypatch):
+    """Codex review of PR #72, round 8, finding 2: docs/improvement-policy.json
+    and docs/improvement-policy-history.jsonl carry finding text (mined_from),
+    so a policy-changing diff and a historical checkout still handed answers
+    to the reviewer."""
+    for path in ("docs/improvement-policy.json", "docs/improvement-policy-history.jsonl"):
+        assert policy_mod.is_answer_path(path), path
+    diff = _patch("scripts/x.py", "token = 'abc'") + _patch(
+        "docs/improvement-policy.json", '{"mined_from": [{"finding": "[P1] leaked token"}]}'
+    )
+    entry = {"round": 7, "source_sha": "s7", "findings": ["[P1] leaked token in scripts/x.py"]}
+    case = build.build_case(entry, "base", diff, KW, 60_000)
+    assert "improvement-policy" not in case["diff"]
+    assert case["answer_paths_removed"] == ["docs/improvement-policy.json"]
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "improvement-policy.json").write_text('{"mined_from": []}')
+    (repo / "docs" / "improvement-policy-history.jsonl").write_text('{"policy": {}}\n')
+    _git(repo, "add", "."), _git(repo, "commit", "-qm", "policy on main")
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    fake = _fake_codex(tmp_path, '{"findings": []}')
+    result = run.grade_codex(
+        dict(case, source_sha=head), KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd)
+    )
+    assert result["status"] != "error", result
+    assert "improvement-policy" not in result["reviewer_checkout"]
+
+
+def test_yaml_block_credentials_are_redacted_inside_unified_diffs():
+    """Codex review of PR #72, round 9, finding 1: the block-scalar shape
+    matched plain YAML only; build_case() feeds unified diffs whose lines
+    start with `+`, `-` or a space, so a patch adding `password: |` kept its
+    secret lines in the serialized case."""
+    hunk = (
+        "diff --git a/deploy/config.yml b/deploy/config.yml\n"
+        "--- a/deploy/config.yml\n"
+        "+++ b/deploy/config.yml\n"
+        "@@ -1,4 +1,10 @@\n"
+        " service: api\n"
+        "+password: |\n"
+        "+  firstline-secret\n"
+        "+  secondline-secret\n"
+        "+description: |\n"
+        "+  keep this text\n"
+        "+  and this\n"
+        "-api_key: >\n"
+        "-  folded-secret\n"
+        " replicas: 3\n"
+    )
+    entry = {
+        "round": 1,
+        "source_sha": "aaa",
+        "findings": ["[P1] leaked credential in deploy/config.yml"],
+    }
+    case = build.build_case(entry, "base", hunk, KW, 60_000)
+    for leaked in ("firstline-secret", "secondline-secret", "folded-secret"):
+        assert leaked not in case["diff"], leaked
+    assert "+password: |\n+[REDACTED]\n+description: |" in case["diff"], case["diff"]
+    assert "+  keep this text\n+  and this\n" in case["diff"], "non-credential blocks survive"
+    assert "-api_key: >\n-[REDACTED]\n replicas: 3" in case["diff"], case["diff"]
+    assert build.scrub_source(hunk) == case["diff"] or "firstline-secret" not in build.scrub_source(
+        hunk
+    )
+
+
+def test_reviewer_output_is_scrubbed_before_it_is_truncated(capsys):
+    """Codex review of PR #72, round 9, finding 2: the error and malformed
+    paths sliced the reviewer's output BEFORE scrubbing it, so a cut that
+    dropped `password=` but kept the value let the credential reach the
+    result and stdout."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    # A plain word: only the `password=` in front of it says it is a secret,
+    # so the order of slicing and scrubbing is what decides its fate.
+    value = "samplepassphrase"
+    # The excerpt is the last 500 (error) / 300 (malformed) characters: the
+    # filler after the value makes that window start INSIDE the value, so
+    # the `password=` that identifies it is cut away by the slice.
+    stderr_text = f"login failed: password={value}" + "y" * 490
+    stdout_text = f"sorry, password={value}" + "y" * 290 + " is not json"
+
+    def reviewer_fails(_prompt):
+        return run.ReviewerRun(text="", returncode=1, stderr=stderr_text)
+
+    def reviewer_babbles(_prompt):
+        return run.ReviewerRun(text=stdout_text, returncode=0)
+
+    for reviewer in (reviewer_fails, reviewer_babbles):
+        result = run.grade_codex(cases[0], KW, reviewer)
+        assert result["status"] == "error", reviewer.__name__
+        assert "passphrase" not in json.dumps(result), reviewer.__name__
+        assert len(result["error"]) <= 600, "the excerpt is still bounded"

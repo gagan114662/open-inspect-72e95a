@@ -33,7 +33,8 @@
     "docs/improvement-policy.json",
     "docs/improvement-policy-history.jsonl",
     "docs/rsi/",
-    "skills/"
+    "skills/",
+    "evals/"
   ],
   "schedules": ["schedules/hourly-revise.md", "schedules/on-review.md"],
   "channels": [
@@ -41,5 +42,11 @@
     "channels/github-issues.md",
     "channels/codex-review.md"
   ],
+  "evals": {
+    "cases": "evals/cases/",
+    "results": "evals/results/",
+    "build": "scripts/build-evals.py",
+    "run": "scripts/run-evals.py"
+  },
   "entry": "run.py"
 }

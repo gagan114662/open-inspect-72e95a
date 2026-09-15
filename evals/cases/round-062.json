@@ -1,0 +1,31 @@
+{
+  "id": "round-062",
+  "round": 62,
+  "source_sha": "f221530b5b2c6a459914b872f858c3e1c0687b1b",
+  "base_sha": "1ee9b4d457d0022a930bcf48c21ce7e04e5ef88e",
+  "target": "PR #41 diff",
+  "occurred_at": "2026-09-15T13:49:06.009554+00:00",
+  "expected": [
+    {
+      "finding": "**[P2]** The rollback rule can undo this taxonomy correction. [docs/improvement-policy.json:4](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/docs/improvement-policy.json:4) records v3 as an ordinary revision, so lower coverage than v2 triggers a rollback proposal after two rounds. With two synthetic v3 findings containing \u201cpre-existing\u201d and \u201cRe-evaluate,\u201d `decide()` proposed restoring v2, including `-e` and `exit code`. Account for intentional removal of false matches in rollback evaluation so those same false positives cannot justify restoring the rejected keywords.",
+      "topic": null
+    }
+  ],
+  "expected_topics": [],
+  "referenced_files": [
+    "docs/improvement-policy.json"
+  ],
+  "diff": "",
+  "diff_truncated": false,
+  "diff_chars": 0,
+  "omitted_files": [],
+  "answer_paths_removed": [
+    "docs/improvement-policy-history.jsonl",
+    "docs/improvement-policy.json",
+    "docs/rsi/dashboard.html",
+    "docs/rsi/measurement.json",
+    "docs/rsi/trace-evidence.json"
+  ],
+  "scorable": false,
+  "not_scorable_reason": "findings reference only answer-bearing paths removed from the diff: docs/improvement-policy-history.jsonl, docs/improvement-policy.json, docs/rsi/dashboard.html, docs/rsi/measurement.json, docs/rsi/trace-evidence.json"
+}
