@@ -245,12 +245,16 @@ _TOKEN_RE = re.compile(r"[a-z][a-z_-]{2,}")
 # of problem it is: "/home/runner/work/<repo>/scripts/x.py:41" must not
 # hand mining the tokens home, runner, scripts or the repository's own name
 # (the loop's first autonomous proposal, PR #54, did exactly that).
+# Every file type the repository actually contains (`git ls-files`, 2026-09-15),
+# not only source code: a Terraform or SQL file named in two findings must not
+# become a topic keyword either (Codex review of PR #56, round 12).
 _LOCATION_EXTENSIONS = (
     ".py",
     ".ts",
     ".tsx",
     ".js",
     ".mjs",
+    ".cjs",
     ".yml",
     ".yaml",
     ".json",
@@ -258,6 +262,21 @@ _LOCATION_EXTENSIONS = (
     ".md",
     ".sh",
     ".toml",
+    ".tf",
+    ".tftpl",
+    ".hcl",
+    ".sql",
+    ".css",
+    ".html",
+    ".svg",
+    ".txt",
+    ".snap",
+    ".lock",
+    ".example",
+    ".env",
+    ".cfg",
+    ".ini",
+    ".dockerfile",
 )
 
 

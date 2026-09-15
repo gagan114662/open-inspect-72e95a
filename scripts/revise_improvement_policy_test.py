@@ -1674,3 +1674,14 @@ def test_is_location_peels_nested_decorations_in_linear_time():
     assert elapsed < 3.0, f"is_location took {elapsed:.2f}s on {len(word)} chars"
     assert revise.strip_line_refs("allocator.py:bad:41") == "allocator.py:bad"
     assert revise.strip_line_refs("x:41:12-15") == "x" and revise.strip_line_refs(":41") == ":41"
+
+
+def test_every_repository_file_type_is_a_location_not_a_keyword():
+    """Codex review of PR #56, round 12: `.tf` was missing, so `backend.tf:12`
+    contributed the token "backend" and two findings naming that file made a
+    topic whose only keyword was a filename."""
+    for word in ("backend.tf:12", "schema.sql", "main.tftpl", "(variables.hcl)", "app.css:3"):
+        assert revise.is_location(word), word
+    assert "backend" not in revise.tokenize("Terraform state drift in backend.tf:12 again")
+    # A slash-separated pair of prose words is still prose.
+    assert not revise.is_location("backend/frontend")
