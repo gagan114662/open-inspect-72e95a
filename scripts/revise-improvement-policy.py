@@ -261,18 +261,56 @@ _LOCATION_EXTENSIONS = (
 )
 
 
+_LOCATION_ROOTS = frozenset(
+    {
+        "scripts",
+        "docs",
+        "packages",
+        "terraform",
+        ".github",
+        "tools",
+        "skills",
+        "channels",
+        "schedules",
+        "agents",
+        "home",
+        "tmp",
+        "var",
+        "usr",
+        "etc",
+        "opt",
+        "users",
+        "runner",
+        "work",
+        "node_modules",
+        "src",
+        "lib",
+        "test",
+        "tests",
+        "dist",
+        "build",
+    }
+)
+_LINE_REF_RE = re.compile(r":\d+(?:-\d+)?$")
+
+
 def is_location(word: str) -> bool:
-    """A URL, an absolute or explicitly relative path, a multi-segment path,
-    or a file reference (x.py, x.py:41). Checked per whitespace-separated
-    word with plain string tests, so a long string costs linear time
-    (Codex review of PR #56, round 2)."""
-    w = word.strip("()[]<>`'\",;")
+    """A URL, an absolute or explicitly relative path, a file reference
+    (x.py, x.py:41, x.py:41-43, with surrounding punctuation), or a path
+    whose first segment is a known directory. Slash-separated prose such as
+    deadlock/livelock/starvation is not a location. Plain string tests per
+    whitespace-separated word, linear on long inputs (Codex review of PR
+    #56, rounds 2 and 3)."""
+    w = word.strip("()[]<>`'\",;.:!?*_").lower()
+    w = _LINE_REF_RE.sub("", w)
+    if not w:
+        return False
     if w.startswith(("http://", "https://", "/", "./", "../", "~/")):
         return True
-    if w.count("/") >= 2:
+    segments = w.split("/")
+    if any(seg.endswith(_LOCATION_EXTENSIONS) for seg in segments):
         return True
-    base = w.rsplit(":", 1)[0] if ":" in w and w.rsplit(":", 1)[1].isdigit() else w
-    return base.lower().endswith(_LOCATION_EXTENSIONS)
+    return len(segments) > 1 and segments[0] in _LOCATION_ROOTS
 
 
 # A token present in more than this share of ALL archived findings is the

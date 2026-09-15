@@ -1572,3 +1572,19 @@ def test_location_detection_is_linear_on_long_words():
         "https://x.y/z"
     )
     assert not revise.is_location("deadlock/livelock") and not revise.is_location("reader/writer")
+
+
+def test_location_detection_handles_punctuation_line_ranges_and_prose_with_many_slashes():
+    loc = revise.is_location
+    assert (
+        loc("`scripts/worker.py`.") and loc("scripts/worker.py:41-43") and loc("(docs/plans/x.md),")
+    )
+    assert loc("scripts/a/b") and loc("packages/web/src")
+    assert not loc("deadlock/livelock/starvation") and not loc("read/write/execute")
+    assert not (
+        {"scripts", "worker"}
+        & revise.tokenize("see `scripts/worker.py`. and scripts/worker.py:41-43")
+    )
+    assert {"deadlock", "livelock", "starvation"} <= revise.tokenize(
+        "deadlock/livelock/starvation in the pool"
+    )
