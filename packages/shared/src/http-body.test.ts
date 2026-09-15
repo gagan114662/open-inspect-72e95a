@@ -1,4 +1,4 @@
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Fiber } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { BodyReadFailed, BodyTooLarge, readBody, readBodyCapped } from "./http-body";
@@ -74,6 +74,51 @@ describe("readBody (Effect)", () => {
     const error = await Effect.runPromise(Effect.flip(readBody(failingStream(boom), 10)));
     expect(error).toBeInstanceOf(BodyReadFailed);
     expect(error).toMatchObject({ _tag: "BodyReadFailed", cause: boom });
+  });
+
+  it("cancels and unlocks a stalled stream when the caller times out", async () => {
+    let cancelled = false;
+    const stalled = new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise(() => undefined); // never delivers a chunk
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const exit = await Effect.runPromiseExit(
+      readBody(stalled, 10).pipe(Effect.timeout("30 millis"))
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(cancelled).toBe(true);
+    expect(stalled.locked).toBe(false);
+  });
+
+  it("cancels the stream when the fiber is interrupted", async () => {
+    let cancelled = false;
+    const stalled = new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise(() => undefined);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const fiber = yield* Effect.fork(readBody(stalled, 10));
+        yield* Effect.sleep("10 millis");
+        yield* Fiber.interrupt(fiber);
+      })
+    );
+    expect(cancelled).toBe(true);
+    expect(stalled.locked).toBe(false);
+  });
+
+  it("releases the lock after a successful read", async () => {
+    const stream = streamOf(new Uint8Array([1]));
+    await Effect.runPromise(readBody(stream, 10));
+    expect(stream.locked).toBe(false);
   });
 
   it("lets callers recover from the typed error with catchTag", async () => {

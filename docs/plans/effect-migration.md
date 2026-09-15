@@ -40,10 +40,14 @@ Counts are from `grep -c` over `src/**/*.ts`; they size the work, they are not a
 3. **Adapters preserve behaviour bit for bit.** A Promise adapter rethrows the original cause of an
    unexpected failure (`Cause.squash`), and a boolean adapter maps exactly the errors the old
    `catch` swallowed. Tests pin this.
-4. **One module per PR, tests first.** A PR that touches more than one module or changes a caller
+4. **Anything with a close/cancel/release step is a resource.** Readers, sockets, locks and temp
+   files are acquired with `Effect.acquireUseRelease` (or a `Scope`), so the release runs on
+   success, on a typed failure and when the caller's fiber is interrupted by a timeout. A test
+   interrupts the fiber and asserts the release ran (Codex review of PR #75, round 1).
+5. **One module per PR, tests first.** A PR that touches more than one module or changes a caller
    without migrating it is split.
-5. **Codex reviews the diff; a human merges.** Same loop as every other change in this fork.
-6. **No Effect in `packages/web` React components** until the server modules are done. Effect in the
+6. **Codex reviews the diff; a human merges.** Same loop as every other change in this fork.
+7. **No Effect in `packages/web` React components** until the server modules are done. Effect in the
    browser bundle is a size and readability question to decide separately.
 
 ## Phases
