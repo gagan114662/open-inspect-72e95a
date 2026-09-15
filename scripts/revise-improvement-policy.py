@@ -301,7 +301,9 @@ def is_location(word: str) -> bool:
     deadlock/livelock/starvation is not a location. Plain string tests per
     whitespace-separated word, linear on long inputs (Codex review of PR
     #56, rounds 2 and 3)."""
-    w = word.strip("()[]<>`'\",;.:!?*_").lower()
+    # Trailing punctuation only, and no leading dot: ".github/actions" is a
+    # directory, not "github/actions" (Codex review of PR #56, round 5).
+    w = word.lstrip("()[]<>`'\"*_").rstrip("()[]<>`'\",;.:!?*_").lower()
     w = _LINE_REF_RE.sub("", w)
     if not w:
         return False
@@ -324,7 +326,9 @@ MAX_BACKGROUND_SHARE = 0.2
 MIN_BACKGROUND_OCCURRENCES = 10
 
 
-_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
+# Bounded character classes: an unmatched "[" cannot make the scan retry
+# the rest of the text (Codex review of PR #56, round 5).
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\[\]]{0,300})\]\(([^()\s]{0,2000})\)")
 
 
 def tokenize(text: str) -> set[str]:

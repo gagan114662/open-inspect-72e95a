@@ -1597,3 +1597,13 @@ def test_markdown_links_keep_their_text_and_drop_their_target():
     assert {"details", "deadlock"} <= toks
     assert not ({"github", "acme", "project", "pull", "scripts"} & toks)
     assert revise.is_location("details](https://github.com/acme/x)")
+
+
+def test_dot_directories_are_locations_and_unmatched_brackets_stay_linear():
+    import time
+
+    assert revise.is_location(".github/actions") and revise.is_location("(.github/workflows/x.yml)")
+    assert not ({"github", "actions"} & revise.tokenize("touches .github/actions here"))
+    start = time.perf_counter()
+    revise.tokenize("[" * 20000 + " deadlock")
+    assert time.perf_counter() - start < 1.0
