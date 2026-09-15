@@ -27,6 +27,7 @@ import importlib.util
 import inspect
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -145,8 +146,27 @@ def historical_checkout(sha: str) -> Iterator[tuple[Path, list[str]]]:
                 shutil.rmtree(target)
             elif target.exists() or target.is_symlink():
                 target.unlink()
+        # The real CLI refuses to run outside a trusted git repository
+        # ("Not inside a trusted directory and --skip-git-repo-check was not
+        # specified"), and reviewers reach for `git diff`/`git log`: the
+        # extracted tree becomes a one-commit repository of its own (Codex
+        # review of PR #72, round 6).
+        git_env = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": "eval",
+            "GIT_AUTHOR_EMAIL": "eval@localhost",
+            "GIT_COMMITTER_NAME": "eval",
+            "GIT_COMMITTER_EMAIL": "eval@localhost",
+        }
+        for argv in (
+            ["git", "init", "-q"],
+            ["git", "add", "-A"],
+            ["git", "commit", "-q", "--allow-empty", "-m", f"eval case at {sha[:12]}"],
+        ):
+            subprocess.run(argv, cwd=root, capture_output=True, env=git_env, timeout=120)
         docs = root / "docs"
         entries = [*root.iterdir(), *(docs.iterdir() if docs.is_dir() else [])]
+        entries = [p for p in entries if p.name != ".git"]
         listing = sorted(str(p.relative_to(root)) for p in entries)
         yield root, listing
     finally:
@@ -164,7 +184,9 @@ def run_codex(prompt: str, codex_bin: str = "codex", cwd: str | Path | None = No
         cwd = scratch
     try:
         result = subprocess.run(
-            [codex_bin, "exec", "-s", "read-only", "-o", path, prompt],
+            # --skip-git-repo-check as belt and braces: the checkout is a
+            # repository already, but a review must never fail on that check.
+            [codex_bin, "exec", "-s", "read-only", "--skip-git-repo-check", "-o", path, prompt],
             cwd=cwd,
             capture_output=True,
             text=True,

@@ -169,19 +169,29 @@ _CREDENTIAL_WORD = (
 )
 _SOURCE_BARE_VALUE = (
     r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)(?!\d+(?:\.\d+)?(?![\w.]))"
-    r"[^\s\"'(\[{,;)]+(?![\w(\[.])"
+    r"[^\s\"'(\[{,;)}\]]+(?![\w(\[.])"
 )
 # The value of a CREDENTIAL-named assignment or flag: numbers are secrets
 # too (`password = 123456`), only expressions, references and literals such
 # as None/true survive (Codex review of PR #72, round 5).
 _SOURCE_CREDENTIAL_VALUE = (
-    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)[^\s\"'(\[{,;)]+(?![\w(\[.])"
+    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)[^\s\"'(\[{,;)}\]]+(?![\w(\[.])"
+)
+# String literals a credential can hide in: triple-quoted first (a
+# `"""..."""` is not an empty `""`), then single-line quoted (Codex review
+# of PR #72, round 6).
+_SOURCE_QUOTED_VALUE = (
+    r"\"\"\"(?:(?!\"\"\")[^\n])*\"\"\"|'''(?:(?!''')[^\n])*'''"
+    r"|\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'"
 )
 _SOURCE_ASSIGNMENT_SHAPE = re.compile(
     # `self.password`, `config.api_key`, `settings['db'].secret`: an attribute
-    # or item prefix before the credential name is still that credential.
-    r"(?i)(?<![\w.])((?:[\w\[\]\"']+\.)*[a-z0-9_]*" + _CREDENTIAL_WORD + r"[a-z0-9_]*\s*[=:]\s*)"
-    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|" + _SOURCE_CREDENTIAL_VALUE + r")"
+    # or item prefix before the credential name is still that credential; so
+    # is a quoted key, `config["password"] =` or `{"password":` (round 6).
+    r"(?i)(?<![\w.])((?:[\w\[\]\"']+\.)*[\"']?[a-z0-9_]*"
+    + _CREDENTIAL_WORD
+    + r"[a-z0-9_]*[\"']?\]?\s*[=:]\s*)"
+    r"(" + _SOURCE_QUOTED_VALUE + r"|" + _SOURCE_CREDENTIAL_VALUE + r")"
 )
 # Short credential flags (`-a samplepass`, `-p VALUE`, `-pVALUE`, as in
 # redis-cli / mysql) kept their redaction in the prose scrubber; the source

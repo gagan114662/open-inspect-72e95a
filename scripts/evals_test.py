@@ -457,20 +457,61 @@ def test_reviewer_output_is_scrubbed_before_it_is_saved_or_printed(tmp_path, cap
     assert "[REDACTED]" in saved
 
 
-def _fake_codex(tmp_path, reply):
-    """A stand-in `codex` binary: records its cwd, writes `reply` to -o."""
+REPO_CHECK_MESSAGE = "Not inside a trusted directory and --skip-git-repo-check was not specified."
+
+
+def _fake_codex(tmp_path, reply, require="either"):
+    """A stand-in `codex` binary: records its cwd, writes `reply` to -o.
+    Like the real CLI it refuses to run outside a git repository unless
+    `--skip-git-repo-check` is passed (Codex review of PR #72, round 6):
+    `require` narrows that to "git" (a .git in cwd) or "flag" only."""
     binary = tmp_path / "fake-codex"
     binary.write_text(
         "#!/usr/bin/env python3\n"
-        "import os, sys\n"
+        "import os, sys, subprocess\n"
         "args = sys.argv[1:]\n"
+        f"require = {require!r}\n"
+        "has_flag = '--skip-git-repo-check' in args\n"
+        "in_repo = os.path.isdir('.git')\n"
+        "ok = {'either': has_flag or in_repo, 'git': in_repo, 'flag': has_flag}[require]\n"
+        "if not ok:\n"
+        f"    sys.stderr.write({REPO_CHECK_MESSAGE!r})\n"
+        "    sys.exit(1)\n"
         "out = args[args.index('-o') + 1]\n"
+        "log = subprocess.run(['git', 'log', '--oneline'], capture_output=True, text=True)\n"
+        f"open({str(tmp_path / 'git-log.txt')!r}, 'w').write(log.stdout if log.returncode == 0 else 'NO GIT')\n"
         f"open(os.path.join(os.getcwd(), 'reviewer-cwd.txt'), 'w').write(os.getcwd())\n"
         f"open(out, 'w').write({reply!r})\n"
         f"open({str(tmp_path / 'cwd-record.txt')!r}, 'w').write(os.getcwd())\n"
     )
     binary.chmod(0o755)
     return binary
+
+
+def test_the_codex_grader_passes_the_real_clis_git_repo_check(tmp_path, monkeypatch):
+    """Codex review of PR #72, round 6, finding 1: the isolated checkout came
+    from `git archive`, so it had no .git, and `codex exec` was run without
+    `--skip-git-repo-check`; the real CLI refused with "Not inside a trusted
+    directory" and every codex-graded case was an error. The checkout is now
+    a real repository (one commit, so `git log`/`git diff` work) AND the flag
+    is passed; either alone satisfies the CLI, so both are pinned."""
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    case = {
+        "id": "round-001",
+        "round": 1,
+        "source_sha": head,
+        "expected_topics": ["credential-redaction"],
+        "diff": "+x",
+        "scorable": True,
+    }
+    for require in ("git", "flag", "either"):
+        fake = _fake_codex(tmp_path, '{"findings": []}', require=require)
+        result = run.grade_codex(case, KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd))
+        assert result["status"] != "error", (require, result)
+    assert "NO GIT" not in (tmp_path / "git-log.txt").read_text(), "git log works in the checkout"
+    assert (tmp_path / "git-log.txt").read_text().strip(), "the checkout has a commit"
 
 
 def test_the_reviewer_runs_in_an_isolated_historical_checkout_without_answers(
@@ -523,3 +564,41 @@ def test_the_reviewer_runs_in_an_isolated_historical_checkout_without_answers(
         dict(case, source_sha="0" * 40), KW, lambda p, cwd=None: run.run_codex(p, str(fake), cwd)
     )
     assert missing["status"] == "error" and "checkout" in missing["error"]
+
+
+def test_source_scrubbing_covers_item_assignments_triple_quotes_and_quoted_keys():
+    """Codex review of PR #72, round 6, finding 2: `config["password"] =
+    "demo123"`, a triple-quoted `password = ...` and `{"password": 123456}`
+    survived into serialized eval cases (item assignment, triple-quoted value,
+    numeric value under a quoted key). Ordinary settings keep their values."""
+    triple = '"' * 3
+    src = "\n".join(
+        [
+            'config["password"] = "demo123"',
+            "config['api_key'] = 'samplekey'",
+            f"password = {triple}secondpass{triple}",
+            "token = " + "'" * 3 + "thirdtok" + "'" * 3,
+            '{"password": 123456}',
+            "{'token': 'abcdef', 'timeout': 30}",
+            'creds = {"secret": "s3cr3t", "user": "bob"}',
+            '{"timeout": 30}',
+            'config["port"] = 8080',
+            "token_count = len(items)",
+            "settings['retries'] = 3",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("demo123", "samplekey", "secondpass", "thirdtok", "123456", "abcdef", "s3cr3t"):
+        assert leaked not in out, leaked
+    assert 'config["password"] = [REDACTED]' in out
+    assert "password = [REDACTED]" in out
+    assert '{"password": [REDACTED]}' in out, "the closing brace survives"
+    assert "'timeout': 30}" in out
+    for kept in (
+        '{"timeout": 30}',
+        'config["port"] = 8080',
+        "token_count = len(items)",
+        "settings['retries'] = 3",
+        '"user": "bob"',
+    ):
+        assert kept in out, kept

@@ -2,11 +2,11 @@
   "grader": "keywords",
   "policy_version": 3,
   "policy_hash": "11e8243663fa",
-  "ran_at": "2026-09-15T19:56:09+00:00",
+  "ran_at": "2026-09-15T20:49:42+00:00",
   "summary": {
-    "cases": 38,
+    "cases": 44,
     "errors": 0,
-    "mean_recall": 0.9605,
+    "mean_recall": 0.9659,
     "per_topic_recall": {
       "archive-branch": 1.0,
       "auth-lifecycle": 0.8,
@@ -520,6 +520,84 @@
     {
       "id": "round-074",
       "round": 74,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-076",
+      "round": 76,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-078",
+      "round": 78,
+      "expected_topics": [
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-091",
+      "round": 91,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-098",
+      "round": 98,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-099",
+      "round": 99,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 1.0,
+      "status": "completed",
+      "method": "policy keywords present in the diff"
+    },
+    {
+      "id": "round-101",
+      "round": 101,
       "expected_topics": [
         "archive-branch"
       ],
