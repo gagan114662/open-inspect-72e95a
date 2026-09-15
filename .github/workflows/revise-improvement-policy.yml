@@ -100,21 +100,37 @@ jobs:
           # Optional extra folder name whose sessions also count as this
           # repository's (a scratch folder with no git remote). Repo variable.
           TRACES_EXTRA_MATCH: ${{ vars.TRACES_EXTRA_MATCH || '' }}
+          # Set to "true" when TRACES_NAMESPACE holds only this repository's
+          # sessions; the only way a runner can use namespace evidence.
+          TRACES_NAMESPACE_IS_REPOSITORY: ${{ vars.TRACES_NAMESPACE_IS_REPOSITORY || 'false' }}
         run: |
           set -euo pipefail
           mkdir -p docs/rsi
           # --match scopes the namespace to sessions whose git remote is THIS
           # repository; a namespace holds every project its owner shares.
-          extra=()
-          [ -n "$TRACES_EXTRA_MATCH" ] && extra=(--match "$TRACES_EXTRA_MATCH")
+          scope=(--match "github.com/${GITHUB_REPOSITORY}")
+          [ -n "$TRACES_EXTRA_MATCH" ] && scope+=(--match "$TRACES_EXTRA_MATCH")
+          # A synced session on this runner carries no folder or git remote, so
+          # scoping by repository only works when the namespace itself is
+          # dedicated to this repository (repo variable TRACES_NAMESPACE_IS_REPOSITORY=true).
+          [ "$TRACES_NAMESPACE_IS_REPOSITORY" = "true" ] && scope=(--namespace-is-repository)
+          cp docs/rsi/trace-evidence.json "$RUNNER_TEMP/evidence-before.json" 2>/dev/null || true
           if python3 scripts/mine-trace-failures.py \
-              --namespace "$TRACES_NAMESPACE" --traces-key "$TRACES_API_KEY" \
-              --match "github.com/${GITHUB_REPOSITORY}" "${extra[@]}" \
+              --namespace "$TRACES_NAMESPACE" --traces-key "$TRACES_API_KEY" "${scope[@]}" \
               --save-evidence docs/rsi/trace-evidence.json \
               --out-json "$RUNNER_TEMP/field-failures.json" > "$RUNNER_TEMP/mine.txt"; then
             # Only the human summary (counts and kinds) reaches this public
             # log; excerpts and commands live in the JSON under RUNNER_TEMP.
             sed -n '1,/^---/p' "$RUNNER_TEMP/mine.txt" | grep -v '^---' | head -n 30
+            # A refresh that observed no session at all is not evidence; it
+            # must never replace the committed snapshot (that is how PR #40
+            # proposed an empty field anchor).
+            observed=$(python3 -c 'import json; print(len(json.load(open("docs/rsi/trace-evidence.json")).get("sessions") or []))')
+            if [ "$observed" = "0" ]; then
+              echo "::warning::The refresh observed no session for this repository; keeping the committed evidence snapshot."
+              git checkout -- docs/rsi/trace-evidence.json 2>/dev/null || cp "$RUNNER_TEMP/evidence-before.json" docs/rsi/trace-evidence.json 2>/dev/null || true
+              rm -f "$RUNNER_TEMP/field-failures.json"
+            fi
           else
             echo "::warning::Traces refresh failed; using the committed evidence snapshot instead."
             sed -n '1,40p' "$RUNNER_TEMP/mine.txt" || true

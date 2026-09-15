@@ -521,6 +521,13 @@ def main(argv: list[str]) -> int:
         "repeatable, e.g. to include a scratch folder that has no git remote",
     )
     parser.add_argument(
+        "--namespace-is-repository",
+        action="store_true",
+        help="with --namespace: every session in the namespace belongs to this repository "
+        "(a namespace dedicated to one repository). Needed on a runner, where synced sessions "
+        "carry no folder or git remote to match on",
+    )
+    parser.add_argument(
         "--traces-key",
         default=None,
         help="API key passed as --key to every traces call (CI); omit when logged in locally",
@@ -573,9 +580,10 @@ def main(argv: list[str]) -> int:
 
     if args.traces_key:
         EXTRA_CLI_ARGS[:] = ["--key", args.traces_key]
-    if args.namespace and not args.match:
+    if args.namespace and not args.match and not args.namespace_is_repository:
         print(
-            "::error::--namespace requires --match so other projects' sessions are excluded",
+            "::error::--namespace requires --match (or --namespace-is-repository) so other "
+            "projects' sessions are excluded",
             file=sys.stderr,
         )
         return 1
@@ -591,17 +599,30 @@ def main(argv: list[str]) -> int:
             )
         failures: list[dict] = []
         kept: list[dict] = []
+        unscoped = 0
         for trace in traces:
             if agents is None and trace.get("agentId") == VERIFIER_AGENT:
                 pass  # "all" deliberately includes the verifier's own sessions
             if args.namespace:
                 sync_trace(args.traces_bin, trace["id"])
-                meta = trace_metadata(args.traces_bin, trace["id"])
-                if not any(session_belongs_to(meta, needle) for needle in args.match):
-                    continue
+                if not args.namespace_is_repository:
+                    meta = trace_metadata(args.traces_bin, trace["id"])
+                    if not (meta.get("gitRemoteUrl") or meta.get("directory")):
+                        unscoped += 1
+                    if not any(session_belongs_to(meta, needle) for needle in args.match or []):
+                        continue
             kept.append(trace)
             failures.extend(mine_trace(args.traces_bin, trace))
         traces = kept
+        if unscoped:
+            # A synced session on a fresh runner carries neither folder nor
+            # git remote, so repository scoping has nothing to match on and
+            # excludes it. Say so, rather than reporting an empty field.
+            print(
+                f"::warning::{unscoped} session(s) carried no folder or git remote and were "
+                "excluded by repository scoping; a runner cannot scope a shared namespace. "
+                "Use a namespace dedicated to this repository with --namespace-is-repository."
+            )
     except TracesCliError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
