@@ -317,3 +317,48 @@ def test_a_human_folder_at_a_topic_path_is_never_written_into_or_deleted(tmp_pat
     assert not propose.generator_owns(generated)
     assert propose.main([*base, "--manifest", str(manifest), "--out-dir", str(out / "g")]) == 0
     assert (generated / "extra.md").exists()
+
+
+def test_a_human_edit_to_a_generated_file_ends_the_generators_ownership(tmp_path):
+    """Codex review of PR #61, round 7: ownership was judged by the README
+    marker and file names alone, so a human's edit to the generated checker
+    or its tests was overwritten by the next draft and deleted by cleanup.
+    The README now records each generated file's sha256; any difference
+    means the folder is a human's."""
+    policy = policy_mod.builtin_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    out = tmp_path / "proposals"
+    base = ["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]
+    assert propose.main(base) == 0
+    folder = out / "shell-semantics"
+    assert propose.generator_owns(folder)
+    checker = folder / "check-shell-semantics.py"
+    checker.write_text(checker.read_text() + "\n# a human improved this\n")
+    assert not propose.generator_owns(folder)
+    edited = {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()}
+    # Re-drafting skips it and changes nothing.
+    assert propose.main(base) == 0
+    assert {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()} == edited
+    # Becoming ineligible does not delete it either.
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+        )
+    )
+    assert propose.main([*base, "--manifest", str(manifest)]) == 0
+    assert {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()} == edited
+    # A README whose hash line was stripped is not proof of ownership either.
+    fresh = out / "fresh"
+    assert (
+        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(fresh)])
+        == 0
+    )
+    readme = fresh / "shell-semantics" / "README.md"
+    readme.write_text(
+        "\n".join(ln for ln in readme.read_text().splitlines() if "generated-sha256" not in ln)
+    )
+    assert not propose.generator_owns(fresh / "shell-semantics")
