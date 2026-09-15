@@ -119,6 +119,15 @@ ownership, bots, and member suspension.
 └────────────────────────────────────────────────────────────────────┘
 ```
 
+## The self-improvement agent
+
+`agents/self-improver/` is the repository's review-and-fix loop laid out the way
+[eve](https://github.com/vercel/eve) lays out an agent, a directory of files: `instructions.md`,
+`agent.json`, `tools/`, `skills/`, `channels/`, `schedules/`. The files point at the scripts and
+workflows that already run; `skills/` is distilled from the review archive by
+`scripts/distill-skills.py`. Start at
+[`agents/self-improver/README.md`](agents/self-improver/README.md).
+
 ## Packages
 
 | Package                                           | Description                                 |
