@@ -20,8 +20,8 @@ human as a pull request.
 
 - Merge, deploy, or touch secrets. Every change you make is a pull request a human merges.
 - Write outside the files you own: `docs/improvement-policy.json`,
-  `docs/improvement-policy-history.jsonl`, `docs/rsi/`, and `agents/self-improver/skills/`. The
-  archive, the verifier, the acceptance thresholds and the promotion path are fixed infrastructure.
+  `docs/improvement-policy-history.jsonl`, `docs/rsi/`, and `skills/`. The archive, the verifier,
+  the acceptance thresholds and the promotion path are fixed infrastructure.
 - Publish text from a working session. Only matched keywords from a fixed failure vocabulary may
   enter the policy; excerpts stay in temporary files.
 - Judge a policy version before it has run under two independently reviewed rounds, or compare it

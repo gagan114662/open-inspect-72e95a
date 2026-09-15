@@ -33,7 +33,7 @@
     "docs/improvement-policy.json",
     "docs/improvement-policy-history.jsonl",
     "docs/rsi/",
-    "agents/self-improver/skills/"
+    "skills/"
   ],
   "schedules": ["schedules/hourly-revise.md", "schedules/on-review.md"],
   "channels": [

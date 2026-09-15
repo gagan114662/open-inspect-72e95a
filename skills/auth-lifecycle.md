@@ -21,6 +21,10 @@ Load this before changing anything that touches: `refresh token`, `rotat`, `expi
   In `scripts/measure-policy-validity.py:measure()`, snapshot alignment updates `dev_only_topics`
   and `anchor_only_topics`, but leaves `current["validity"]` calculated from the entire archive. The
   revision logic eva
+- Round 23: **[P2]** Fresh evidence does not trigger policy evaluation. In
+  `.github/workflows/revise-improvement-policy.yml`, only archive changes trigger automatic runs.
+  Committing a refreshed `trace-evidence.json` therefore does nothing; the next archived round makes
+  that snapshot stale, and `weight_repair()`
 - Round 41: **[P2]**
   [Deduplication discards commands needed for classification](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:225).
   Failures are merged by `(tool, excerpt)`, although topic matching also uses the command. Two
@@ -32,7 +36,7 @@ Load this before changing anything that touches: `refresh token`, `rotat`, `expi
 
 ## Recurrence
 
-Recurred in 6 round(s): 12, 16, 18, 22, 41, 51. Mechanism-fix threshold: 3.
+Recurred in 7 round(s): 12, 16, 18, 22, 23, 41, 51. Mechanism-fix threshold: 3.
 
 ## How it was fixed
 
