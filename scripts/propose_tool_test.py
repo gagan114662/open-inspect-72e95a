@@ -107,6 +107,10 @@ def test_main_never_writes_under_scripts_or_tools(tmp_path):
                     str(repo / forbidden),
                 ]
             )
+        # A refused run leaves nothing behind: an empty folder under a
+        # protected path used to survive and make the next run skip the
+        # guard (Codex review of PR #61, round 6).
+        assert not (repo / forbidden / "shell-semantics").exists()
     out = tmp_path / "proposals"
     assert (
         propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]) == 0
@@ -223,9 +227,13 @@ def test_drafting_refuses_symlinks_and_never_deletes_its_inputs(tmp_path):
     (trap / "README.md").write_text(propose.GENERATED_MARKER)
     archive = trap / "archive.jsonl"
     archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
-    with pytest.raises(PermissionError, match="input of this run"):
-        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)])
-    assert archive.exists()
+    # The marker alone no longer makes a folder ours: the extra archive file
+    # means a human (or an input) lives there, so cleanup leaves it alone
+    # (Codex review of PR #61, round 6) and the input survives.
+    assert (
+        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]) == 0
+    )
+    assert archive.exists() and (trap / "README.md").exists()
     # A symlink planted where a draft file would go is refused.
     outside = tmp_path / "victim.py"
     outside.write_text("keep")
@@ -258,3 +266,54 @@ def test_a_topic_folder_that_is_a_symlink_to_a_sibling_is_refused(tmp_path):
     with pytest.raises(PermissionError, match="symlink"):
         propose.draft(rec["topic"], rec, _archive(), policy, out)
     assert (human / "README.md").read_text() == "a human wrote this"
+
+
+def test_a_human_folder_at_a_topic_path_is_never_written_into_or_deleted(tmp_path):
+    """Codex review of PR #61, round 6: draft() accepted an existing topic
+    folder without checking who owns it, overwrote the implementation and
+    README, and the new README's marker then let cleanup delete the whole
+    folder, human files included. Drafting now refuses a folder the
+    generator does not own; main() skips that topic and says so."""
+    policy = policy_mod.builtin_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    out = tmp_path / "proposals"
+    human = out / "shell-semantics"
+    human.mkdir(parents=True)
+    (human / "README.md").write_text("# my own checker\nhand written, not generated\n")
+    (human / "check-shell-semantics.py").write_text("print('mine')\n")
+    (human / "notes.txt").write_text("keep me\n")
+    before = {p.name: p.read_bytes() for p in human.iterdir()}
+
+    rec = propose.topics_needing_a_tool(_archive(), policy, {"tools": []})[0]
+    assert rec["topic"] == "shell-semantics"
+    with pytest.raises(PermissionError):
+        propose.draft(rec["topic"], rec, _archive(), policy, out)
+    assert {p.name: p.read_bytes() for p in human.iterdir()} == before
+
+    base = ["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]
+    assert propose.main(base) == 0
+    assert {p.name: p.read_bytes() for p in human.iterdir()} == before, "main() skipped it"
+    # Covering the topic makes it ineligible; a human folder is still not ours to delete.
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+        )
+    )
+    assert propose.main([*base, "--manifest", str(manifest)]) == 0
+    assert {p.name: p.read_bytes() for p in human.iterdir()} == before
+
+    # A generated folder a human added a file to is not ours any more either.
+    assert (
+        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out / "g")])
+        == 0
+    )
+    generated = out / "g" / "shell-semantics"
+    assert propose.generator_owns(generated)
+    (generated / "extra.md").write_text("human note\n")
+    assert not propose.generator_owns(generated)
+    assert propose.main([*base, "--manifest", str(manifest), "--out-dir", str(out / "g")]) == 0
+    assert (generated / "extra.md").exists()
