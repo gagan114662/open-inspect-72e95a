@@ -132,3 +132,68 @@ def test_undated_findings_never_enter_a_held_out_set():
     assert result["common_rounds"] == 2
     kept = replay.rounds_after(entries, "2026-09-14T13:00:00Z")
     assert all(e.get("occurred_at") for e in kept)
+
+
+def _evidence_for(policy, timestamps: list[int]) -> dict:
+    keywords = policy_mod.topic_keywords(policy)
+    return {
+        "source": "traces",
+        "collected_at": "2026-09-14T23:00:00Z",
+        "sessions": [f"s{i}" for i in range(len(timestamps))],
+        "definitions": {t: list(w) for t, w in keywords.items()},
+        "topics": {
+            t: [
+                {"id": f"s{i}", "agentId": "claude-code", "timestamp": ts}
+                for i, ts in enumerate(timestamps)
+            ]
+            for t in keywords
+        },
+    }
+
+
+def test_held_out_validity_only_counts_field_evidence_after_the_revision():
+    """Codex review of PR #70, round 4: review entries were filtered by the
+    cutoff but the whole evidence snapshot was passed to measure(), so field
+    traces that informed the revision counted towards its held-out validity."""
+    v1, v2 = _versions()
+    history = [{"version": 2, "policy": v2, "replaced_policy_hash": policy_mod.policy_hash(v1)}]
+    cutoff = replay.measure_mod.parse_timestamp_ms("2026-09-14T13:00:00Z")
+    before_only = _evidence_for(v2, [cutoff - 3_600_000, cutoff - 60_000])
+    rows = {
+        r["version"]: r for r in replay.replay(_entries(), v2, history, before_only)["versions"]
+    }
+    assert rows[2]["validity_oos"] is None, "no field trace was observed after v2 existed"
+    assert rows[2]["validity_common"] is None
+    mixed = _evidence_for(v2, [cutoff - 60_000, cutoff + 60_000])
+    kept = replay.evidence_after(mixed, cutoff)
+    assert all(len(traces) == 1 and traces[0]["id"] == "s1" for traces in kept["topics"].values())
+    assert kept["sessions"] == ["s1"]
+    undated = _evidence_for(v2, [cutoff + 60_000])
+    undated["topics"]["quartz-crashes"][0].pop("timestamp")
+    assert "quartz-crashes" not in replay.evidence_after(undated, cutoff)["topics"], (
+        "a trace that cannot be placed in time makes the topic's held-out count unknown"
+    )
+    assert replay.evidence_after(mixed, None) == mixed, "the root version keeps every trace"
+
+
+def test_a_revision_without_a_valid_timestamp_has_no_held_out_metrics():
+    """Codex review of PR #70, round 4: a non-root revision whose created_at
+    was missing or unparseable received every round as 'held out' and, as
+    the newest version, defined a common window that let training findings
+    in. Its held-out metrics are now unavailable and the common comparison
+    is not built on it."""
+    v1, v2 = _versions()
+    history = [{"version": 2, "policy": v2, "replaced_policy_hash": policy_mod.policy_hash(v1)}]
+    for created in (None, "", "not a time"):
+        broken = dict(v2)
+        if created is None:
+            broken.pop("created_at", None)
+        else:
+            broken["created_at"] = created
+        hist = [{**history[0], "policy": broken}]
+        result = replay.replay(_entries(), broken, hist, None)
+        rows = {r["version"]: r for r in result["versions"]}
+        assert rows[2]["rounds_oos"] == 0 and rows[2]["coverage_oos"] is None, created
+        assert rows[2]["held_out"] == "unavailable: no valid created_at", created
+        assert result["common_rounds"] == 0 and result["common_window_after"] is None, created
+        assert rows[1]["rounds_oos"] == 4, "the root version still predates the archive"

@@ -88,6 +88,38 @@ def rounds_after(entries: list[dict], created_at: str | None) -> list[dict]:
     return kept
 
 
+def evidence_after(evidence: dict | None, cutoff_ms: int | None) -> dict | None:
+    """The evidence snapshot restricted to field traces observed after
+    `cutoff_ms`: held-out validity must not count traces that informed the
+    revision (Codex review of PR #70, round 4). A topic with a trace that
+    cannot be placed in time is dropped, so its held-out count is unknown
+    rather than wrong; the scanned-session list is restricted the same way.
+    No cutoff (the root version) keeps every trace."""
+    if evidence is None or cutoff_ms is None:
+        return evidence
+    topics: dict[str, list[dict]] = {}
+    for topic, traces in (evidence.get("topics") or {}).items():
+        if any(not isinstance(t.get("timestamp"), int | float) for t in traces):
+            continue
+        topics[topic] = [t for t in traces if t["timestamp"] > cutoff_ms]
+    kept_ids = {t["id"] for traces in topics.values() for t in traces}
+    sessions = [s for s in evidence.get("sessions") or [] if s in kept_ids]
+    return {**evidence, "topics": topics, "sessions": sessions}
+
+
+def revision_cutoff_ms(version: dict) -> int | None:
+    """When a non-root version started existing, or None when its created_at
+    is missing or unparseable: such a revision has no defensible held-out
+    window (Codex review of PR #70, round 4)."""
+    return measure_mod.parse_timestamp_ms(version.get("created_at"))
+
+
+def is_root_version(version: dict) -> bool:
+    # The root version predates the archive by definition: every round was
+    # archived under it or its descendants.
+    return version.get("origin") == "init" or version.get("parent") is None
+
+
 def replay(entries: list[dict], policy: dict, history: list[dict], evidence: dict | None) -> dict:
     """Per version: metrics on the rounds after it existed (its own
     held-out set) AND on one common held-out set, the rounds after the
@@ -97,30 +129,40 @@ def replay(entries: list[dict], policy: dict, history: list[dict], evidence: dic
     versions = versions_in_order(policy, history)
     for v in versions:
         policy_mod.validate_policy(v)  # a tampered snapshot never renders
-    newest_created = next(
-        (
-            v.get("created_at")
-            for v in reversed(versions)
-            if v.get("created_at") and v.get("parent") is not None
-        ),
-        None,
-    )
-    common = rounds_after(entries, newest_created)
+    # The common window starts when the NEWEST non-root version came to be.
+    # If that version has no valid created_at there is no common window at
+    # all: falling back to an older version's time would let findings the
+    # newest version was trained on count as held out.
+    newest = next((v for v in reversed(versions) if not is_root_version(v)), None)
+    newest_created = None
+    common_cutoff = None
+    if newest is not None:
+        common_cutoff = revision_cutoff_ms(newest)
+        newest_created = newest.get("created_at") if common_cutoff is not None else None
+    common = rounds_after(entries, newest_created) if common_cutoff is not None else []
+    common_evidence = evidence_after(evidence, common_cutoff)
     rows = []
     for version in versions:
-        # The root version predates the archive by definition: every round
-        # was archived under it or its descendants.
-        is_root = version.get("origin") == "init" or version.get("parent") is None
-        later = rounds_after(entries, None if is_root else version.get("created_at"))
+        is_root = is_root_version(version)
+        cutoff = None if is_root else revision_cutoff_ms(version)
+        held_out = "ok"
+        if is_root:
+            later = list(entries)
+        elif cutoff is None:
+            later = []
+            held_out = "unavailable: no valid created_at"
+        else:
+            later = rounds_after(entries, version.get("created_at"))
         if later:
-            current = measure_mod.measure(later, version, evidence)["current"]
+            own_evidence = evidence_after(evidence, cutoff)
+            current = measure_mod.measure(later, version, own_evidence)["current"]
             coverage, validity = current.get("coverage"), current.get("validity")
             findings = current.get("findings_total")
         else:
             coverage = validity = findings = None
         in_sample = measure_mod.measure(entries, version, evidence)["current"]
         if common:
-            on_common = measure_mod.measure(common, version, evidence)["current"]
+            on_common = measure_mod.measure(common, version, common_evidence)["current"]
             coverage_common, validity_common = on_common.get("coverage"), on_common.get("validity")
         else:
             coverage_common = validity_common = None
@@ -128,6 +170,7 @@ def replay(entries: list[dict], policy: dict, history: list[dict], evidence: dic
             {
                 "coverage_common": coverage_common,
                 "validity_common": validity_common,
+                "held_out": held_out,
                 "version": version.get("version"),
                 "origin": version.get("origin"),
                 "created_at": version.get("created_at"),
