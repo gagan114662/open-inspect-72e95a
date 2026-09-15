@@ -1,0 +1,110 @@
+{
+  "grader": "codex",
+  "policy_version": 3,
+  "policy_hash": "11e8243663fa",
+  "ran_at": "2026-09-15T16:49:37+00:00",
+  "summary": {
+    "cases": 4,
+    "mean_recall": 0.4583,
+    "per_topic_recall": {
+      "archive-branch": 0.3333,
+      "auth-lifecycle": 1.0,
+      "credential-redaction": 0.5,
+      "env-var-precedence": 0.0
+    }
+  },
+  "results": [
+    {
+      "id": "round-009",
+      "round": 9,
+      "expected_topics": [
+        "archive-branch"
+      ],
+      "found_topics": [],
+      "recall": 0.0,
+      "method": "codex exec review",
+      "reviewer_findings": []
+    },
+    {
+      "id": "round-012",
+      "round": 12,
+      "expected_topics": [
+        "auth-lifecycle"
+      ],
+      "found_topics": [
+        "auth-lifecycle"
+      ],
+      "recall": 1.0,
+      "method": "codex exec review",
+      "reviewer_findings": [
+        {
+          "topic": "other",
+          "summary": "search_topic caps results at 100 and analyze reports len(matches) as the total, silently undercounting topics with more than 100 matching traces."
+        },
+        {
+          "topic": "other",
+          "summary": "Topic searches cover the entire repository instead of the limited trace_ids set, so matching_traces can include unscanned sessions and exceed traces_scanned."
+        },
+        {
+          "topic": "other",
+          "summary": "hydrate_trace does not catch subprocess.TimeoutExpired or OSError, so a supposedly non-fatal hydration failure can abort the entire analysis."
+        }
+      ]
+    },
+    {
+      "id": "round-014",
+      "round": 14,
+      "expected_topics": [
+        "archive-branch",
+        "credential-redaction"
+      ],
+      "found_topics": [
+        "credential-redaction"
+      ],
+      "recall": 0.5,
+      "method": "codex exec review",
+      "reviewer_findings": [
+        {
+          "topic": "fork-pr-permissions",
+          "summary": "With persist-credentials disabled, the subsequent git fetch has no checkout credentials on private repositories, and its authentication failure is misreported as an absence of trace notes."
+        },
+        {
+          "topic": "shell-semantics",
+          "summary": "The installer pipeline lacks pipefail, so a failed curl can be masked by a successful bash exit and the step can succeed without installing Traces."
+        },
+        {
+          "topic": "credential-redaction",
+          "summary": "Passing the Traces API key through the CLI's --key argument exposes it in process arguments, which subsequent output redaction cannot protect."
+        }
+      ]
+    },
+    {
+      "id": "round-015",
+      "round": 15,
+      "expected_topics": [
+        "archive-branch",
+        "credential-redaction",
+        "env-var-precedence"
+      ],
+      "found_topics": [
+        "archive-branch"
+      ],
+      "recall": 0.3333,
+      "method": "codex exec review",
+      "reviewer_findings": [
+        {
+          "topic": "archive-branch",
+          "summary": "Each archive commit creates a separate policy branch without checking for pending revisions, so successive runs before a merge can propose different policies with the same version and parent, causing conflicting policy files and history entries."
+        },
+        {
+          "topic": "other",
+          "summary": "The measurement step always reuses the committed evidence snapshot and never queries Traces even when TRACES_API_KEY is configured, so the checked-in empty snapshot leaves predictive validity permanently unmeasured unless someone refreshes it manually."
+        },
+        {
+          "topic": "other",
+          "summary": "The workflow saves measurement.json before revising the policy but commits both together without remeasurement, so any accepted revision leaves the committed measurement describing the previous policy version and hash."
+        }
+      ]
+    }
+  ]
+}
