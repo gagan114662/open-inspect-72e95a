@@ -209,3 +209,39 @@ def test_cleanup_is_narrow_and_survives_pycache_and_symlinks(tmp_path):
     assert propose.main([*base, "--manifest", str(manifest)]) == 0
     assert not (out / "shell-semantics").exists()
     assert (outside / "keep.txt").exists(), "symlink target untouched"
+
+
+def test_drafting_refuses_symlinks_and_never_deletes_its_inputs(tmp_path):
+    policy = policy_mod.builtin_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    out = tmp_path / "proposals"
+    out.mkdir()
+    # The archive to process sits inside a folder that looks generated.
+    trap = out / "old-topic"
+    trap.mkdir()
+    (trap / "README.md").write_text(propose.GENERATED_MARKER)
+    archive = trap / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    with pytest.raises(PermissionError, match="input of this run"):
+        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)])
+    assert archive.exists()
+    # A symlink planted where a draft file would go is refused.
+    outside = tmp_path / "victim.py"
+    outside.write_text("keep")
+    (out / "shell-semantics").mkdir(exist_ok=True)
+    planted = out / "shell-semantics" / "check-shell-semantics.py"
+    planted.unlink(missing_ok=True)  # the earlier run drafted it before refusing
+    planted.symlink_to(outside)
+    archive2 = tmp_path / "archive.jsonl"
+    archive2.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    with pytest.raises(PermissionError, match="symlink"):
+        propose.main(["p", str(archive2), "--policy", str(policy_path), "--out-dir", str(out)])
+    assert outside.read_text() == "keep"
+    # "+++i" is an added line, not a header.
+    rec = propose.topics_needing_a_tool(_archive(), policy, {"tools": []})[0]
+    propose.draft(rec["topic"], rec, _archive(), policy, tmp_path / "d")
+    script = tmp_path / "d" / rec["topic"] / f"check-{rec['topic']}.py"
+    diff = "+++ b/x\n@@ -1 +1 @@\n+++pipefail\n"
+    run = subprocess.run([sys.executable, str(script)], input=diff, capture_output=True, text=True)
+    assert "1 line(s)" in run.stdout

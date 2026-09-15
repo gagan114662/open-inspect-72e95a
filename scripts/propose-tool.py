@@ -122,7 +122,8 @@ def scan(text: str) -> list[tuple[int, str, str]]:
     is_diff = any(line.startswith(("+++ ", "@@ ")) for line in text.splitlines())
     hits: list[tuple[int, str, str]] = []
     for number, line in enumerate(text.splitlines(), 1):
-        if is_diff and not (line.startswith("+") and not line.startswith("+++")):
+        # Only "+++ " (with the space) is a file header; "+++i" is the added line "++i".
+        if is_diff and not (line.startswith("+") and not line.startswith("+++ ")):
             continue
         lowered = line.lower()
         for word in KEYWORDS:
@@ -234,7 +235,14 @@ def manifest_entry(topic: str, words: list[str]) -> dict:
     }
 
 
-def draft(topic: str, rec: dict, entries: list[dict], policy: dict, out_dir: Path) -> list[str]:
+def draft(
+    topic: str,
+    rec: dict,
+    entries: list[dict],
+    policy: dict,
+    out_dir: Path,
+    inputs: list[str | Path] | None = None,
+) -> list[str]:
     if not SAFE_TOPIC_NAME.fullmatch(topic):
         raise ValueError(f"topic name {topic!r} is not a safe filename component")
     keywords = policy_mod.topic_keywords(policy)
@@ -242,6 +250,8 @@ def draft(topic: str, rec: dict, entries: list[dict], policy: dict, out_dir: Pat
     folder = (out_dir / topic).resolve()
     if folder.parent != out_dir.resolve():
         raise ValueError(f"{topic!r} would write outside {out_dir}")
+    if folder.is_symlink():
+        raise PermissionError(f"{folder} is a symlink; refusing to draft into it")
     folder.mkdir(parents=True, exist_ok=True)
     files = {
         folder / f"check-{topic}.py": check_script(
@@ -253,7 +263,12 @@ def draft(topic: str, rec: dict, entries: list[dict], policy: dict, out_dir: Pat
     }
     written = []
     for path, content in files.items():
-        policy_mod.assert_safe_output(path)
+        # Never write through a symlink: a link planted at the draft's path
+        # would redirect the write outside the folder (Codex review of PR
+        # #61, round 4).
+        if path.is_symlink():
+            raise PermissionError(f"{path} is a symlink; refusing to write through it")
+        policy_mod.assert_safe_output(path, inputs=inputs or ())
         path.write_text(content)
         written.append(policy_mod.relative_to_repo(path))
     return written
@@ -292,8 +307,9 @@ def main(argv: list[str]) -> int:
     if args.topic:
         needing = [r for r in needing if r["topic"] in set(args.topic)]
     out_dir = Path(args.out_dir)
+    inputs = [x for x in (args.archive_path, args.policy, args.manifest) if x]
     proposals = {
-        rec["topic"]: draft(rec["topic"], rec, entries, policy, out_dir) for rec in needing
+        rec["topic"]: draft(rec["topic"], rec, entries, policy, out_dir, inputs) for rec in needing
     }
     # Drafts for topics that are no longer eligible (covered since, or below
     # threshold) are removed. Only when no --topic filter narrowed this run
@@ -319,7 +335,8 @@ def main(argv: list[str]) -> int:
                 if child.is_symlink():
                     raise PermissionError(f"{child} is a symlink; refusing to clean {folder}")
                 if child.is_file():
-                    policy_mod.assert_safe_output(child)
+                    # Inputs of this run are never deleted, wherever they sit.
+                    policy_mod.assert_safe_output(child, inputs=inputs)
             shutil.rmtree(folder)
     print(json.dumps({"policy_version": policy["version"], "proposals": proposals}, indent=2))
     return 0
