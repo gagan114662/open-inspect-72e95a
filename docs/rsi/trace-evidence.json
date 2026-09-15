@@ -1,60 +1,70 @@
 {
   "source": "trace-failures",
-  "collected_at": "2026-09-14T22:57:47Z",
-  "repo_dir": "/Users/gaganarora/Desktop/my projects/background agents",
-  "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
+  "collected_at": "2026-09-15T13:46:06Z",
+  "repo_dir": "",
+  "agents": [
+    "claude-code",
+    "antigravity",
+    "cursor",
+    "droid",
+    "openclaw",
+    "pi"
+  ],
   "event_types": "tool_result(status=error) or failure-shaped output",
   "definitions": {
-    "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
-    "shell-semantics": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
-    "env-var-precedence": ["precedence", "env var", "environment variable", "unconditionally"],
-    "fork-pr-permissions": ["fork", "github_token", "persist-credentials"],
-    "auth-lifecycle": ["refresh token", "rotat", "expir", "auth.json", "stale"],
-    "archive-branch": ["archive", "branch", "commit", "create", "creation"]
-  },
-  "topics": {
     "credential-redaction": [
-      {
-        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
-        "agentId": "claude-code",
-        "timestamp": 1789220862989
-      }
+      "redact",
+      "credential",
+      "secret",
+      "token",
+      "leak",
+      "expos"
     ],
     "shell-semantics": [
-      {
-        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
-        "agentId": "claude-code",
-        "timestamp": 1789219270517
-      },
-      {
-        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
-        "agentId": "claude-code",
-        "timestamp": 1789411887600
-      }
+      "errexit",
+      "bash -e",
+      "exit code",
+      "-e",
+      "pipefail",
+      "shell"
     ],
-    "env-var-precedence": [],
-    "fork-pr-permissions": [],
+    "env-var-precedence": [
+      "precedence",
+      "env var",
+      "environment variable",
+      "unconditionally"
+    ],
+    "fork-pr-permissions": [
+      "fork",
+      "github_token",
+      "persist-credentials"
+    ],
     "auth-lifecycle": [
-      {
-        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
-        "agentId": "claude-code",
-        "timestamp": 1789400745754
-      }
+      "refresh token",
+      "rotat",
+      "expir",
+      "auth.json",
+      "stale"
     ],
     "archive-branch": [
-      {
-        "id": "5d594754-a57e-4dc8-a19a-86200de49f11",
-        "agentId": "claude-code",
-        "timestamp": 1789219270517
-      },
-      {
-        "id": "4f0f798a-051c-46c1-b19e-9373f222ac0a",
-        "agentId": "claude-code",
-        "timestamp": 1789412579985
-      }
+      "archive",
+      "branch",
+      "commit",
+      "create",
+      "creation"
     ]
+  },
+  "topics": {
+    "credential-redaction": [],
+    "shell-semantics": [],
+    "env-var-precedence": [],
+    "fork-pr-permissions": [],
+    "auth-lifecycle": [],
+    "archive-branch": []
   },
   "truncated": [],
   "listing_complete": true,
-  "failure_count": 96
+  "failure_count": 0,
+  "sessions": [],
+  "namespace": "@gagan114"
 }
