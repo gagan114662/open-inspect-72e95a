@@ -291,7 +291,7 @@ _LOCATION_ROOTS = frozenset(
         "build",
     }
 )
-_LINE_REF_RE = re.compile(r":\d+(?:-\d+)?$")
+_LINE_REF_RE = re.compile(r"(?::\d+(?:-\d+)?)+$")  # :41, :41-43, :41:12
 
 
 def is_location(word: str) -> bool:
@@ -328,7 +328,9 @@ MIN_BACKGROUND_OCCURRENCES = 10
 
 # Bounded character classes: an unmatched "[" cannot make the scan retry
 # the rest of the text (Codex review of PR #56, round 5).
-_MARKDOWN_LINK_RE = re.compile(r"\[([^\[\]]{0,300})\]\(([^()\s]{0,2000})\)")
+_MARKDOWN_LINK_RE = re.compile(
+    r"\[([^\[\]]{0,300})\]\(([^()\s]{0,2000})(?:\s+\"[^\"]{0,300}\")?\)"  # optional "title"
+)
 
 
 def tokenize(text: str) -> set[str]:

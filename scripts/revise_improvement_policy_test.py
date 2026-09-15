@@ -1607,3 +1607,14 @@ def test_dot_directories_are_locations_and_unmatched_brackets_stay_linear():
     start = time.perf_counter()
     revise.tokenize("[" * 20000 + " deadlock")
     assert time.perf_counter() - start < 1.0
+
+
+def test_markdown_titles_and_line_column_suffixes():
+    assert {"deadlock"} <= revise.tokenize('[deadlock](docs/locking.md "design notes") happened')
+    assert not (
+        {"docs", "locking", "design", "notes"}
+        & revise.tokenize('[deadlock](docs/locking.md "design notes")')
+    )
+    assert revise.is_location("renderer.ts:41:12") and revise.is_location(
+        "a/b/renderer.ts:41:12-15"
+    )
