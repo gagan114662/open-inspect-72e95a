@@ -390,10 +390,12 @@ def match_timestamps(failure: dict, words: list[str]) -> list[int | float] | Non
             blind_before.append(o.get("timestamp"))
     if not matched or any(not isinstance(ts, int | float) for ts in matched):
         return None
-    dated = sorted(ts for ts in matched if isinstance(ts, int | float))
-    if any(not isinstance(ts, int | float) or ts < dated[0] for ts in blind_before):
+    # Any truncated, unmatched occurrence, before OR after a visible match,
+    # may have contained another match: the full set of match times is
+    # unknown, not "just the visible ones" (Codex review of PR #70, round 6).
+    if blind_before:
         return None
-    return dated
+    return sorted(matched)
 
 
 def first_match_timestamp(failure: dict, words: list[str]) -> int | float | None:

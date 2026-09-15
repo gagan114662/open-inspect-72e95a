@@ -822,6 +822,17 @@ def test_evidence_keeps_every_dated_match_per_session():
     assert mine.first_match_timestamp(failure, words) == 100
     undated = dict(failure, _occurrences=[{"timestamp": None, "text": "pipefail"}])
     assert mine.match_timestamps(undated, words) is None
+    # Codex review of PR #70, round 6: truncated output AFTER the first match
+    # may hide a recurrence, so the set of match times is unknown too.
+    hidden_later = dict(
+        failure,
+        _occurrences=[
+            {"timestamp": 100, "text": "pipefail missing"},
+            {"timestamp": 300, "text": "cut off …", "truncated": True},
+        ],
+    )
+    assert mine.match_timestamps(hidden_later, words) is None
+    assert mine.first_match_timestamp(hidden_later, words) == 100, "the first time is still known"
     evidence = mine.build_evidence([failure], {"shell-semantics": words}, ".", [], True, ["s1"])
     trace = evidence["topics"]["shell-semantics"][0]
     assert trace["timestamp"] == 100 and trace["timestamps"] == [100, 300]
