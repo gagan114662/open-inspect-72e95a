@@ -111,6 +111,10 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
         r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-p)(?:\s+|=)?)"
         r"(\"[^\"]*\"|'[^']*'|[^\s\"']{4,})"
     ),
+    # curl-style user:password arguments: -u user:PASS, --user user:PASS (round 43).
+    re.compile(
+        r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)[\"']?[^\s:\"']+:)[^\s\"']+"
+    ),
     # Quoted JSON/YAML fields: {"password": "..."} (round 39).
     re.compile(
         r"(?i)(\"[a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\"\s*:\s*\")[^\"]{4,}"

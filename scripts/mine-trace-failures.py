@@ -60,7 +60,11 @@ measure_mod = _load_sibling_module("measure_policy_validity", "measure-policy-va
 VERIFIER_AGENT = "codex"
 PAGE_SIZE = 200
 EXCERPT_CHARS = 160
-MAX_TEXT_CHARS = 400_000  # per failure, all occurrences' output kept for matching
+# Matching reads the COMPLETE output; the cap only guards against a
+# pathological multi-megabyte result, and a capped occurrence marks every
+# topic it did not match as unknown rather than zero (Codex review of
+# PR #10, round 43).
+MAX_TEXT_CHARS = 20_000_000
 
 # Failure shapes, each named so a report can say what kind of thing broke.
 FAILURE_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -280,9 +284,11 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
         # are two failures, and classification reads the command
         # (Codex review of PR #10, round 28).
         key = (tool, " ".join(command.split())[:EXCERPT_CHARS], excerpt)
+        full = f"{command} {output}".lower()
         occurrence = {
             "timestamp": event.get("timestamp"),
-            "text": f"{command} {output}".lower()[:MAX_TEXT_CHARS],
+            "text": full[:MAX_TEXT_CHARS],
+            "truncated": len(full) > MAX_TEXT_CHARS,
         }
         if key in failures:
             failures[key]["count"] += 1
@@ -362,8 +368,13 @@ def build_evidence(
     namespace: str | None = None,
 ) -> dict:
     per_topic: dict[str, dict[str, dict]] = defaultdict(dict)
+    unknown: set[str] = set()
     for failure in failures:
-        for topic in matching_topics(failure, keywords):
+        matched = matching_topics(failure, keywords)
+        if any(o.get("truncated") for o in failure.get("_occurrences") or []):
+            # Text past the cap was never searched: a miss is not a zero.
+            unknown.update(t for t in keywords if t not in matched)
+        for topic in matched:
             when = first_match_timestamp(failure, keywords[topic])
             entry = per_topic[topic].setdefault(
                 failure["trace_id"],
@@ -387,7 +398,7 @@ def build_evidence(
             )
             for topic in keywords
         },
-        "truncated": [] if complete else list(keywords),
+        "truncated": list(keywords) if not complete else sorted(unknown),
         "listing_complete": complete,
         "failure_count": len(failures),
         # Every session scanned, matched or not: a complete scan with only

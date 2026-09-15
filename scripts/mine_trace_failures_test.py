@@ -632,3 +632,27 @@ def test_cli_stdout_error_paths_are_scrubbed_too(monkeypatch, tmp_path):
     with pytest.raises(mine.TracesCliError) as exc:
         mine.run_traces_json("traces", ["list", "@slug", "--all"], retries=0)
     assert "tr_SENTINEL_KEY" not in str(exc.value)
+
+
+def test_output_past_the_text_cap_marks_unmatched_topics_unknown(monkeypatch):
+    monkeypatch.setattr(mine, "MAX_TEXT_CHARS", 200)
+    events = [
+        {"type": "tool_call", "callId": "c1", "args": {"command": "python3 job.py"}},
+        {
+            "type": "tool_result",
+            "callId": "c1",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 1,
+            "eventNumber": 2,
+            "output": "Exit code 1\njob crashed\n" + "x" * 300 + "\nthe session expired",
+        },
+    ]
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    evidence = mine.build_evidence(failures, keywords, "/repo", None)
+    assert evidence["topics"]["auth-lifecycle"] == []
+    assert "auth-lifecycle" in evidence["truncated"], "a miss past the cap is unknown, not zero"
+    assert "shell-semantics" not in evidence["truncated"], "topics that matched are known"
+    assert "_occurrences" not in json.dumps(mine.public_failure(failures[0]))

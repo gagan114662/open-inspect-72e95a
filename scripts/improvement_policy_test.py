@@ -209,3 +209,12 @@ def test_scrub_secrets_covers_short_options_and_quoted_values_with_spaces():
     assert "-h db" in out and "again" in out
     out = scrub("export DB_PASSWORD='two words here' && run")
     assert "two words" not in out and "&& run" in out
+
+
+def test_scrub_secrets_covers_curl_user_password_arguments():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub(
+        "curl -u admin:FAKE_CURL_PW https://api/x -> HTTP 403; curl --user 'bob:FAKE TWO' https://y"
+    )
+    assert "FAKE_CURL_PW" not in out and "FAKE TWO" not in out
+    assert "admin:" in out and "HTTP 403" in out
