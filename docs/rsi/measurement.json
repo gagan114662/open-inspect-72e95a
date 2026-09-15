@@ -1,13 +1,14 @@
 {
-  "policy_version": 2,
-  "policy_hash": "c3c6db9d8605",
+  "policy_version": 3,
+  "policy_hash": "11e8243663fa",
   "archive_digest": "34d56884482d",
   "anchor": {
     "source": "trace-failures",
     "agents": ["claude-code", "antigravity", "cursor", "droid", "openclaw", "pi"],
     "event_types": "tool_result(status=error) or failure-shaped output",
-    "collected_at": "2026-09-14T22:57:47Z",
-    "traces_considered": 2
+    "collected_at": "2026-09-15T13:38:54Z",
+    "evidence_digest": "4bd5d9402889d1cc",
+    "traces_considered": 4
   },
   "epochs": [
     {
@@ -33,15 +34,15 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.5,
+      "validity": 0.2236,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -68,15 +69,15 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.1118,
+      "validity": 0.1667,
       "dev_only_topics": [],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
@@ -103,16 +104,16 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.22,
-      "dev_only_topics": [],
+      "validity": 0.164,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
     {
@@ -138,16 +139,16 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.22,
-      "dev_only_topics": [],
+      "validity": 0.164,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
     {
@@ -173,16 +174,16 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.22,
-      "dev_only_topics": [],
+      "validity": 0.164,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
     {
@@ -208,16 +209,16 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.22,
-      "dev_only_topics": [],
+      "validity": 0.164,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
     {
@@ -243,16 +244,16 @@
         "archive-branch": 0.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.22,
-      "dev_only_topics": [],
+      "validity": 0.164,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["archive-branch", "auth-lifecycle"]
     },
     {
@@ -278,16 +279,16 @@
         "archive-branch": 1.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.4264,
-      "dev_only_topics": [],
+      "validity": 0.3178,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["auth-lifecycle"]
     },
     {
@@ -313,16 +314,16 @@
         "archive-branch": 2.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.533,
-      "dev_only_topics": [],
+      "validity": 0.4767,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["auth-lifecycle"]
     },
     {
@@ -348,16 +349,16 @@
         "archive-branch": 3.0
       },
       "anchor": {
-        "credential-redaction": 1,
-        "shell-semantics": 1,
+        "credential-redaction": 2,
+        "shell-semantics": 0,
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
         "archive-branch": 1
       },
       "anchor_unknown_topics": [],
-      "validity": 0.5251,
-      "dev_only_topics": [],
+      "validity": 0.5479,
+      "dev_only_topics": ["shell-semantics"],
       "anchor_only_topics": ["auth-lifecycle"]
     }
   ],
@@ -384,15 +385,15 @@
       "archive-branch": 3.0
     },
     "anchor": {
-      "credential-redaction": 1,
-      "shell-semantics": 2,
-      "env-var-precedence": 0,
+      "credential-redaction": 3,
+      "shell-semantics": 1,
+      "env-var-precedence": 1,
       "fork-pr-permissions": 0,
-      "auth-lifecycle": 1,
+      "auth-lifecycle": 2,
       "archive-branch": 2
     },
     "anchor_unknown_topics": [],
-    "validity": 0.5457,
+    "validity": 0.6419,
     "unclassified_findings": [
       {
         "round": 1,
@@ -409,23 +410,34 @@
     ],
     "dev_only_topics": [],
     "anchor_only_topics": ["auth-lifecycle"],
-    "validity_all_rounds": 0.5457,
+    "validity_all_rounds": 0.6419,
     "rounds_after_evidence": 0,
     "anchor_definitions": {
       "credential-redaction": ["redact", "credential", "secret", "token", "leak", "expos"],
-      "shell-semantics": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
+      "shell-semantics": [
+        "errexit",
+        "bash -e",
+        "set -e",
+        "pipefail",
+        "shell",
+        "argument list",
+        "quoting",
+        "exit status"
+      ],
       "env-var-precedence": ["precedence", "env var", "environment variable", "unconditionally"],
       "fork-pr-permissions": ["fork", "github_token", "persist-credentials"],
       "auth-lifecycle": ["refresh token", "rotat", "expir", "auth.json", "stale"],
-      "archive-branch": ["archive", "branch", "commit", "create", "creation"]
+      "archive-branch": ["archive", "branch", "commit", "create", "creation"],
+      "shell-semantics@959ad56f": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"]
     },
     "anchor_evidence": {
-      "credential-redaction": 1,
-      "shell-semantics": 2,
-      "env-var-precedence": 0,
+      "credential-redaction": 3,
+      "shell-semantics": 1,
+      "env-var-precedence": 1,
       "fork-pr-permissions": 0,
-      "auth-lifecycle": 1,
-      "archive-branch": 2
+      "auth-lifecycle": 2,
+      "archive-branch": 2,
+      "shell-semantics@959ad56f": 3
     }
   }
 }
