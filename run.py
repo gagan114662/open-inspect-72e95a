@@ -117,7 +117,6 @@ def main(argv: list[str]) -> int:
     # relative to where the user typed it (Codex review of PR #68, round 2).
     args.repo_dir = str(Path(args.repo_dir or ROOT).expanduser().resolve())
 
-    field_failures: list[str] = []
     scratch: Path | None = None
     if args.refresh:
         # Mine into scratch files first: a refresh that observed no session
@@ -132,7 +131,21 @@ def main(argv: list[str]) -> int:
         # `.refresh/trace-evidence.json` link to the committed snapshot would
         # otherwise redirect the miner's write onto the protected file before
         # replace_evidence() ever ran (Codex review of PR #68, round 6).
-        tmp = Path(tempfile.mkdtemp(prefix="run-", dir=scratch_root))
+        scratch = Path(tempfile.mkdtemp(prefix="run-", dir=scratch_root))
+    try:
+        return run_pass(args, scratch)
+    finally:
+        # The scratch folder goes whatever happens after it was created: a
+        # refused replacement, a failed step, or success (Codex review of
+        # PR #68, rounds 7 and 8).
+        if scratch is not None:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+
+def run_pass(args: argparse.Namespace, tmp: Path | None) -> int:
+    """One pass: the optional refresh into `tmp`, then the decision steps."""
+    field_failures: list[str] = []
+    if tmp is not None:
         fresh, failures = tmp / "trace-evidence.json", tmp / "field-failures.json"
         mine = [
             "scripts/mine-trace-failures.py",
@@ -155,15 +168,7 @@ def main(argv: list[str]) -> int:
             print(f"[ok] refresh: {observed} session(s) observed; evidence snapshot replaced")
         else:
             print("[skip] refresh: no session observed; the committed evidence snapshot is kept")
-        scratch = tmp
-    try:
-        return run_decision(args, field_failures)
-    finally:
-        # The scratch folder lives until the decision has used the mined
-        # blind spots, then goes, on success and on failure alike (Codex
-        # review of PR #68, round 7).
-        if scratch is not None:
-            shutil.rmtree(scratch, ignore_errors=True)
+    return run_decision(args, field_failures)
 
 
 def run_decision(args: argparse.Namespace, field_failures: list[str]) -> int:

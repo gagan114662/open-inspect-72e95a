@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # The smallest checkout the agent can run in: its tools, its records, its
@@ -224,6 +226,49 @@ def test_repo_dir_is_resolved_against_the_callers_directory(tmp_path, monkeypatc
     monkeypatch.chdir(tmp_path)
     assert run.main(["run.py", "--refresh", "--repo-dir", "."]) == 0
     assert seen["repo_dir"] == str(tmp_path.resolve())
+
+
+def test_a_refused_refresh_leaves_no_scratch_files_behind(tmp_path, monkeypatch):
+    """Codex review of PR #68, round 8: the refusal returns happened before
+    the cleanup try/finally, so a rejected replacement kept both mined files
+    for ever. Cleanup now starts the moment the scratch folder exists."""
+    run = load_run("run_entry_refused_scratch")
+    root = tmp_path / "repo"
+    (root / "docs" / "rsi").mkdir(parents=True)
+    (root / "scripts").mkdir()
+    shutil.copyfile(
+        ROOT / "scripts" / "improvement_policy.py", root / "scripts" / "improvement_policy.py"
+    )
+    archive = root / "docs" / "self-improvement-archive.jsonl"
+    archive.write_text('{"round": 1}\n')
+    (root / "docs" / "rsi" / "trace-evidence.json").symlink_to(archive)  # refused destination
+    (root / "scripts" / "mine-trace-failures.py").write_text(
+        "import sys, json\na=sys.argv\n"
+        "open(a[a.index('--save-evidence')+1],'w').write(json.dumps({'sessions': ['s1'], 'topics': {}}))\n"
+        "open(a[a.index('--out-json')+1],'w').write('[]')\nprint('1 distinct failure(s)')\n"
+    )
+    monkeypatch.setattr(run, "ROOT", root)
+    assert run.main(["run.py", "--refresh", "--repo-dir", str(tmp_path)]) == 1
+    assert list((root / "docs" / "rsi" / ".refresh").iterdir()) == []
+
+
+def test_the_entry_point_itself_is_a_protected_output(tmp_path):
+    """Codex review of PR #68, round 8: linking docs/rsi/measurement.json to
+    run.py let the measurement overwrite the entry point with JSON."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "policy_for_run_entry", ROOT / "scripts" / "improvement_policy.py"
+    )
+    policy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(policy)
+    for rel in ("run.py", "agent.json", "instructions.md", "tools/manifest.json"):
+        with pytest.raises(PermissionError):
+            policy.assert_safe_output(policy.REPO_ROOT / rel)
+    linked = tmp_path / "measurement.json"
+    linked.symlink_to(ROOT / "run.py")
+    with pytest.raises(PermissionError):
+        policy.assert_safe_output(linked)
 
 
 def test_refresh_never_writes_through_a_planted_staging_link(tmp_path, monkeypatch):
