@@ -197,3 +197,15 @@ def test_scrub_secrets_covers_basic_auth_and_quoted_flag_values():
     out = scrub('tool --api-key "FAKE_QUOTED_KEY_1" --region us; token FAKEBARE_TOKEN_22 rejected')
     assert "FAKE_QUOTED_KEY_1" not in out and "FAKEBARE_TOKEN_22" not in out
     assert "--region us" in out
+
+
+def test_scrub_secrets_covers_short_options_and_quoted_values_with_spaces():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub(
+        'mysql -uadmin -pFAKE_PASSWORD_123 -h db; then --password "FAKE PASSWORD VALUE" again'
+    )
+    assert "FAKE_PASSWORD_123" not in out
+    assert "FAKE PASSWORD VALUE" not in out and "PASSWORD VALUE" not in out
+    assert "-h db" in out and "again" in out
+    out = scrub("export DB_PASSWORD='two words here' && run")
+    assert "two words" not in out and "&& run" in out
