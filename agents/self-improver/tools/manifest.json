@@ -1,0 +1,67 @@
+{
+  "tools": [
+    {
+      "name": "archive_round",
+      "script": "scripts/archive-round.py",
+      "purpose": "Persist one independent review as an archive round, stamped with the policy version and hash in force.",
+      "inputs": ["archive path", "review comment file", "source sha"],
+      "writes": ["docs/self-improvement-archive.jsonl (via PR)"]
+    },
+    {
+      "name": "merge_archive_rounds",
+      "script": "scripts/merge-archive-rounds.py",
+      "purpose": "Rebuild the standing per-PR archive branch from the default branch without conflicts.",
+      "inputs": ["base archive", "standing archive", "new round"],
+      "writes": ["merged archive"]
+    },
+    {
+      "name": "detect_recurring_pattern",
+      "script": "scripts/detect-recurring-pattern.py",
+      "purpose": "Count recurrence per topic under the policy and recommend target vs mechanism fixes.",
+      "inputs": ["archive path", "--policy"],
+      "writes": []
+    },
+    {
+      "name": "mine_trace_failures",
+      "script": "scripts/mine-trace-failures.py",
+      "purpose": "Mine failed tool calls from working sessions (local folder or dedicated Traces namespace) into a field-evidence snapshot; scrubs credentials; never prints excerpts in CI.",
+      "inputs": ["--repo-dir | --namespace", "--save-evidence", "--out-json"],
+      "writes": ["docs/rsi/trace-evidence.json"]
+    },
+    {
+      "name": "measure_policy_validity",
+      "script": "scripts/measure-policy-validity.py",
+      "purpose": "Coverage of archived findings and Spearman validity of the policy's signal against the field anchor, per round.",
+      "inputs": ["archive path", "--trace-evidence", "--out-json"],
+      "writes": ["docs/rsi/measurement.json"]
+    },
+    {
+      "name": "revise_improvement_policy",
+      "script": "scripts/revise-improvement-policy.py",
+      "purpose": "Apply the fixed acceptance rule: propose a bounded revision, a rollback, or nothing.",
+      "inputs": ["archive path", "--measurement", "--field-failures"],
+      "writes": ["docs/improvement-policy.json", "docs/improvement-policy-history.jsonl"]
+    },
+    {
+      "name": "render_rsi_dashboard",
+      "script": "scripts/render-rsi-dashboard.py",
+      "purpose": "Render the loop's state as a single HTML page.",
+      "inputs": ["archive path", "--trace-evidence", "--out"],
+      "writes": ["docs/rsi/dashboard.html"]
+    },
+    {
+      "name": "distill_skills",
+      "script": "scripts/distill-skills.py",
+      "purpose": "Turn resolved archive rounds into per-topic playbooks the next fix can load.",
+      "inputs": ["archive path", "--policy", "--out-dir"],
+      "writes": ["agents/self-improver/skills/*.md"]
+    },
+    {
+      "name": "improvement_policy",
+      "script": "scripts/improvement_policy.py",
+      "purpose": "Shared library: policy load/validate/hash, lineage checks, write guards, credential scrubbing, round identity.",
+      "inputs": [],
+      "writes": []
+    }
+  ]
+}
