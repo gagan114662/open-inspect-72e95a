@@ -1,8 +1,8 @@
 {
-  "version": 2,
-  "parent": 1,
+  "version": 3,
+  "parent": 2,
   "origin": "revision",
-  "created_at": "2026-09-14T20:01:51Z",
+  "created_at": "2026-09-15T13:46:14Z",
   "threshold": 3,
   "topics": {
     "credential-redaction": {
@@ -10,7 +10,16 @@
       "weight": 1.0
     },
     "shell-semantics": {
-      "keywords": ["errexit", "bash -e", "exit code", "-e", "pipefail", "shell"],
+      "keywords": [
+        "errexit",
+        "bash -e",
+        "set -e",
+        "pipefail",
+        "shell",
+        "argument list",
+        "quoting",
+        "exit status"
+      ],
       "weight": 1.0
     },
     "env-var-precedence": {
@@ -64,5 +73,5 @@
       ]
     }
   },
-  "rationale": "Revised because coverage 0.6071 < 0.8. added topic archive-branch (keywords ['archive', 'branch', 'commit', 'create', 'creation']) covering 8 unclassified finding(s)"
+  "rationale": "Human taxonomy correction (issue #16): the keyword '-e' matched inside ordinary words (pre-existing, re-evaluate) and 'exit code' matched nearly every failed command's output, so shell-semantics recurred on findings and failures that had nothing to do with shells."
 }
