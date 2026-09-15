@@ -4,6 +4,7 @@
     python3 run.py            measure, decide (dry run), render, distill, propose
     python3 run.py --refresh  first mine this machine's working sessions into the field anchor
     python3 run.py --apply    write the decision to the policy files instead of a dry run
+    python3 run.py --root DIR run against another checkout (tests use a copy)
 
 Each step is one of the agent's registered tools (tools/manifest.json); this
 file only calls them in the order the hourly schedule uses, and prints one
@@ -14,8 +15,8 @@ schedules in .github/workflows/ run the same steps on their own.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,32 @@ EVIDENCE = "docs/rsi/trace-evidence.json"
 VERIFIER_EVIDENCE = "docs/rsi/trace-evidence-verifier.json"
 MEASUREMENT = "docs/rsi/measurement.json"
 DASHBOARD = "docs/rsi/dashboard.html"
+
+
+def replace_evidence(fresh: Path, dest: Path) -> str | None:
+    """Replace the committed evidence snapshot with the freshly mined one, under
+    the same output guard every tool uses: the destination may not be (or link
+    to) the archive, the policy, its history, or the loop's code, and it must
+    be a regular file so nothing is followed (Codex review of PR #68, round 3).
+    Returns the refusal reason, or None when the snapshot was replaced."""
+    guard = ROOT / "scripts" / "improvement_policy.py"
+    if not guard.exists():
+        return f"{guard.relative_to(ROOT)} is missing; refusing to replace evidence unguarded"
+    spec = importlib.util.spec_from_file_location("run_entry_policy", guard)
+    policy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(policy)
+    if dest.is_symlink():
+        return f"{dest.relative_to(ROOT)} is a symlink; evidence must be a regular file"
+    try:
+        policy.assert_safe_output(dest, inputs=[fresh], kind="evidence")
+    except PermissionError as exc:
+        return str(exc)
+    if dest.exists() and dest.stat().st_nlink > 1:
+        return f"{dest.relative_to(ROOT)} has other hard links; evidence must be a regular file"
+    staged = dest.with_name(dest.name + ".tmp")
+    staged.write_bytes(fresh.read_bytes())
+    staged.replace(dest)
+    return None
 
 
 def step(name: str, argv: list[str]) -> int:
@@ -59,15 +86,23 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("--refresh", action="store_true", help="mine this machine's sessions first")
     parser.add_argument(
-        "--repo-dir", default=str(ROOT), help="folder whose sessions to mine (with --refresh)"
+        "--repo-dir", default=None, help="folder whose sessions to mine (with --refresh)"
     )
     parser.add_argument(
         "--apply", action="store_true", help="write the decision instead of a dry run"
     )
+    parser.add_argument(
+        "--root", default=None, help="checkout to run in (default: this file's folder)"
+    )
     args = parser.parse_args(argv[1:])
+    if args.root:
+        # Tests and operators can point one pass at a copy of the checkout so
+        # a run never rewrites the real one (Codex review of PR #68, round 3).
+        global ROOT
+        ROOT = Path(args.root).expanduser().resolve()
     # Subprocesses run from the repository root; a relative --repo-dir means
     # relative to where the user typed it (Codex review of PR #68, round 2).
-    args.repo_dir = str(Path(args.repo_dir).expanduser().resolve())
+    args.repo_dir = str(Path(args.repo_dir or ROOT).expanduser().resolve())
 
     field_failures: list[str] = []
     if args.refresh:
@@ -90,7 +125,10 @@ def main(argv: list[str]) -> int:
             return 1
         observed = len(json.loads(fresh.read_text()).get("sessions") or [])
         if observed:
-            shutil.copyfile(fresh, ROOT / EVIDENCE)
+            refused = replace_evidence(fresh, ROOT / EVIDENCE)
+            if refused:
+                print(f"[exit 1] refresh: {refused}")
+                return 1
             field_failures = ["--field-failures", str(failures)]
             print(f"[ok] refresh: {observed} session(s) observed; evidence snapshot replaced")
         else:
