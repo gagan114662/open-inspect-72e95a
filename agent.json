@@ -1,0 +1,44 @@
+{
+  "name": "self-improver",
+  "description": "Revises this repository's improvement policy from measured evidence and proposes the result as pull requests.",
+  "roles": {
+    "improver": "Claude Code (applies each round's fix)",
+    "verifier": "Codex via .github/workflows/codex-review.yml (independent review of every PR, executes tests in its sandbox)",
+    "meta_improver": "scripts/revise-improvement-policy.py (rewrites the policy from measured validity)",
+    "human": "merges every pull request; runs the deploy"
+  },
+  "policy": {
+    "path": "docs/improvement-policy.json",
+    "history": "docs/improvement-policy-history.jsonl",
+    "note": "version, topics and threshold live in the policy file itself; read them there"
+  },
+  "acceptance_rule": {
+    "min_coverage": 0.8,
+    "min_validity": 0.3,
+    "min_rounds_to_judge": 2,
+    "max_new_topics_per_revision": 2,
+    "min_findings_per_topic": 2,
+    "min_field_blind_spots": 5,
+    "defined_in": "scripts/revise-improvement-policy.py"
+  },
+  "evidence": {
+    "archive": "docs/self-improvement-archive.jsonl",
+    "field_anchor": "docs/rsi/trace-evidence.json",
+    "measurement": "docs/rsi/measurement.json",
+    "dashboard": "docs/rsi/dashboard.html",
+    "traces_namespace": "@open-inspect",
+    "traces_namespace_is_repository": true
+  },
+  "owned_paths": [
+    "docs/improvement-policy.json",
+    "docs/improvement-policy-history.jsonl",
+    "docs/rsi/",
+    "skills/"
+  ],
+  "schedules": ["schedules/hourly-revise.md", "schedules/on-review.md"],
+  "channels": [
+    "channels/github-pull-requests.md",
+    "channels/github-issues.md",
+    "channels/codex-review.md"
+  ]
+}

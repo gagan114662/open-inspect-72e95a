@@ -192,6 +192,11 @@ jobs:
           [ -f docs/rsi/trace-evidence-verifier.json ] && args+=(--verifier-evidence docs/rsi/trace-evidence-verifier.json)
           python3 scripts/render-rsi-dashboard.py "${args[@]}"
 
+      - name: Distill skills from the archive
+        # The eve-shaped agent directory: resolved rounds become per-topic
+        # playbooks (skills/) the next fix can load.
+        run: python3 scripts/distill-skills.py docs/self-improvement-archive.jsonl
+
       - name: Propose the result as a pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -199,7 +204,7 @@ jobs:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           set -euo pipefail
-          if git diff --quiet -- docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/; then
+          if git diff --quiet -- docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/ skills/; then
             echo "Nothing changed (action: $ACTION)."
             exit 0
           fi
@@ -228,7 +233,7 @@ jobs:
             title="chore(rsi): refresh the Traces field anchor"
             body="Automatically refreshed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) from the shared Traces namespace at \`${SOURCE_SHA}\`. The fixed acceptance rule proposed no policy change on this evidence (action: **${ACTION}**). This changes only the evidence snapshot, the measurement and the dashboard; the policy is untouched."
             git checkout -b "$branch"
-            git add docs/rsi/
+            git add docs/rsi/ skills/
             git commit -m "$title"
             git push --force origin "$branch"
             existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
@@ -246,7 +251,7 @@ jobs:
           # version and parent (Codex review of PR #10, round 5).
           branch="improvement-policy-proposal"
           git checkout -b "$branch"
-          git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/
+          git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/ skills/
           git commit -m "chore(rsi): ${ACTION} of the improvement policy (v${version})"
           git push --force origin "$branch"
           # Same-repository PRs only: `--head` matches by branch name alone, so

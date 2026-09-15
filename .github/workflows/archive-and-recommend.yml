@@ -120,6 +120,23 @@ jobs:
             const headSha = context.payload.workflow_run.head_sha;
             const marker = `<!-- codex-review-sha: ${headSha} -->`;
 
+            // The loop's own pull requests (archive rounds, evidence refreshes,
+            // policy proposals) are one data file each; reviewing them yields
+            // clean rounds that would count toward a policy's evaluation period
+            // for free. Their reviews are never archived.
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: prNumber,
+            });
+            const head = pr.data.head.ref || "";
+            if (
+              pr.data.user?.login === "github-actions[bot]" ||
+              /^(archive-rounds-pr-|improvement-policy-proposal$|improvement-evidence-refresh$)/.test(head)
+            ) {
+              console.log(`PR #${prNumber} (${head}) is the loop's own; its review is not archived.`);
+              core.setOutput("found", "false");
+              return;
+            }
+
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -191,27 +208,40 @@ jobs:
           branch="archive-rounds-pr-${PR_NUMBER}"
           tail -n 1 docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/new-round.jsonl"
           git checkout -- docs/self-improvement-archive.jsonl
-          if git fetch origin "$branch" 2>/dev/null; then
-            git show FETCH_HEAD:docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/standing.jsonl" || : > "$RUNNER_TEMP/standing.jsonl"
-          else
-            : > "$RUNNER_TEMP/standing.jsonl"
-          fi
-          python3 scripts/merge-archive-rounds.py \
-            docs/self-improvement-archive.jsonl "$RUNNER_TEMP/standing.jsonl" \
-            "$RUNNER_TEMP/new-round.jsonl" "$RUNNER_TEMP/merged.jsonl" > "$RUNNER_TEMP/merge-result.json"
-          cat "$RUNNER_TEMP/merge-result.json"
-          if [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["changed"])' "$RUNNER_TEMP/merge-result.json")" != "True" ]; then
-            echo "The standing branch already holds this round — nothing to push."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Two writers (this job and the rebuild job) force-push the same
+          # branch. Each push is leased on the commit it read; a lost lease
+          # means the other writer landed first, so refetch, merge again and
+          # retry, never overwrite (Codex review of PR #49, finding 1).
+          for attempt in 1 2 3 4; do
+            if git fetch origin "$branch" 2>/dev/null; then
+              lease=$(git rev-parse FETCH_HEAD)
+              git show FETCH_HEAD:docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/standing.jsonl" || : > "$RUNNER_TEMP/standing.jsonl"
+            else
+              lease=""
+              : > "$RUNNER_TEMP/standing.jsonl"
+            fi
+            python3 scripts/merge-archive-rounds.py \
+              docs/self-improvement-archive.jsonl "$RUNNER_TEMP/standing.jsonl" \
+              "$RUNNER_TEMP/new-round.jsonl" "$RUNNER_TEMP/merged.jsonl" > "$RUNNER_TEMP/merge-result.json"
+            cat "$RUNNER_TEMP/merge-result.json"
+            if [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["changed"])' "$RUNNER_TEMP/merge-result.json")" != "True" ]; then
+              echo "The standing branch already holds this round — nothing to push."
+              break
+            fi
             git checkout -B "$branch"
             cp "$RUNNER_TEMP/merged.jsonl" docs/self-improvement-archive.jsonl
             git add docs/self-improvement-archive.jsonl
             rounds=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["rounds"]))' "$RUNNER_TEMP/merge-result.json")
-            git commit -m "chore: archive ${rounds} review round(s) of PR #${PR_NUMBER}"
-            git push --force origin "$branch"
-          fi
+            git commit -q -m "chore: archive ${rounds} review round(s) of PR #${PR_NUMBER}"
+            if git push --force-with-lease="refs/heads/${branch}:${lease}" origin "$branch"; then
+              break
+            fi
+            echo "Lease lost on attempt ${attempt}; refetching and merging again."
+            git checkout -q "$(git rev-parse HEAD~1)" 2>/dev/null || git checkout -q --detach
+            sleep $((attempt * 3))
+          done
 
           # Same-repository PRs only (a fork branch of the same name is not ours).
           existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
@@ -288,6 +318,85 @@ jobs:
               });
               console.log(`Opened tracking issue for topic "${item.topic}".`);
             }
+
+  rebuild-archive-branches:
+    name: Rebuild open archive branches on the merged archive
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    # When one archive PR merges, every other open archive-rounds-pr-* branch
+    # still claims the round number that just landed and shows a conflict
+    # that would never clear (its own PR may already be merged, so no review
+    # run will rebuild it). Rebuild each on the new default branch with
+    # scripts/merge-archive-rounds.py; a branch that would not change is
+    # left alone.
+    permissions:
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: archive-and-recommend-rebuild
+      cancel-in-progress: false
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Rebuild each open archive branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          : > "$RUNNER_TEMP/empty.jsonl"
+          # --limit 1000: gh's default of 30 would silently skip older archive
+          # PRs (Codex review of PR #49, finding 2).
+          for branch in $(gh pr list --state open --base "$default_branch" --limit 1000 \
+              --json headRefName,isCrossRepository \
+              --jq '.[] | select(.isCrossRepository == false) | .headRefName | select(startswith("archive-rounds-pr-"))'); do
+            for attempt in 1 2 3 4; do
+              git fetch origin "$branch" || break
+              lease=$(git rev-parse FETCH_HEAD)
+              git show FETCH_HEAD:docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/standing.jsonl" || : > "$RUNNER_TEMP/standing.jsonl"
+              python3 scripts/merge-archive-rounds.py \
+                docs/self-improvement-archive.jsonl "$RUNNER_TEMP/standing.jsonl" \
+                "$RUNNER_TEMP/empty.jsonl" "$RUNNER_TEMP/merged.jsonl" > "$RUNNER_TEMP/merge-result.json"
+              if cmp -s "$RUNNER_TEMP/merged.jsonl" "$RUNNER_TEMP/standing.jsonl"; then
+                echo "$branch: already on the current archive."
+                break
+              fi
+              rounds=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["rounds"]))' "$RUNNER_TEMP/merge-result.json")
+              git checkout -q -B "$branch" "origin/$default_branch"
+              cp "$RUNNER_TEMP/merged.jsonl" docs/self-improvement-archive.jsonl
+              git add docs/self-improvement-archive.jsonl
+              # Every round already on the default branch: the branch has
+              # nothing left to propose; leave it for its PR to be closed
+              # rather than failing the loop (Codex review of PR #49, finding 3).
+              if git diff --cached --quiet; then
+                echo "$branch: all of its rounds are already on the default branch; nothing to rebuild."
+                git checkout -q "origin/$default_branch"
+                break
+              fi
+              git commit -q -m "chore: archive ${rounds} review round(s) (rebuilt on the current default branch)"
+              # Leased on the commit this run read: if the analyze job pushed a
+              # newer round meanwhile, refetch and merge again instead of
+              # overwriting it (Codex review of PR #49, finding 1).
+              if git push --force-with-lease="refs/heads/${branch}:${lease}" origin "$branch"; then
+                echo "$branch: rebuilt with ${rounds} round(s)."
+                git checkout -q "origin/$default_branch"
+                break
+              fi
+              echo "$branch: lease lost on attempt ${attempt}; retrying."
+              git checkout -q "origin/$default_branch"
+              sleep $((attempt * 3))
+            done
+          done
 
   reevaluate-on-merge:
     name: Re-evaluate thresholds after an archive-round PR merges
