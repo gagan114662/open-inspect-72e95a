@@ -1454,3 +1454,51 @@ def test_field_derived_keywords_come_only_from_the_safe_vocabulary():
     # A word an archived (public) review finding already contains is allowed.
     vocab = revise.field_vocabulary([{"findings": ["**[P1]** violetorchard renderer crashed."]}])
     assert "violetorchard" in vocab
+
+
+def test_mining_never_names_a_topic_after_paths_or_the_repositorys_background_vocabulary():
+    # The loop's first autonomous proposal (PR #54) mined "scripts-evidence"
+    # from path fragments and words present in most findings, classifying 52
+    # findings as one class. Locations are stripped before tokenizing and
+    # background vocabulary is excluded from mining.
+    assert revise.tokenize(
+        "**[P2]** Rollback evaluates rounds. In [revise-improvement-policy.py:541]"
+        "(/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:541), see docs/x.md"
+    ) == {"rollback", "evaluates", "rounds"}
+    entries = [
+        {
+            "round": i,
+            "source_sha": f"s{i}",
+            "findings": [
+                f"**[P2]** scripts evidence topic broke thing-{i} in /home/runner/x{i}.py"
+            ],
+        }
+        for i in range(10)
+    ] + [{"round": 10, "source_sha": "s10", "findings": ["**[P2]** disk quota exceeded on runner"]}]
+    background = revise.background_tokens(entries)
+    assert {"scripts", "evidence", "topic"} <= background
+    assert "quota" not in background
+    unclassified = [{"round": i, "finding": e["findings"][0]} for i, e in enumerate(entries)]
+    mined = revise.mine_topics(unclassified, {}, None, background)
+    for topic in mined:
+        assert not ({"scripts", "evidence", "topic", "home", "runner"} & set(topic["keywords"])), (
+            topic
+        )
+
+
+def test_the_real_archive_no_longer_mines_location_words(tmp_path):
+    archive = Path(__file__).resolve().parent.parent / "docs" / "self-improvement-archive.jsonl"
+    if not archive.exists():
+        return
+    entries = [json.loads(line) for line in archive.read_text().splitlines() if line.strip()]
+    policy = policy_mod.load_policy()
+    current = measure.measure(entries, policy, None)["current"]
+    mined = revise.mine_topics(
+        list(current["unclassified_findings"]),
+        policy_mod.topic_keywords(policy),
+        revise.field_vocabulary(entries),
+        revise.background_tokens(entries),
+    )
+    banned = {"scripts", "home", "runner", "work", "open-inspect", "evidence", "topic", "policy"}
+    for topic in mined:
+        assert not (banned & set(topic["keywords"])), topic["keywords"]

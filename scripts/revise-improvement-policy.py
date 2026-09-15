@@ -241,12 +241,25 @@ STOPWORDS = frozenset(
 )
 
 _TOKEN_RE = re.compile(r"[a-z][a-z_-]{2,}")
+# Paths, URLs and file references name WHERE a finding is, never what class
+# of problem it is: "/home/runner/work/<repo>/scripts/x.py:41" must not
+# hand mining the tokens home, runner, scripts or the repository's own name
+# (the loop's first autonomous proposal, PR #54, did exactly that).
+_LOCATION_RE = re.compile(
+    r"\S*/\S*|\S+\.(?:py|ts|tsx|js|mjs|yml|yaml|json|jsonl|md|sh|toml)\b(?::\d+)?"
+)
+# A token present in more than this share of ALL archived findings is the
+# repository's background vocabulary ("policy", "evidence", "scripts"), not
+# a class of problem, and may not name or define a mined topic.
+MAX_BACKGROUND_SHARE = 0.2
+MIN_BACKGROUND_FINDINGS = 10
 
 
 def tokenize(text: str) -> set[str]:
+    text = _LOCATION_RE.sub(" ", text.lower())
     return {
         tok.strip("-_")
-        for tok in _TOKEN_RE.findall(text.lower())
+        for tok in _TOKEN_RE.findall(text)
         if len(tok) >= MIN_TOKEN_LENGTH
         and tok not in STOPWORDS
         and tok != "redacted"  # the scrubber's marker is never a topic
@@ -432,6 +445,16 @@ SAFE_FIELD_VOCABULARY: frozenset[str] = frozenset(
 )
 
 
+def background_tokens(entries: list[dict]) -> set[str]:
+    """Tokens that appear in more than MAX_BACKGROUND_SHARE of every archived
+    finding: what this repository talks about, not what goes wrong in it."""
+    findings = [f for e in entries for f in e.get("findings", []) if isinstance(f, str)]
+    if len(findings) < MIN_BACKGROUND_FINDINGS:
+        return set()  # too few findings for a share to mean anything
+    df: Counter[str] = Counter(tok for f in findings for tok in tokenize(f))
+    return {tok for tok, n in df.items() if n / len(findings) > MAX_BACKGROUND_SHARE}
+
+
 def field_vocabulary(entries: list[dict]) -> set[str]:
     """Words that may be published from field failures: the safe vocabulary
     plus every token already public in an archived review finding."""
@@ -449,6 +472,7 @@ def mine_topics(
     unclassified: list[dict],
     keywords: dict[str, list[str]],
     vocabulary: set[str] | None = None,
+    background: set[str] | None = None,
 ) -> list[dict]:
     """Greedy, auditable topic mining over findings the policy could not
     classify: the most frequent significant token names a topic; its
@@ -456,7 +480,7 @@ def mine_topics(
     findings the new topic covers are removed and the process repeats.
     Field items (round `field:…`) contribute only tokens in `vocabulary`;
     with no vocabulary they contribute nothing (round 49)."""
-    taken = existing_keyword_tokens(keywords)
+    taken = existing_keyword_tokens(keywords) | set(background or ())
 
     def allowed(item: dict) -> set[str]:
         toks = tokenize(item["finding"]) - taken
@@ -977,7 +1001,7 @@ def decide(
     if field_trigger or coverage_trigger:
         mining_input.extend(blind)
     mined = (
-        mine_topics(mining_input, keywords, field_vocabulary(entries))
+        mine_topics(mining_input, keywords, field_vocabulary(entries), background_tokens(entries))
         if (coverage_trigger or field_trigger)
         else []
     )
