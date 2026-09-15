@@ -543,6 +543,18 @@ jobs:
           branch="tool-proposals"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin "$default_branch"
+          # Every line of Python this privileged job executes, and every
+          # reviewed input it reads (archive, policy, registry), comes from
+          # a separate checkout of the DEFAULT branch. The standing branch
+          # is only the output tree: a change to the generator committed
+          # there is never run with this job's write token (Codex review of
+          # PR #61, round 9).
+          trusted="$RUNNER_TEMP/trusted"
+          rm -rf "$trusted"
+          git worktree prune
+          git worktree add -q "$trusted" "origin/$default_branch"
+          trap 'git worktree remove --force "$trusted" 2>/dev/null || true' EXIT
           # The standing branch is a shared workspace: a human may have
           # committed implementation fixes to a draft on it during review.
           # Rebuilding it from the default branch and force-pushing threw
@@ -551,21 +563,29 @@ jobs:
           # top (propose-tool.py leaves every folder it no longer owns by
           # content hash untouched), and push leased on the commit this run
           # read, retrying on a lost lease exactly like the archive branch.
+          topics=""
           for attempt in 1 2 3; do
             git fetch -q origin "$default_branch"
             if git fetch -q origin "$branch" 2>/dev/null; then
               lease=$(git rev-parse "origin/$branch")
               git checkout -q -B "$branch" "origin/$branch"
               if ! git merge -q --no-edit "origin/$default_branch"; then
+                # A conflict is a human's to resolve. Nothing is rebuilt and
+                # nothing is pushed: the branch stays exactly as they left
+                # it (Codex review of PR #61, round 9).
                 git merge --abort
-                echo "::warning::$branch no longer merges with $default_branch; rebuilding it from $default_branch (the old branch stays at $lease in the reflog of this run)."
-                git checkout -q -B "$branch" "origin/$default_branch"
+                echo "::warning::$branch has a merge conflict with $default_branch; nothing was pushed. Resolve the conflict on $branch by hand (or delete the branch to let the next run rebuild it)."
+                exit 0
               fi
             else
               lease=""
               git checkout -q -B "$branch" "origin/$default_branch"
             fi
-            python3 scripts/propose-tool.py docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/proposals.json"
+            python3 "$trusted/scripts/propose-tool.py" \
+              "$trusted/docs/self-improvement-archive.jsonl" \
+              --policy "$trusted/docs/improvement-policy.json" \
+              --manifest "$trusted/tools/manifest.json" \
+              --out-dir "$PWD/proposals/tools" > "$RUNNER_TEMP/proposals.json"
             cat "$RUNNER_TEMP/proposals.json"
             git add -A proposals/ 2>/dev/null || true
             topics=$(python3 -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
@@ -584,8 +604,12 @@ jobs:
                 exit 0
               fi
               if [ -n "$lease" ] && [ "$(git rev-parse HEAD)" = "$lease" ]; then
+                # Nothing to push, but the PR may still be missing: a push
+                # that succeeded while `gh pr create` failed must be
+                # completed by the next run, not reported as done (Codex
+                # review of PR #61, round 9).
                 echo "Drafts unchanged; $branch already holds them."
-                exit 0
+                break
               fi
             else
               git commit -q -m "chore(agent): propose tools for ${topics:-the current archive}"
@@ -603,12 +627,12 @@ jobs:
           existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
             --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           if [ -n "$existing_pr" ]; then
-            echo "Updated the open tool-proposal PR #$existing_pr in place."
+            echo "The open tool-proposal PR #$existing_pr tracks $branch."
             exit 0
           fi
           gh pr create \
             --title "chore(agent): proposed tools for ${topics:-the current archive}" \
-            --body "Drafted by [\`scripts/propose-tool.py\`](../blob/main/scripts/propose-tool.py): each of these finding classes crossed the mechanism-fix threshold and no registered tool covers it. Each folder under \`proposals/tools/\` holds a pre-push check, its tests, a registry entry and a README with the promote steps. The agent cannot install a tool itself (\`scripts/\` and \`tools/\` are fixed infrastructure); merging this PR only accepts the drafts, and promoting one is a separate human commit. Human commits on this branch survive later drafting runs." \
+            --body "Drafted by [\`scripts/propose-tool.py\`](../blob/main/scripts/propose-tool.py): each of these finding classes crossed the mechanism-fix threshold and no registered tool covers it. Each folder under \`proposals/tools/\` holds a pre-push check, its tests, a registry entry and a README with the promote steps. The agent cannot install a tool itself (\`scripts/\` and \`tools/\` are fixed infrastructure); merging this PR only accepts the drafts, and promoting one is a separate human commit. Human commits on this branch survive later drafting runs; the generator that drafts here always runs from the default branch." \
             --label "self-improvement-archive" \
             --base "$default_branch" \
             --head "$branch"
