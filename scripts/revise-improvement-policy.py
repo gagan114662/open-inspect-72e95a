@@ -246,13 +246,18 @@ _TOKEN_RE = re.compile(r"[a-z][a-z_-]{2,}")
 # hand mining the tokens home, runner, scripts or the repository's own name
 # (the loop's first autonomous proposal, PR #54, did exactly that).
 _LOCATION_RE = re.compile(
-    r"\S*/\S*|\S+\.(?:py|ts|tsx|js|mjs|yml|yaml|json|jsonl|md|sh|toml)\b(?::\d+)?"
+    r"https?://\S+"  # URLs
+    r"|(?<!\S)(?:/|\./|\.\./|~/)\S+"  # absolute or explicitly relative paths
+    r"|\S+/\S+/\S+"  # two or more separators: a path, not prose like deadlock/livelock
+    r"|\S+\.(?:py|ts|tsx|js|mjs|yml|yaml|json|jsonl|md|sh|toml)\b(?::\d+)?"  # file references
 )
 # A token present in more than this share of ALL archived findings is the
 # repository's background vocabulary ("policy", "evidence", "scripts"), not
 # a class of problem, and may not name or define a mined topic.
 MAX_BACKGROUND_SHARE = 0.2
-MIN_BACKGROUND_FINDINGS = 10
+# ...and only once a token has been seen in at least this many findings: a
+# word in 3 of 10 findings is a recurring problem, not background.
+MIN_BACKGROUND_OCCURRENCES = 10
 
 
 def tokenize(text: str) -> set[str]:
@@ -449,10 +454,14 @@ def background_tokens(entries: list[dict]) -> set[str]:
     """Tokens that appear in more than MAX_BACKGROUND_SHARE of every archived
     finding: what this repository talks about, not what goes wrong in it."""
     findings = [f for e in entries for f in e.get("findings", []) if isinstance(f, str)]
-    if len(findings) < MIN_BACKGROUND_FINDINGS:
-        return set()  # too few findings for a share to mean anything
+    if not findings:
+        return set()
     df: Counter[str] = Counter(tok for f in findings for tok in tokenize(f))
-    return {tok for tok, n in df.items() if n / len(findings) > MAX_BACKGROUND_SHARE}
+    return {
+        tok
+        for tok, n in df.items()
+        if n >= MIN_BACKGROUND_OCCURRENCES and n / len(findings) > MAX_BACKGROUND_SHARE
+    }
 
 
 def field_vocabulary(entries: list[dict]) -> set[str]:

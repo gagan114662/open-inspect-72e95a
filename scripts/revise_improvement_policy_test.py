@@ -1502,3 +1502,33 @@ def test_the_real_archive_no_longer_mines_location_words(tmp_path):
     banned = {"scripts", "home", "runner", "work", "open-inspect", "evidence", "topic", "policy"}
     for topic in mined:
         assert not (banned & set(topic["keywords"])), topic["keywords"]
+
+
+def test_slash_separated_prose_and_small_recurrences_still_mine():
+    # Codex review of PR #56: "deadlock/livelock" is prose, not a location,
+    # and a word in 3 of 10 findings is a recurring problem, not background.
+    assert {"deadlock", "livelock", "reader", "writer"} <= revise.tokenize(
+        "deadlock/livelock between reader/writer in /home/runner/x.py and scripts/y.py:3"
+    )
+    assert not (
+        {"home", "runner", "scripts"} & revise.tokenize("see /home/runner/x.py and scripts/y.py:3")
+    )
+    entries = [
+        {
+            "round": i,
+            "source_sha": f"d{i}",
+            "findings": [f"**[P2]** deadlock/livelock in worker pool {i}"],
+        }
+        for i in range(3)
+    ] + [
+        {
+            "round": 10 + i,
+            "source_sha": f"o{i}",
+            "findings": [f"**[P2]** unrelated item number {i}"],
+        }
+        for i in range(7)
+    ]
+    assert "deadlock" not in revise.background_tokens(entries)
+    unclassified = [{"round": e["round"], "finding": e["findings"][0]} for e in entries[:3]]
+    mined = revise.mine_topics(unclassified, {}, None, revise.background_tokens(entries))
+    assert mined and "deadlock" in mined[0]["keywords"]
