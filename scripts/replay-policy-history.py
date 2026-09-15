@@ -65,22 +65,50 @@ def versions_in_order(policy: dict, history: list[dict]) -> list[dict]:
 
 
 def rounds_after(entries: list[dict], created_at: str | None) -> list[dict]:
-    """Archive entries whose round was recorded after `created_at`; every
-    entry when the version predates the archive or is undated."""
+    """Archive entries recorded after `created_at`, judged by EACH ENTRY's
+    own timestamp: a later result line for a round must not drag that
+    round's earlier findings into the held-out set (Codex review of PR
+    #70). Undated entries fall back to their round's earliest known time.
+    Every entry when the version predates the archive."""
     cutoff = measure_mod.parse_timestamp_ms(created_at) if created_at else None
     if cutoff is None:
         return list(entries)
-    later = {
-        r["key"]
-        for r in measure_mod.rounds_in_order(entries)
-        if r["timestamp_ms"] is not None and r["timestamp_ms"] > cutoff
-    }
-    return [e for e in entries if policy_mod.round_key(e) in later]
+    earliest: dict[str, int] = {}
+    for e in entries:
+        ts = measure_mod.parse_timestamp_ms(e.get("occurred_at"))
+        if ts is not None:
+            key = policy_mod.round_key(e)
+            earliest[key] = min(ts, earliest.get(key, ts))
+    kept = []
+    for e in entries:
+        ts = measure_mod.parse_timestamp_ms(e.get("occurred_at"))
+        if ts is None:
+            ts = earliest.get(policy_mod.round_key(e))
+        if ts is not None and ts > cutoff:
+            kept.append(e)
+    return kept
 
 
 def replay(entries: list[dict], policy: dict, history: list[dict], evidence: dict | None) -> dict:
+    """Per version: metrics on the rounds after it existed (its own
+    held-out set) AND on one common held-out set, the rounds after the
+    newest version existed, so versions are compared on the same rounds
+    (Codex review of PR #70): a rising per-version line alone says nothing
+    when each version is judged on different rounds."""
+    versions = versions_in_order(policy, history)
+    for v in versions:
+        policy_mod.validate_policy(v)  # a tampered snapshot never renders
+    newest_created = next(
+        (
+            v.get("created_at")
+            for v in reversed(versions)
+            if v.get("created_at") and v.get("parent") is not None
+        ),
+        None,
+    )
+    common = rounds_after(entries, newest_created)
     rows = []
-    for version in versions_in_order(policy, history):
+    for version in versions:
         # The root version predates the archive by definition: every round
         # was archived under it or its descendants.
         is_root = version.get("origin") == "init" or version.get("parent") is None
@@ -92,8 +120,15 @@ def replay(entries: list[dict], policy: dict, history: list[dict], evidence: dic
         else:
             coverage = validity = findings = None
         in_sample = measure_mod.measure(entries, version, evidence)["current"]
+        if common:
+            on_common = measure_mod.measure(common, version, evidence)["current"]
+            coverage_common, validity_common = on_common.get("coverage"), on_common.get("validity")
+        else:
+            coverage_common = validity_common = None
         rows.append(
             {
+                "coverage_common": coverage_common,
+                "validity_common": validity_common,
                 "version": version.get("version"),
                 "origin": version.get("origin"),
                 "created_at": version.get("created_at"),
@@ -109,6 +144,8 @@ def replay(entries: list[dict], policy: dict, history: list[dict], evidence: dic
     return {
         "archive_digest": measure_mod.archive_digest(entries),
         "evidence_digest": measure_mod.evidence_digest(evidence),
+        "common_window_after": newest_created,
+        "common_rounds": len({policy_mod.round_key(e) for e in common}),
         "versions": rows,
     }
 
@@ -118,9 +155,10 @@ def summary_lines(result: dict) -> list[str]:
     for r in result["versions"]:
         cov = "n/a" if r["coverage_oos"] is None else f"{r['coverage_oos']:.2f}"
         val = "n/a" if r["validity_oos"] is None else f"{r['validity_oos']:.2f}"
+        cc = "n/a" if r.get("coverage_common") is None else f"{r['coverage_common']:.2f}"
         lines.append(
             f"  v{r['version']} ({r['origin']}, {r['policy_hash']}): {r['rounds_oos']} later round(s), "
-            f"coverage {cov}, validity {val}"
+            f"coverage {cov}, validity {val}; on the common {result['common_rounds']} round(s): coverage {cc}"
         )
     return lines
 

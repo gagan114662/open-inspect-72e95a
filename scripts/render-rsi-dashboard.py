@@ -229,7 +229,7 @@ def replay_chart(rows: list[dict]) -> str:
             + f'" fill="none" stroke="{ORANGE}" stroke-width="3"/>'
         )
     for i, r in enumerate(rows):
-        label = f"v{r['version']}"
+        label = f"v{r['version']}"  # esc() below
         parts.append(
             f'<text x="{xs[i]:.1f}" y="{h - pad_b + 16}" font-size="11" text-anchor="middle" fill="{GREY}">{esc(label)} · {r["rounds_oos"]} later round(s)</text>'
         )
@@ -427,8 +427,9 @@ def render(
     decision_now = revise_mod.decide(entries, policy, history, after, policy_mod.utc_now_iso())
     replay_rows = replay_mod.replay(entries, policy, history, evidence)["versions"]
     replay_table = "".join(
-        f"<tr><td>v{r['version']}</td><td>{esc(str(r.get('origin')))}</td><td>{esc(str(r.get('created_at') or 'predates the archive'))}</td>"
-        f"<td>{r['rounds_oos']}</td><td>{fmt(r.get('coverage_oos'))}</td><td>{fmt(r.get('validity_oos'))}</td>"
+        f"<tr><td>v{esc(str(r['version']))}</td><td>{esc(str(r.get('origin')))}</td><td>{esc(str(r.get('created_at') or 'predates the archive'))}</td>"
+        f"<td>{fmt(r['rounds_oos'])}</td><td>{fmt(r.get('coverage_oos'))}</td><td>{fmt(r.get('validity_oos'))}</td>"
+        f"<td>{fmt(r.get('coverage_common'))}</td><td>{fmt(r.get('validity_common'))}</td>"
         f"<td>{fmt(r.get('coverage_all'))}</td><td>{fmt(r.get('validity_all'))}</td></tr>"
         for r in replay_rows
     )
@@ -567,10 +568,10 @@ def render(
   <h2>Did the improver improve? <small>— out-of-sample replay: each version judged only on rounds archived after it existed</small></h2>
   {replay_chart(replay_rows)}
   <div class="scroll"><table>
-    <tr><th>Version</th><th>Origin</th><th>Created</th><th>Later rounds</th><th>Coverage (later rounds)</th><th>Validity (later rounds)</th><th>Coverage (all)</th><th>Validity (all)</th></tr>
+    <tr><th>Version</th><th>Origin</th><th>Created</th><th>Later rounds</th><th>Coverage (own later rounds)</th><th>Validity (own later rounds)</th><th>Coverage (common held-out)</th><th>Validity (common held-out)</th><th>Coverage (all)</th><th>Validity (all)</th></tr>
     {replay_table}
   </table></div>
-  <p>The honest test of recursive self-improvement: a policy revised on the findings it had seen must predict the findings it had <em>not</em> seen. Coverage rising across versions on later rounds is the improver improving; validity falling is the field anchor saying a mined topic was review-only noise, which is what the weight discount is for. A version with too few later rounds shows n/a.</p>
+  <p>The honest test of recursive self-improvement: a policy revised on the findings it had seen must predict the findings it had <em>not</em> seen. "Own later rounds" judges each version on the rounds after it existed; "common held-out" judges every version on the same rounds, the ones after the newest version existed, which is the only fair comparison between versions. Coverage rising on the common set is the improver improving; validity falling is the field anchor saying a mined topic was review-only noise, which is what the weight discount is for. A version with too few later rounds shows n/a.</p>
 </section>
 
 <section>
