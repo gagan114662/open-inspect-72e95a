@@ -503,3 +503,67 @@ jobs:
               });
               console.log(`Opened tracking issue for topic "${item.topic}".`);
             }
+
+  propose-tools:
+    name: Draft a tool for each uncovered recurring class
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    # The agent cannot create tools on the fly: scripts/ and tools/ are
+    # fixed infrastructure its write guard refuses. It can ASK: for every
+    # topic the detector recommends a mechanism-level fix for that no
+    # registered tool covers, scripts/propose-tool.py drafts a tested
+    # pre-push check under proposals/tools/<topic>/ and this job proposes
+    # it on ONE standing branch. Codex reviews it; a human promotes it.
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: archive-and-recommend-propose-tools
+      cancel-in-progress: false
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Draft proposals
+        run: |
+          set -euo pipefail
+          python3 scripts/propose-tool.py docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/proposals.json"
+          cat "$RUNNER_TEMP/proposals.json"
+
+      - name: Propose them as one pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git add -A proposals/ 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No new or changed tool proposals."
+            exit 0
+          fi
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          branch="tool-proposals"
+          topics=$(python3 -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git commit -q -m "chore(agent): propose tools for ${topics}"
+          git push --force origin "$branch"
+          existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+            --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          if [ -n "$existing_pr" ]; then
+            echo "Updated the open tool-proposal PR #$existing_pr in place."
+            exit 0
+          fi
+          gh pr create \
+            --title "chore(agent): proposed tools for ${topics}" \
+            --body "Drafted by [\`scripts/propose-tool.py\`](../blob/main/scripts/propose-tool.py): each of these finding classes crossed the mechanism-fix threshold and no registered tool covers it. Each folder under \`proposals/tools/\` holds a pre-push check, its tests, a registry entry and a README with the promote steps. The agent cannot install a tool itself (\`scripts/\` and \`tools/\` are fixed infrastructure); merging this PR only accepts the drafts, and promoting one is a separate human commit." \
+            --label "self-improvement-archive" \
+            --base "$default_branch" \
+            --head "$branch"

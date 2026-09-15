@@ -343,7 +343,13 @@ def assert_ai_may_write(
         )
 
 
-PROTECTED_OUTPUT_PREFIXES: tuple[str, ...] = (".github/", "scripts/", "packages/", "terraform/")
+PROTECTED_OUTPUT_PREFIXES: tuple[str, ...] = (
+    ".github/",
+    "scripts/",
+    "tools/",  # the registry of what the agent may call (proposals go to proposals/)
+    "packages/",
+    "terraform/",
+)
 PROTECTED_OUTPUT_FILES: tuple[str, ...] = (
     "docs/self-improvement-archive.jsonl",
     "docs/improvement-policy.json",

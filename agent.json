@@ -33,7 +33,8 @@
     "docs/improvement-policy.json",
     "docs/improvement-policy-history.jsonl",
     "docs/rsi/",
-    "skills/"
+    "skills/",
+    "proposals/"
   ],
   "schedules": ["schedules/hourly-revise.md", "schedules/on-review.md"],
   "channels": [
