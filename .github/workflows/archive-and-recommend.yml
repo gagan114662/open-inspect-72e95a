@@ -65,6 +65,9 @@ on:
       # mechanism-fix threshold on the existing archive; re-evaluate then
       # too (Codex review of PR #10, round 31).
       - "docs/improvement-policy.json"
+      # A registry change (a tool now covers a topic) changes which drafts
+      # are eligible (Codex review of PR #61, round 2).
+      - "tools/manifest.json"
 
 permissions:
   contents: write
@@ -503,3 +506,198 @@ jobs:
               });
               console.log(`Opened tracking issue for topic "${item.topic}".`);
             }
+
+  propose-tools:
+    name: Draft a tool for each uncovered recurring class
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    # The agent cannot create tools on the fly: scripts/ and tools/ are
+    # fixed infrastructure its write guard refuses. It can ASK: for every
+    # topic the detector recommends a mechanism-level fix for that no
+    # registered tool covers, scripts/propose-tool.py drafts a tested
+    # pre-push check under proposals/tools/<topic>/ and this job proposes
+    # it on ONE standing branch. Codex reviews it; a human promotes it.
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: archive-and-recommend-propose-tools
+      cancel-in-progress: false
+    steps:
+      - name: Checkout (default branch — trusted)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Draft proposals on the standing branch and propose them as one pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          branch="tool-proposals"
+          withdraw_stale_pr() {
+            # A standing proposal PR whose topics are no longer eligible is
+            # withdrawn, not left open (Codex review of PR #61, finding 2),
+            # but only when the branch holds nothing else: human changes
+            # outside the drafts (notes, fixes) stay on an open PR and an
+            # intact branch until a person merges or closes it (Codex review
+            # of PR #61, round 12).
+            local stale_pr
+            stale_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+            if [ -z "$stale_pr" ]; then
+              return 0
+            fi
+            if git diff --quiet "origin/$default_branch" HEAD; then
+              gh pr close "$stale_pr" \
+                --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
+              echo "Closed the stale tool-proposal PR #$stale_pr."
+              # The branch is deleted only if it still points at the commit
+              # this run inspected: a human commit pushed meanwhile keeps it
+              # (a leased delete, not `gh pr close --delete-branch`; Codex
+              # review of PR #61, round 13).
+              # The remote commit this run read or pushed (git updates the
+              # tracking ref on a successful push), never the local HEAD,
+              # which may hold an unpushed merge of the default branch.
+              inspected=$(git rev-parse "origin/$branch")
+              if git push --force-with-lease="refs/heads/${branch}:${inspected}" origin ":refs/heads/${branch}"; then
+                echo "Deleted $branch at ${inspected}."
+              else
+                echo "::notice::$branch moved since this run inspected it; the branch is kept for a person to look at."
+              fi
+            else
+              echo "::notice::No tool proposals remain, but $branch still differs from $default_branch (human changes). PR #$stale_pr stays open for a person to merge or close."
+            fi
+          }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin "$default_branch"
+          # Every line of Python this privileged job executes, and every
+          # reviewed input it reads (archive, policy, registry), comes from
+          # a separate checkout of the DEFAULT branch. The standing branch
+          # is only the output tree: a change to the generator committed
+          # there is never run with this job's write token (Codex review of
+          # PR #61, round 9).
+          trusted="$RUNNER_TEMP/trusted"
+          refresh_trusted() {
+            # Rebuilt on every attempt at the default-branch commit that
+            # attempt merges in, so the archive, policy and registry the
+            # generator reads are never older than the branch being
+            # proposed (Codex review of PR #61, round 13).
+            git worktree remove --force "$trusted" 2>/dev/null || true
+            rm -rf "$trusted"
+            git worktree prune
+            git worktree add -q "$trusted" "origin/$default_branch"
+          }
+          trap 'git worktree remove --force "$trusted" 2>/dev/null || true' EXIT
+          # The standing branch is a shared workspace: a human may have
+          # committed implementation fixes to a draft on it during review.
+          # Rebuilding it from the default branch and force-pushing threw
+          # those away (Codex review of PR #61, round 8). Instead: start
+          # from the EXISTING branch, bring the default branch in, draft on
+          # top (propose-tool.py leaves every folder it no longer owns by
+          # content hash untouched), and push leased on the commit this run
+          # read, retrying on a lost lease exactly like the archive branch.
+          topics=""
+          for attempt in 1 2 3; do
+            git fetch -q origin "$default_branch"
+            refresh_trusted
+            if git fetch -q origin "$branch" 2>/dev/null; then
+              lease=$(git rev-parse "origin/$branch")
+              git checkout -q -B "$branch" "origin/$branch"
+              if ! git merge -q --no-edit "origin/$default_branch"; then
+                # A conflict is a human's to resolve. Nothing is rebuilt and
+                # nothing is pushed: the branch stays exactly as they left
+                # it (Codex review of PR #61, round 9).
+                git merge --abort
+                echo "::warning::$branch has a merge conflict with $default_branch; nothing was pushed. Resolve the conflict on $branch by hand (or delete the branch to let the next run rebuild it)."
+                exit 0
+              fi
+            else
+              lease=""
+              git checkout -q -B "$branch" "origin/$default_branch"
+            fi
+            # Every Python invocation here is isolated (-I): the working
+            # tree is the standing branch, and a branch-authored json.py on
+            # sys.path would otherwise run with the write token (Codex
+            # review of PR #61, round 10). The generator and its imports
+            # come from the trusted default-branch worktree.
+            python3 -I "$trusted/scripts/propose-tool.py" \
+              "$trusted/docs/self-improvement-archive.jsonl" \
+              --policy "$trusted/docs/improvement-policy.json" \
+              --manifest "$trusted/tools/manifest.json" \
+              --out-dir "$PWD/proposals/tools" > "$RUNNER_TEMP/proposals.json"
+            cat "$RUNNER_TEMP/proposals.json"
+            git add -A proposals/ 2>/dev/null || true
+            topics=$(cd "$trusted" && python3 -I -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
+            # Withdrawal is decided on what the branch HOLDS after drafting,
+            # not on whether this run staged changes: removing the last
+            # eligible draft stages deletions, which must still end in the
+            # PR being closed (Codex review of PR #61, round 10).
+            # No topic qualified and nothing was ever drafted: the folder may
+            # not exist, which is zero remaining proposals, not a failure
+            # under set -e (Codex review of PR #61, round 11).
+            if [ -d proposals/tools ]; then
+              remaining=$(find proposals/tools -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+            else
+              remaining=0
+            fi
+            if git diff --cached --quiet; then
+              if [ -z "$topics" ] && [ "$remaining" = 0 ]; then
+                echo "No tool proposals apply."
+                withdraw_stale_pr
+                exit 0
+              fi
+              if [ -n "$lease" ] && [ "$(git rev-parse HEAD)" = "$lease" ]; then
+                # Nothing to push, but the PR may still be missing: a push
+                # that succeeded while `gh pr create` failed must be
+                # completed by the next run, not reported as done (Codex
+                # review of PR #61, round 9).
+                echo "Drafts unchanged; $branch already holds them."
+                break
+              fi
+            else
+              git commit -q -m "chore(agent): propose tools for ${topics:-the current archive}"
+            fi
+            if git push --force-with-lease="refs/heads/${branch}:${lease}" origin "$branch"; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Could not push $branch after 3 attempts; someone keeps updating it."
+              exit 1
+            fi
+            echo "Lease lost on attempt ${attempt}; refetching and drafting again."
+            git checkout -q --detach
+          done
+          if [ "${remaining:-0}" = 0 ]; then
+            # The push above recorded the deletions; the PR they belonged to
+            # is withdrawn, not left open with an empty diff.
+            echo "No tool proposals remain on $branch."
+            withdraw_stale_pr
+            exit 0
+          fi
+          existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+            --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          if [ -n "$existing_pr" ]; then
+            echo "The open tool-proposal PR #$existing_pr tracks $branch."
+            exit 0
+          fi
+          if git diff --quiet "origin/$default_branch" HEAD; then
+            # The drafts are already on the default branch (a merged
+            # proposal): there is nothing to propose and `gh pr create`
+            # would fail on an empty diff (Codex review of PR #61, round 12).
+            echo "$branch has no changes against $default_branch; nothing to propose."
+            exit 0
+          fi
+          gh pr create \
+            --title "chore(agent): proposed tools for ${topics:-the current archive}" \
+            --body "Drafted by [\`scripts/propose-tool.py\`](../blob/main/scripts/propose-tool.py): each of these finding classes crossed the mechanism-fix threshold and no registered tool covers it. Each folder under \`proposals/tools/\` holds a pre-push check, its tests, a registry entry and a README with the promote steps. The agent cannot install a tool itself (\`scripts/\` and \`tools/\` are fixed infrastructure); merging this PR only accepts the drafts, and promoting one is a separate human commit. Human commits on this branch survive later drafting runs; the generator that drafts here always runs from the default branch." \
+            --label "self-improvement-archive" \
+            --base "$default_branch" \
+            --head "$branch"

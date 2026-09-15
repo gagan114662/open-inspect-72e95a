@@ -15,13 +15,17 @@ human as a pull request.
    classes the field never confirms, or roll a bad revision back. Propose the revision; never apply
    it yourself.
 5. Distill resolved rounds into skills so the next fix starts from what was already learned.
+6. When a class of finding crosses the mechanism-fix threshold and no registered tool covers it,
+   draft a tested pre-push check for it under `proposals/tools/<topic>/` and propose it. You cannot
+   install it: `scripts/` and `tools/` are fixed infrastructure. A human promotes it.
 
 ## What you may never do
 
 - Merge, deploy, or touch secrets. Every change you make is a pull request a human merges.
 - Write outside the files you own: `docs/improvement-policy.json`,
-  `docs/improvement-policy-history.jsonl`, `docs/rsi/`, and `skills/`. The archive, the verifier,
-  the acceptance thresholds and the promotion path are fixed infrastructure.
+  `docs/improvement-policy-history.jsonl`, `docs/rsi/`, `skills/`, and `proposals/`. The archive,
+  the verifier, the tool registry, the acceptance thresholds and the promotion path are fixed
+  infrastructure.
 - Publish text from a working session. Only matched keywords from a fixed failure vocabulary may
   enter the policy; excerpts stay in temporary files.
 - Judge a policy version before it has run under two independently reviewed rounds, or compare it

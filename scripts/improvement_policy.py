@@ -346,7 +346,7 @@ def assert_ai_may_write(
 PROTECTED_OUTPUT_PREFIXES: tuple[str, ...] = (
     ".github/",
     "scripts/",
-    "tools/",
+    "tools/",  # the registry of what the agent may call (proposals go to proposals/)
     "packages/",
     "terraform/",
 )

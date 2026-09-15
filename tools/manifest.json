@@ -5,63 +5,88 @@
       "script": "scripts/archive-round.py",
       "purpose": "Persist one independent review as an archive round, stamped with the policy version and hash in force.",
       "inputs": ["archive path", "review comment file", "source sha"],
-      "writes": ["docs/self-improvement-archive.jsonl (via PR)"]
+      "writes": ["docs/self-improvement-archive.jsonl (via PR)"],
+      "covers": []
     },
     {
       "name": "merge_archive_rounds",
       "script": "scripts/merge-archive-rounds.py",
       "purpose": "Rebuild the standing per-PR archive branch from the default branch without conflicts.",
       "inputs": ["base archive", "standing archive", "new round"],
-      "writes": ["merged archive"]
+      "writes": ["merged archive"],
+      "covers": ["archive-branch"]
     },
     {
       "name": "detect_recurring_pattern",
       "script": "scripts/detect-recurring-pattern.py",
       "purpose": "Count recurrence per topic under the policy and recommend target vs mechanism fixes.",
       "inputs": ["archive path", "--policy"],
-      "writes": []
+      "writes": [],
+      "covers": []
     },
     {
       "name": "mine_trace_failures",
       "script": "scripts/mine-trace-failures.py",
       "purpose": "Mine failed tool calls from working sessions (local folder or dedicated Traces namespace) into a field-evidence snapshot; scrubs credentials; never prints excerpts in CI.",
       "inputs": ["--repo-dir | --namespace", "--save-evidence", "--out-json"],
-      "writes": ["docs/rsi/trace-evidence.json"]
+      "writes": ["docs/rsi/trace-evidence.json"],
+      "covers": []
     },
     {
       "name": "measure_policy_validity",
       "script": "scripts/measure-policy-validity.py",
       "purpose": "Coverage of archived findings and Spearman validity of the policy's signal against the field anchor, per round.",
       "inputs": ["archive path", "--trace-evidence", "--out-json"],
-      "writes": ["docs/rsi/measurement.json"]
+      "writes": ["docs/rsi/measurement.json"],
+      "covers": []
     },
     {
       "name": "revise_improvement_policy",
       "script": "scripts/revise-improvement-policy.py",
       "purpose": "Apply the fixed acceptance rule: propose a bounded revision, a rollback, or nothing.",
       "inputs": ["archive path", "--measurement", "--field-failures"],
-      "writes": ["docs/improvement-policy.json", "docs/improvement-policy-history.jsonl"]
+      "writes": ["docs/improvement-policy.json", "docs/improvement-policy-history.jsonl"],
+      "covers": []
     },
     {
       "name": "render_rsi_dashboard",
       "script": "scripts/render-rsi-dashboard.py",
       "purpose": "Render the loop's state as a single HTML page.",
       "inputs": ["archive path", "--trace-evidence", "--out"],
-      "writes": ["docs/rsi/dashboard.html"]
+      "writes": ["docs/rsi/dashboard.html"],
+      "covers": []
     },
     {
       "name": "distill_skills",
       "script": "scripts/distill-skills.py",
       "purpose": "Turn resolved archive rounds into per-topic playbooks the next fix can load.",
       "inputs": ["archive path", "--policy", "--out-dir"],
-      "writes": ["skills/*.md"]
+      "writes": ["skills/*.md"],
+      "covers": []
     },
     {
       "name": "improvement_policy",
       "script": "scripts/improvement_policy.py",
       "purpose": "Shared library: policy load/validate/hash, lineage checks, write guards, credential scrubbing, round identity.",
       "inputs": [],
-      "writes": []
+      "writes": [],
+      "covers": ["credential-redaction"]
+    },
+    {
+      "name": "redact_secrets",
+      "script": "scripts/redact-secrets.py",
+      "purpose": "Redact configured secret values from Codex review output before it is posted.",
+      "inputs": ["stdin text"],
+      "writes": [],
+      "covers": ["credential-redaction"]
+    },
+    {
+      "name": "propose_tool",
+      "script": "scripts/propose-tool.py",
+      "purpose": "Draft a tested pre-push check for a recurring finding class no registered tool covers, under proposals/tools/, for a human to promote.",
+      "inputs": ["archive path", "--policy", "--manifest", "--out-dir"],
+      "writes": ["proposals/tools/<topic>/*"],
+      "covers": []
     },
     {
       "name": "replay_policy_history",
