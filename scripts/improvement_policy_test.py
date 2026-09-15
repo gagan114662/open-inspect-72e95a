@@ -239,3 +239,12 @@ def test_scrub_secrets_covers_single_quoted_dict_fields():
     scrub = improvement_policy.scrub_secrets
     out = scrub("config {'password': 'FAKE_DATABASE_PASSWORD', 'host': 'db'} rejected")
     assert "FAKE_DATABASE_PASSWORD" not in out and "'host': 'db'" in out
+
+
+def test_scrub_secrets_redacts_quoted_values_containing_the_other_quote():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub(
+        """cfg {"password": "a'FAKE_DATABASE_PASSWORD"} and {'token': 'x"FAKE_TOK'} and {"secret": "es\\"caped FAKE_ESC"}"""
+    )
+    assert "FAKE_DATABASE_PASSWORD" not in out and "FAKE_TOK" not in out and "FAKE_ESC" not in out
+    assert out.count("[REDACTED]") == 3

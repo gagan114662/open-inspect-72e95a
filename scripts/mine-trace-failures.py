@@ -206,6 +206,29 @@ def sync_trace(traces_bin: str, trace_id: str) -> None:
     run_traces_json(traces_bin, ["sync", trace_id])
 
 
+def trace_metadata(traces_bin: str, trace_id: str) -> dict:
+    data = run_traces_json(traces_bin, ["show", trace_id, "--offset", "1", "--limit", "1"])
+    return data.get("trace") or {}
+
+
+def session_belongs_to(meta: dict, needle: str) -> bool:
+    """Whether a session worked on THIS repository: its git remote contains
+    the needle (e.g. github.com/owner/repo) or its working directory's last
+    path segment equals the needle's. A namespace holds every project its
+    owner shares; other projects' failures must not shape this
+    repository's policy (Codex review of PR #10, round 46)."""
+    needle = needle.strip().lower().rstrip("/")
+    if not needle:
+        return False
+    remote = str(meta.get("gitRemoteUrl") or "").lower().rstrip("/")
+    if remote.endswith(".git"):
+        remote = remote[:-4]
+    if needle in remote:
+        return True
+    directory = str(meta.get("directory") or "").rstrip("/")
+    return bool(directory) and directory.rsplit("/", 1)[-1].lower() == needle.rsplit("/", 1)[-1]
+
+
 def iter_events(traces_bin: str, trace_id: str):
     offset = 1
     while True:
@@ -448,8 +471,14 @@ def main(argv: list[str]) -> int:
     where.add_argument("--repo-dir", help="mine the local sessions recorded in this folder")
     where.add_argument(
         "--namespace",
-        help="mine every session shared to this traces.com namespace (e.g. @gagan114); "
-        "for runners with no local sessions",
+        help="mine the sessions shared to this traces.com namespace (e.g. @gagan114) that "
+        "belong to this repository (see --match); for runners with no local sessions",
+    )
+    parser.add_argument(
+        "--match",
+        default=None,
+        help="with --namespace: keep only sessions whose git remote contains this text "
+        "(e.g. github.com/owner/repo) or whose folder name equals its last segment",
     )
     parser.add_argument(
         "--traces-key",
@@ -499,6 +528,12 @@ def main(argv: list[str]) -> int:
 
     if args.traces_key:
         EXTRA_CLI_ARGS[:] = ["--key", args.traces_key]
+    if args.namespace and not args.match:
+        print(
+            "::error::--namespace requires --match so other projects' sessions are excluded",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         if args.namespace:
@@ -510,12 +545,17 @@ def main(argv: list[str]) -> int:
                 f"::warning::session listing hit --limit {args.limit}; evidence counts are marked unknown, raise --limit"
             )
         failures: list[dict] = []
+        kept: list[dict] = []
         for trace in traces:
             if agents is None and trace.get("agentId") == VERIFIER_AGENT:
                 pass  # "all" deliberately includes the verifier's own sessions
             if args.namespace:
                 sync_trace(args.traces_bin, trace["id"])
+                if not session_belongs_to(trace_metadata(args.traces_bin, trace["id"]), args.match):
+                    continue
+            kept.append(trace)
             failures.extend(mine_trace(args.traces_bin, trace))
+        traces = kept
     except TracesCliError as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
@@ -525,6 +565,7 @@ def main(argv: list[str]) -> int:
     summary["listing_complete"] = complete
     summary["repo_dir"] = args.repo_dir
     summary["namespace"] = args.namespace
+    summary["match"] = args.match
     for line in lines:
         print(line)
     if args.save_evidence:

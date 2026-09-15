@@ -427,12 +427,22 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
                 "traces": [
                     {"id": "remote-1", "agentId": "claude-code", "timestamp": 5},
                     {"id": "remote-2", "agentId": "codex", "timestamp": 6},
+                    {"id": "remote-3", "agentId": "claude-code", "timestamp": 7},
                 ]
             }
         if args[0] == "sync":
             return {"traceId": args[1]}
         if args[0] == "show":
-            return {"events": _events() if args[1] == "remote-1" else []}
+            meta = {
+                "remote-1": {
+                    "gitRemoteUrl": "https://github.com/gagan114662/open-inspect-72e95a.git"
+                },
+                "remote-3": {
+                    "gitRemoteUrl": "https://github.com/someone/other-project",
+                    "directory": "/w/other",
+                },
+            }.get(args[1], {})
+            return {"trace": meta, "events": _events() if args[1] == "remote-1" else []}
         raise AssertionError(args)
 
     monkeypatch.setattr(mine, "run_traces_json", run)
@@ -445,6 +455,8 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
             "m",
             "--namespace",
             "gagan114",
+            "--match",
+            "github.com/gagan114662/open-inspect-72e95a",
             "--agents",
             "claude-code",
             "--traces-key",
@@ -463,8 +475,15 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
     assert not any(c[:2] == ["sync", "remote-2"] for c in calls), "codex sessions were filtered out"
     saved = json.loads(evidence.read_text())
     assert saved["namespace"] == "gagan114"
-    assert saved["sessions"] == ["remote-1"]
+    assert saved["sessions"] == ["remote-1"], "remote-3 belongs to another repository"
     assert saved["listing_complete"] is True
+    assert mine.session_belongs_to(
+        {"directory": "/x/open-inspect-72e95a"}, "github.com/o/open-inspect-72e95a"
+    )
+    assert not mine.session_belongs_to(
+        {"directory": "/x/background agents"}, "github.com/o/open-inspect-72e95a"
+    )
+    assert mine.main(["m", "--namespace", "gagan114", "--policy", str(policy)]) == 1
     assert "tr_secret" not in capsys.readouterr().out
 
 

@@ -115,10 +115,12 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     # -u user:PASS, -uuser:PASS, --user 'user:PASS WITH SPACES' (rounds 43-44).
     re.compile(r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)?)(\"[^\"]*\"|'[^']*')"),
     re.compile(r"(?i)((?<!\S)(?:-u|--user|--proxy-user|--login)(?:\s+|=)?[^\s:\"']+:)[^\s\"']+"),
-    # Quoted JSON / Python-dict / YAML fields, either quote style:
-    # {"password": "..."} and {'password': '...'} (rounds 39 and 45).
+    # Quoted JSON / Python-dict / YAML fields, either quote style, matched to
+    # the ACTUAL enclosing delimiter so a value containing the other quote or
+    # an escaped quote is redacted whole (rounds 39, 45 and 46).
     re.compile(
-        r"(?i)([\"'][a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*[\"']\s*[:=]\s*[\"'])[^\"']{4,}"
+        r"(?i)(?P<keep>(?P<q1>[\"'])[a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*(?P=q1)\s*[:=]\s*(?P<q2>[\"']))"
+        r"(?P<val>(?:\\.|(?!(?P=q2)).)+)(?P<close>(?P=q2))"
     ),
     re.compile(r"\b(sk|ghp|gho|ghu|ghs|ghr|vcp|xox[abp]|npm_|pypi-|glpat-|AKIA)[A-Za-z0-9_-]{8,}"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),  # JWT
@@ -135,14 +137,18 @@ def scrub_secrets(text: str) -> str:
     """Replace credential-shaped substrings with [REDACTED], keeping the
     surrounding words so the failure stays classifiable."""
     for pattern in _SECRET_SHAPES:
-        if pattern.groups:
-            text = pattern.sub(
-                lambda m: f"{m.group(1)}[REDACTED]" + ("@" if m.group(0).endswith("@") else ""),
-                text,
-            )
-        else:
+        if not pattern.groups:
             text = pattern.sub("[REDACTED]", text)
+        else:
+            text = pattern.sub(_redact_match, text)
     return text
+
+
+def _redact_match(m: re.Match[str]) -> str:
+    names = m.re.groupindex
+    keep = m.group("keep") if "keep" in names else m.group(1)
+    close = m.group("close") if "close" in names else ("@" if m.group(0).endswith("@") else "")
+    return f"{keep}[REDACTED]{close}"
 
 
 def round_key(entry: dict) -> str:

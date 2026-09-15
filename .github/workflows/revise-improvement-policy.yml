@@ -100,8 +100,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p docs/rsi
+          # --match scopes the namespace to sessions whose git remote is THIS
+          # repository; a namespace holds every project its owner shares.
           if python3 scripts/mine-trace-failures.py \
               --namespace "$TRACES_NAMESPACE" --traces-key "$TRACES_API_KEY" \
+              --match "github.com/${GITHUB_REPOSITORY}" \
               --save-evidence docs/rsi/trace-evidence.json \
               --out-json "$RUNNER_TEMP/field-failures.json" > "$RUNNER_TEMP/mine.txt"; then
             head -n 30 "$RUNNER_TEMP/mine.txt"
