@@ -315,11 +315,25 @@ def mine_topics(
             {
                 "name": name,
                 "keywords": topic_keywords,
+                # Field failures never enter the policy as text: only the
+                # keywords that matched, so no regex list decides what a
+                # proposal PR publishes (Codex review of PR #10, round 48).
+                # Archive findings are Codex review text that is already
+                # public on the PR, kept for the dashboard.
                 "evidence": [
-                    {
-                        "round": item["round"],
-                        "finding": policy_mod.scrub_secrets(item["finding"])[:160],
-                    }
+                    (
+                        {
+                            "round": item["round"],
+                            "matched": [
+                                kw for kw in topic_keywords if kw in item["finding"].lower()
+                            ],
+                        }
+                        if str(item["round"]).startswith("field:")
+                        else {
+                            "round": item["round"],
+                            "finding": policy_mod.scrub_secrets(item["finding"])[:160],
+                        }
+                    )
                     for item in covering
                 ],
             }

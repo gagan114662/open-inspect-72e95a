@@ -374,11 +374,27 @@ def first_match_timestamp(failure: dict, words: list[str]) -> int | float | None
     occurrence that matches, not the failure's first occurrence, so a
     diagnostic seen at t=100 never counts in the anchor at t=50 (Codex
     review of PR #10, round 39)."""
-    matched = [ts for ts, text in occurrences(failure) if any(w.lower() in text for w in words)]
+    matched: list[int | float | None] = []
+    blind_before: list[int | float | None] = []
+    for o in failure.get("_occurrences") or [{"timestamp": failure.get("timestamp"), "text": ""}]:
+        text = str(o.get("text", "")) if o.get("text") is not None else ""
+        if not (failure.get("_occurrences")):
+            text = f"{failure['command']} {failure['excerpt']}".lower()
+        if any(w.lower() in text for w in words):
+            matched.append(o.get("timestamp"))
+        elif o.get("truncated"):
+            blind_before.append(o.get("timestamp"))
     if not matched:
         return None
     dated = [ts for ts in matched if isinstance(ts, int | float)]
-    return min(dated) if len(dated) == len(matched) else None
+    if len(dated) != len(matched):
+        return None
+    first = min(dated)
+    # A truncated, unmatched occurrence earlier than the first visible match
+    # may have contained the match: the first-seen time is unknown (round 48).
+    if any(not isinstance(ts, int | float) or ts < first for ts in blind_before):
+        return None
+    return first
 
 
 def public_failure(failure: dict) -> dict:
@@ -448,7 +464,9 @@ def build_evidence(
     }
 
 
-def report(failures: list[dict], keywords: dict[str, list[str]]) -> tuple[list[str], dict]:
+def report(
+    failures: list[dict], keywords: dict[str, list[str]], *, show_excerpts: bool = False
+) -> tuple[list[str], dict]:
     lines: list[str] = []
     by_kind = Counter(f["kind"] for f in failures)
     by_topic: Counter[str] = Counter()
@@ -468,8 +486,11 @@ def report(failures: list[dict], keywords: dict[str, list[str]]) -> tuple[list[s
         lines.append(f"  [{topic}] {by_topic.get(topic, 0)}")
     lines.append(f"unclassified failures (field blind spots): {len(blind)}")
     for failure in blind[:12]:
+        # Excerpts are printed only on request: workflow logs are public and
+        # no scrubber is a guarantee (Codex review of PR #10, round 48).
+        tail = f": {failure['excerpt'][:110]}" if show_excerpts else ""
         lines.append(
-            f"  {failure['trace_id'][:8]} #{failure['event_number']} {failure['tool']} ({failure['kind']}, x{failure['count']}): {failure['excerpt'][:110]}"
+            f"  {failure['trace_id'][:8]} #{failure['event_number']} {failure['tool']} ({failure['kind']}, x{failure['count']}){tail}"
         )
     return lines, {
         "failures": [public_failure(f) for f in failures],
@@ -510,6 +531,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--out-json", default=None)
     parser.add_argument("--save-evidence", default=None)
     parser.add_argument("--traces-bin", default="traces")
+    parser.add_argument(
+        "--show-excerpts",
+        action="store_true",
+        help="print failure excerpts in the human report (local use; never in CI logs)",
+    )
     parser.add_argument("--limit", type=int, default=200)
     args = parser.parse_args(argv[1:])
 
@@ -580,7 +606,7 @@ def main(argv: list[str]) -> int:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
 
-    lines, summary = report(failures, current_keywords)
+    lines, summary = report(failures, current_keywords, show_excerpts=args.show_excerpts)
     summary["traces_scanned"] = len(traces)
     summary["listing_complete"] = complete
     summary["repo_dir"] = args.repo_dir

@@ -687,3 +687,49 @@ def test_output_past_the_text_cap_marks_unmatched_topics_unknown(monkeypatch):
     assert "auth-lifecycle" in evidence["truncated"], "a miss past the cap is unknown, not zero"
     assert "shell-semantics" not in evidence["truncated"], "topics that matched are known"
     assert "_occurrences" not in json.dumps(mine.public_failure(failures[0]))
+
+
+def test_report_hides_excerpts_unless_asked(monkeypatch):
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": _events()}))
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    lines, _ = mine.report(failures, {"nothing": ["zzz-never"]})
+    assert not any("failed" in line and "#" in line for line in lines)
+    lines, _ = mine.report(failures, {"nothing": ["zzz-never"]}, show_excerpts=True)
+    assert any("3 failed" in line for line in lines)
+
+
+def test_a_truncated_earlier_occurrence_makes_the_first_match_time_unknown(monkeypatch):
+    monkeypatch.setattr(mine, "MAX_TEXT_CHARS", 200)
+    head = "Exit code 1\njob crashed\n"
+    events = [
+        {"type": "tool_call", "callId": "c1", "args": {"command": "python3 job.py"}},
+        {
+            "type": "tool_result",
+            "callId": "c1",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 1,
+            "eventNumber": 2,
+            "output": head + "x" * 300,
+        },
+        {"type": "tool_call", "callId": "c2", "args": {"command": "python3 job.py"}},
+        {
+            "type": "tool_result",
+            "callId": "c2",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 100,
+            "eventNumber": 4,
+            "output": head + "the session expired",
+        },
+    ]
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    assert len(failures) == 1
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    assert mine.first_match_timestamp(failures[0], keywords["auth-lifecycle"]) is None
+    evidence = mine.build_evidence(failures, keywords, "/repo", None)
+    (trace,) = evidence["topics"]["auth-lifecycle"]
+    assert trace["timestamp"] is None, (
+        "the t=1 output was cut; the match may already have been there"
+    )

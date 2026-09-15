@@ -108,7 +108,7 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     # Command-line flags: --password VALUE, --token=VALUE, -p VALUE, -pVALUE,
     # and whole quoted values with spaces (rounds 40-42).
     re.compile(
-        r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-p)(?:\s+|=)?)"
+        r"(?i)((?:--?[a-z0-9-]*(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b|(?<!\S)-[pa])(?:\s+|=)?)"
         r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s\"']{4,})"
     ),
     # curl-style user:password arguments, attached or not, quoted or not:

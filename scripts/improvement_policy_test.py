@@ -257,3 +257,8 @@ def test_scrub_secrets_handles_escaped_quotes_inside_flag_and_assignment_values(
     )
     assert "FAKE_PASSWORD_SUFFIX" not in out and "FAKE_TWO" not in out
     assert "now" in out and "done" in out
+
+
+def test_scrub_secrets_covers_redis_style_short_auth_flag():
+    out = improvement_policy.scrub_secrets("redis-cli -a FAKE_REDIS_PW ping -> NOAUTH")
+    assert "FAKE_REDIS_PW" not in out and "NOAUTH" in out

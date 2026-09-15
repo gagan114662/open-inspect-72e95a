@@ -1419,3 +1419,18 @@ def test_mining_from_field_failures_never_publishes_a_secret_or_the_redaction_ma
     blob = json.dumps(mined) + json.dumps(summary)
     assert "FAKE_DATABASE_PASSWORD" not in blob
     assert all("redacted" not in kw for m in mined for kw in m["keywords"])
+
+
+def test_field_evidence_in_a_mined_topic_is_keywords_not_excerpts():
+    spots = [
+        {
+            "round": f"field:{i}",
+            "finding": f"psycopg2 refused connection number {i} with pw FAKE_SECRET_{i}",
+        }
+        for i in range(5)
+    ]
+    mined = revise.mine_topics(spots, {})
+    assert mined
+    for entry in mined[0]["evidence"]:
+        assert "finding" not in entry and entry["matched"], entry
+    assert "FAKE_SECRET" not in json.dumps(mined)
