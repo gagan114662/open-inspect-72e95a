@@ -284,12 +284,15 @@ def grade_codex(case: dict, keywords: dict[str, list[str]], runner=run_codex) ->
         ran = runner(prompt)
     if isinstance(ran, str):
         ran = ReviewerRun(text=ran, returncode=0)
+    # Scrub the COMPLETE output before taking an excerpt: a slice that cut
+    # away `password=` but kept its value would let the value through
+    # (Codex review of PR #72, round 9, finding 2).
     if ran.returncode != 0 or not ran.text.strip():
-        error = (ran.stderr or ran.text or "no output").strip()[-500:]
+        error = scrubbed((ran.stderr or ran.text or "no output").strip())[-500:]
         return _error(case, f"reviewer exited {ran.returncode}: {error}")
     findings, invalid = parse_findings(ran.text)
     if invalid:
-        return _error(case, f"{invalid}: {ran.text.strip()[-300:]}")
+        return _error(case, f"{invalid}: {scrubbed(ran.text.strip())[-300:]}")
     findings = scrubbed(findings)
     # Each finding is credited to exactly one topic: the one the reviewer
     # named, or, only when it named none of ours ("other" or an unknown

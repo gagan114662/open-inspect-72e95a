@@ -220,17 +220,28 @@ _SOURCE_ASSIGNMENT_SHAPE = re.compile(
 # following line indented deeper than the key is the value. Runs before the
 # assignment shape, which would otherwise take the `|` for the value and
 # leave the block untouched (Codex review of PR #72, round 8).
+# Each line may start with one unified-diff marker (`+`, `-` or a space):
+# build_case() scrubs diffs, not files, and a patch adding `password: |`
+# kept its block (Codex review of PR #72, round 9). The first block line's
+# marker is kept in front of the redaction so the hunk stays a hunk.
+# When the key line carries a `+`/`-` marker every block line must carry
+# exactly one marker too (`+`, `-` or the context space), so a following
+# context line such as ` replicas: 3` is never mistaken for an indented
+# block line. A context key line's own space reads as indentation.
 _SOURCE_YAML_BLOCK_SHAPE = re.compile(
-    r"(?im)^(?P<keep>(?P<indent>[ \t]*)[\"']?[a-z0-9_-]*"
+    r"(?im)^(?P<keep>(?P<mark>[+\-])?(?P<indent>[ \t]*)[\"']?[a-z0-9_-]*"
     + _CREDENTIAL_WORD
-    + r"[a-z0-9_-]*[\"']?\s*:\s*[|>][-+]?[ \t]*\n)"
-    r"(?:(?P=indent)[ \t]+[^\n]*\n)*(?P=indent)[ \t]+[^\n]*"
+    + r"[a-z0-9_-]*[\"']?\s*:\s*[|>][-+]?[ \t]*\n(?(mark)[+\- ]|))"
+    r"(?P=indent)[ \t]+[^\n]*(?:\n(?(mark)[+\- ]|)(?P=indent)[ \t]+[^\n]*)*"
 )
 # Short credential flags (`-a samplepass`, `-p VALUE`, `-pVALUE`, as in
 # redis-cli / mysql) kept their redaction in the prose scrubber; the source
 # scrubber must keep it too (Codex review of PR #72, round 4).
+# `-a`/`-p` need a separator; the glued `-pVALUE` form only after a space,
+# so a removed diff line `-api_key: >` or `-password: x` is not read as a
+# short flag with a glued value (Codex review of PR #72, round 9).
 _SOURCE_SHORT_FLAG_SHAPE = re.compile(
-    r"((?<!\S)-[pa](?:\s+|=)?)"
+    r"((?:(?<!\S)-[pa](?:\s+|=)|(?<=[ \t])-p(?=\S)))"
     r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|(?!-)" + _SOURCE_CREDENTIAL_VALUE + r")"
 )
 _SOURCE_FLAG_SHAPE = re.compile(

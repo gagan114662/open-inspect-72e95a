@@ -776,3 +776,68 @@ def test_policy_files_are_answer_paths_for_cases_and_checkouts(tmp_path, monkeyp
     )
     assert result["status"] != "error", result
     assert "improvement-policy" not in result["reviewer_checkout"]
+
+
+def test_yaml_block_credentials_are_redacted_inside_unified_diffs():
+    """Codex review of PR #72, round 9, finding 1: the block-scalar shape
+    matched plain YAML only; build_case() feeds unified diffs whose lines
+    start with `+`, `-` or a space, so a patch adding `password: |` kept its
+    secret lines in the serialized case."""
+    hunk = (
+        "diff --git a/deploy/config.yml b/deploy/config.yml\n"
+        "--- a/deploy/config.yml\n"
+        "+++ b/deploy/config.yml\n"
+        "@@ -1,4 +1,10 @@\n"
+        " service: api\n"
+        "+password: |\n"
+        "+  firstline-secret\n"
+        "+  secondline-secret\n"
+        "+description: |\n"
+        "+  keep this text\n"
+        "+  and this\n"
+        "-api_key: >\n"
+        "-  folded-secret\n"
+        " replicas: 3\n"
+    )
+    entry = {
+        "round": 1,
+        "source_sha": "aaa",
+        "findings": ["[P1] leaked credential in deploy/config.yml"],
+    }
+    case = build.build_case(entry, "base", hunk, KW, 60_000)
+    for leaked in ("firstline-secret", "secondline-secret", "folded-secret"):
+        assert leaked not in case["diff"], leaked
+    assert "+password: |\n+[REDACTED]\n+description: |" in case["diff"], case["diff"]
+    assert "+  keep this text\n+  and this\n" in case["diff"], "non-credential blocks survive"
+    assert "-api_key: >\n-[REDACTED]\n replicas: 3" in case["diff"], case["diff"]
+    assert build.scrub_source(hunk) == case["diff"] or "firstline-secret" not in build.scrub_source(
+        hunk
+    )
+
+
+def test_reviewer_output_is_scrubbed_before_it_is_truncated(capsys):
+    """Codex review of PR #72, round 9, finding 2: the error and malformed
+    paths sliced the reviewer's output BEFORE scrubbing it, so a cut that
+    dropped `password=` but kept the value let the credential reach the
+    result and stdout."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    # A plain word: only the `password=` in front of it says it is a secret,
+    # so the order of slicing and scrubbing is what decides its fate.
+    value = "samplepassphrase"
+    # The excerpt is the last 500 (error) / 300 (malformed) characters: the
+    # filler after the value makes that window start INSIDE the value, so
+    # the `password=` that identifies it is cut away by the slice.
+    stderr_text = f"login failed: password={value}" + "y" * 490
+    stdout_text = f"sorry, password={value}" + "y" * 290 + " is not json"
+
+    def reviewer_fails(_prompt):
+        return run.ReviewerRun(text="", returncode=1, stderr=stderr_text)
+
+    def reviewer_babbles(_prompt):
+        return run.ReviewerRun(text=stdout_text, returncode=0)
+
+    for reviewer in (reviewer_fails, reviewer_babbles):
+        result = run.grade_codex(cases[0], KW, reviewer)
+        assert result["status"] == "error", reviewer.__name__
+        assert "passphrase" not in json.dumps(result), reviewer.__name__
+        assert len(result["error"]) <= 600, "the excerpt is still bounded"
