@@ -267,3 +267,41 @@ def test_refresh_never_writes_through_a_planted_staging_link(tmp_path, monkeypat
         if p.name.startswith("trace-evidence.json.") and p.name != "trace-evidence.json.tmp"
     ]
     assert leftovers == [], f"staging files left behind: {leftovers}"
+
+
+def test_refresh_scratch_files_never_follow_a_planted_link(tmp_path, monkeypatch):
+    """Codex review of PR #68, round 6: `.refresh/trace-evidence.json` planted
+    as a symlink or hard link to the committed snapshot let the miner
+    overwrite the snapshot before replace_evidence() ran, and a zero-session
+    run then reported the snapshot as kept. Scratch files now live in a
+    uniquely named folder per run, so a planted path is never written."""
+    run = load_run("run_entry_scratch")
+    root = tmp_path / "repo"
+    (root / "docs" / "rsi" / ".refresh").mkdir(parents=True)
+    (root / "scripts").mkdir()
+    shutil.copyfile(
+        ROOT / "scripts" / "improvement_policy.py", root / "scripts" / "improvement_policy.py"
+    )
+    (root / "docs" / "self-improvement-archive.jsonl").write_text("")
+    committed = root / "docs" / "rsi" / "trace-evidence.json"
+    committed.write_text('{"sessions": ["keep"], "topics": {}}')
+    (root / "docs" / "rsi" / ".refresh" / "trace-evidence.json").symlink_to(committed)
+    (root / "docs" / "rsi" / ".refresh" / "field-failures.json").hardlink_to(committed)
+    (root / "scripts" / "mine-trace-failures.py").write_text(
+        "import sys, json\na=sys.argv\n"
+        "open(a[a.index('--save-evidence')+1],'w').write(json.dumps({'sessions': [], 'topics': {}}))\n"
+        "open(a[a.index('--out-json')+1],'w').write('{}')\nprint('0 distinct failure(s)')\n"
+    )
+    monkeypatch.setattr(run, "ROOT", root)
+    run.main(["run.py", "--refresh", "--repo-dir", str(tmp_path)])
+    assert committed.read_text() == '{"sessions": ["keep"], "topics": {}}', "written through a link"
+    assert [p.name for p in (root / "docs" / "rsi" / ".refresh").iterdir() if p.is_dir()] == [], (
+        "the per-run scratch folder is removed when nothing was applied"
+    )
+    (root / "docs" / "rsi" / ".refresh").rmdir() if False else None
+    linked = root / "elsewhere"
+    linked.mkdir()
+    shutil.rmtree(root / "docs" / "rsi" / ".refresh")
+    (root / "docs" / "rsi" / ".refresh").symlink_to(linked)
+    assert run.main(["run.py", "--refresh", "--repo-dir", str(tmp_path)]) == 1
+    assert list(linked.iterdir()) == [], "a symlinked scratch root is refused, nothing written"

@@ -18,6 +18,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -121,8 +122,16 @@ def main(argv: list[str]) -> int:
         # Mine into scratch files first: a refresh that observed no session
         # must never replace the committed snapshot, and the mined blind
         # spots feed the decision (Codex review of PR #68).
-        tmp = ROOT / "docs" / "rsi" / ".refresh"
-        tmp.mkdir(parents=True, exist_ok=True)
+        scratch_root = ROOT / "docs" / "rsi" / ".refresh"
+        if scratch_root.is_symlink():
+            print(f"[exit 1] refresh: {scratch_root.relative_to(ROOT)} is a symlink; refusing")
+            return 1
+        scratch_root.mkdir(parents=True, exist_ok=True)
+        # A fresh, uniquely named scratch folder per run: a planted
+        # `.refresh/trace-evidence.json` link to the committed snapshot would
+        # otherwise redirect the miner's write onto the protected file before
+        # replace_evidence() ever ran (Codex review of PR #68, round 6).
+        tmp = Path(tempfile.mkdtemp(prefix="run-", dir=scratch_root))
         fresh, failures = tmp / "trace-evidence.json", tmp / "field-failures.json"
         mine = [
             "scripts/mine-trace-failures.py",
@@ -145,6 +154,8 @@ def main(argv: list[str]) -> int:
             print(f"[ok] refresh: {observed} session(s) observed; evidence snapshot replaced")
         else:
             print("[skip] refresh: no session observed; the committed evidence snapshot is kept")
+        if not field_failures:
+            shutil.rmtree(tmp, ignore_errors=True)
     evidence = ["--trace-evidence", EVIDENCE] if (ROOT / EVIDENCE).exists() else []
     verifier = (
         ["--verifier-evidence", VERIFIER_EVIDENCE] if (ROOT / VERIFIER_EVIDENCE).exists() else []
