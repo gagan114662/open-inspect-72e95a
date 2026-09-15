@@ -179,9 +179,9 @@ WORD = {word!r}
 
 
 def test_reports_added_lines_that_touch_the_class_and_skips_removed_ones():
-    diff = "+ first " + WORD + " here\\n- removed " + WORD + "\\n+ unrelated line\\n"
+    diff = "+++ b/x\\n@@ -1 +1 @@\\n+ first " + WORD + " here\\n- removed " + WORD + "\\n+ unrelated line\\n"
     hits = check.scan(diff)
-    assert [(n, w) for n, w, _ in hits] == [(1, WORD)]
+    assert [(n, w) for n, w, _ in hits] == [(3, WORD)]  # line 3: after the two header lines
     assert "1 line(s)" in check.report(hits)
 
 
