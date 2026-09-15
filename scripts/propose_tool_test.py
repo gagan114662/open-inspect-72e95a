@@ -174,3 +174,40 @@ def test_ineligible_drafts_are_removed_and_the_scanner_ignores_diff_context(tmp_
     diff = "+++ b/x\n@@ -1 +1 @@\n pipefail context\n-pipefail removed\n+pipefail added\n"
     run = subprocess.run([sys.executable, str(script)], input=diff, capture_output=True, text=True)
     assert "1 line(s)" in run.stdout
+
+
+def test_cleanup_is_narrow_and_survives_pycache_and_symlinks(tmp_path):
+    import os
+
+    policy = policy_mod.builtin_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    out = tmp_path / "proposals"
+    base = ["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]
+    assert propose.main(base) == 0
+    # A __pycache__ left by running the drafted tests must not break cleanup.
+    (out / "shell-semantics" / "__pycache__").mkdir()
+    (out / "shell-semantics" / "__pycache__" / "x.pyc").write_bytes(b"")
+    # A symlinked folder that looks generated is never followed.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "README.md").write_text(propose.GENERATED_MARKER)
+    (outside / "keep.txt").write_text("keep")
+    os.symlink(outside, out / "linked")
+    # A --topic filter must not delete the other eligible topics.
+    cred = tmp_path / "cred.json"
+    cred.write_text(json.dumps({"tools": []}))
+    assert propose.main([*base, "--threshold", "1", "--topic", "credential-redaction"]) == 0
+    assert (out / "shell-semantics").exists(), "filtered run left other eligible drafts alone"
+    # Covering shell-semantics makes it ineligible: removed, pycache and all.
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+        )
+    )
+    assert propose.main([*base, "--manifest", str(manifest)]) == 0
+    assert not (out / "shell-semantics").exists()
+    assert (outside / "keep.txt").exists(), "symlink target untouched"

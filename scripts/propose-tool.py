@@ -29,6 +29,7 @@ import argparse
 import importlib.util
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -295,20 +296,31 @@ def main(argv: list[str]) -> int:
         rec["topic"]: draft(rec["topic"], rec, entries, policy, out_dir) for rec in needing
     }
     # Drafts for topics that are no longer eligible (covered since, or below
-    # threshold) are removed; only folders this script generated (they carry
-    # its README marker) are touched (Codex review of PR #61, round 2).
-    if out_dir.exists():
+    # threshold) are removed. Only when no --topic filter narrowed this run
+    # (a filtered run says nothing about the other topics), only folders this
+    # script generated (they carry its README marker), never symlinks, only
+    # inside --out-dir, and every file passes the output guard first
+    # (Codex review of PR #61, rounds 2 and 3).
+    if out_dir.exists() and not args.topic:
+        eligible = {rec["topic"] for rec in needing}
         for folder in out_dir.iterdir():
+            if folder.is_symlink() or not folder.is_dir() or folder.name in eligible:
+                continue
+            if folder.resolve().parent != out_dir.resolve():
+                continue
             marker = folder / "README.md"
-            if (
-                folder.is_dir()
-                and folder.name not in proposals
-                and marker.exists()
+            if not (
+                marker.is_file()
+                and not marker.is_symlink()
                 and GENERATED_MARKER in marker.read_text()
             ):
-                for child in folder.iterdir():
-                    child.unlink()
-                folder.rmdir()
+                continue
+            for child in folder.rglob("*"):
+                if child.is_symlink():
+                    raise PermissionError(f"{child} is a symlink; refusing to clean {folder}")
+                if child.is_file():
+                    policy_mod.assert_safe_output(child)
+            shutil.rmtree(folder)
     print(json.dumps({"policy_version": policy["version"], "proposals": proposals}, indent=2))
     return 0
 
