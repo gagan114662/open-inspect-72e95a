@@ -37,7 +37,13 @@ export function readBody(
   // instead of staying open after the caller stopped waiting (Codex review
   // of PR #75, round 1).
   return Effect.acquireUseRelease(
-    Effect.sync(() => body.getReader()),
+    // A stream that is already locked makes getReader() throw; that is a
+    // typed BodyReadFailed the caller can recover from, not a defect
+    // (Codex review of PR #75, round 3).
+    Effect.try({
+      try: () => body.getReader(),
+      catch: (cause) => new BodyReadFailed({ cause }),
+    }),
     (reader) =>
       Effect.gen(function* () {
         const chunks: Uint8Array[] = [];

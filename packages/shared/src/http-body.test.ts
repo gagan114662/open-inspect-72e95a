@@ -142,6 +142,25 @@ describe("readBody (Effect)", () => {
     expect(stream.locked).toBe(false);
   });
 
+  it("fails with BodyReadFailed, not a defect, when the stream is already locked", async () => {
+    const stream = streamOf(new Uint8Array([1]));
+    const holder = stream.getReader(); // someone else holds the lock
+    const error = await Effect.runPromise(Effect.flip(readBody(stream, 10)));
+    expect(error).toBeInstanceOf(BodyReadFailed);
+    expect((error as BodyReadFailed).cause).toBeInstanceOf(TypeError);
+    const recovered = await Effect.runPromise(
+      readBody(stream, 10).pipe(
+        Effect.catchTag("BodyReadFailed", () => Effect.succeed("recovered"))
+      )
+    );
+    expect(recovered).toBe("recovered");
+    holder.releaseLock();
+    // The adapter surfaces the original cause, as for any failed read.
+    const locked = streamOf(new Uint8Array([1]));
+    locked.getReader();
+    await expect(readBodyCapped(locked, 10)).rejects.toBeInstanceOf(TypeError);
+  });
+
   it("lets callers recover from the typed error with catchTag", async () => {
     const result = await Effect.runPromise(
       readBody(streamOf(new Uint8Array(4)), 3).pipe(
