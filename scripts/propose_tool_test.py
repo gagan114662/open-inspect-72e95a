@@ -177,8 +177,6 @@ def test_ineligible_drafts_are_removed_and_the_scanner_ignores_diff_context(tmp_
 
 
 def test_cleanup_is_narrow_and_survives_pycache_and_symlinks(tmp_path):
-    import os
-
     policy = policy_mod.builtin_policy()
     policy_path = tmp_path / "policy.json"
     policy_path.write_text(json.dumps(policy))
@@ -195,7 +193,7 @@ def test_cleanup_is_narrow_and_survives_pycache_and_symlinks(tmp_path):
     outside.mkdir()
     (outside / "README.md").write_text(propose.GENERATED_MARKER)
     (outside / "keep.txt").write_text("keep")
-    os.symlink(outside, out / "linked")
+    (out / "linked").symlink_to(outside)
     # A --topic filter must not delete the other eligible topics.
     cred = tmp_path / "cred.json"
     cred.write_text(json.dumps({"tools": []}))
