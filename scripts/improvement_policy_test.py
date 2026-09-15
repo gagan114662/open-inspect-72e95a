@@ -130,3 +130,33 @@ def test_validate_policy_rejects_empty_keyword_lists():
     policy["topics"]["empty"] = {"keywords": [], "weight": 1.0}
     with pytest.raises(ValueError, match="non-empty"):
         improvement_policy.validate_policy(policy)
+
+
+def test_topic_names_may_not_contain_at_signs_and_origin_is_checked():
+    policy = improvement_policy.builtin_policy()
+    policy["topics"]["shell-semantics@custom"] = {"keywords": ["x"], "weight": 1.0}
+    with pytest.raises(ValueError, match="'@'"):
+        improvement_policy.validate_policy(policy)
+    policy = improvement_policy.builtin_policy()
+    policy["origin"] = "whatever"
+    with pytest.raises(ValueError, match="origin"):
+        improvement_policy.validate_policy(policy)
+
+
+def test_hard_linked_outputs_are_refused(tmp_path, monkeypatch):
+    import os
+
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("{}\n")
+    alias = tmp_path / "report.json"
+    os.link(archive, alias)
+    with pytest.raises(PermissionError, match="input of this run"):
+        improvement_policy.assert_safe_output(alias, inputs=[archive])
+    protected = tmp_path / "docs" / "self-improvement-archive.jsonl"
+    protected.parent.mkdir()
+    protected.write_text("{}\n")
+    monkeypatch.setattr(improvement_policy, "REPO_ROOT", tmp_path)
+    alias2 = tmp_path / "out.json"
+    os.link(protected, alias2)
+    with pytest.raises(PermissionError, match="same file as protected"):
+        improvement_policy.assert_safe_output(alias2)

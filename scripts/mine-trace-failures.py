@@ -100,6 +100,11 @@ def parse_cli_json(stdout: str) -> dict | None:
     return None
 
 
+# Extra arguments appended to every CLI call (an API key on a runner that is
+# not logged in). Set once by main(); never printed.
+EXTRA_CLI_ARGS: list[str] = []
+
+
 def run_traces_json(traces_bin: str, args: list[str], *, retries: int = 1) -> dict:
     last_error = "no output"
     for attempt in range(retries + 1):
@@ -109,7 +114,7 @@ def run_traces_json(traces_bin: str, args: list[str], *, retries: int = 1) -> di
         try:
             with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as out:
                 result = subprocess.run(
-                    [traces_bin, *args, "--json"],
+                    [traces_bin, *args, *EXTRA_CLI_ARGS, "--json"],
                     stdout=out,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -151,6 +156,29 @@ def list_traces(
         for trace in traces:
             found[trace["id"]] = trace
     return sorted(found.values(), key=lambda t: (t.get("timestamp") or 0, t["id"])), complete
+
+
+def list_namespace_traces(
+    traces_bin: str, namespace: str, agents: list[str] | None
+) -> tuple[list[dict], bool]:
+    """Sessions shared to a traces.com namespace (for a runner that has no
+    local sessions of its own). `--all` returns the whole namespace, so the
+    listing is complete by construction; agents are filtered client-side."""
+    if not namespace.startswith("@"):
+        namespace = f"@{namespace}"
+    data = run_traces_json(traces_bin, ["list", namespace, "--all"])
+    traces = [
+        t
+        for t in data.get("traces", [])
+        if isinstance(t.get("id"), str) and (agents is None or t.get("agentId") in agents)
+    ]
+    return sorted(traces, key=lambda t: (t.get("timestamp") or 0, t["id"])), True
+
+
+def sync_trace(traces_bin: str, trace_id: str) -> None:
+    """Pull a shared trace's events into the local database so `show` can
+    page through them (a fresh runner has none)."""
+    run_traces_json(traces_bin, ["sync", trace_id])
 
 
 def iter_events(traces_bin: str, trace_id: str):
@@ -229,6 +257,7 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
             failures[key]["count"] += 1
             continue
         failures[key] = {
+            "_text": f"{command} {output}".lower(),
             "trace_id": trace["id"],
             "agent": trace.get("agentId"),
             "event_number": event.get("eventNumber"),
@@ -243,7 +272,19 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
 
 
 def failure_text(failure: dict) -> str:
+    """The text a topic is matched against: the full command and the full
+    tool output while mining (kept in memory under a private key and never
+    written out), so a keyword past the excerpt still counts; the stored
+    command and excerpt for records read back from disk (Codex full-branch
+    review, finding 3)."""
+    full = failure.get("_text")
+    if isinstance(full, str):
+        return full
     return f"{failure['command']} {failure['excerpt']}".lower()
+
+
+def public_failure(failure: dict) -> dict:
+    return {k: v for k, v in failure.items() if not k.startswith("_")}
 
 
 def matching_topics(failure: dict, keywords: dict[str, list[str]]) -> list[str]:
@@ -265,6 +306,8 @@ def build_evidence(
     repo_dir: str,
     agents: list[str] | None,
     complete: bool = True,
+    scanned: list[str] | None = None,
+    namespace: str | None = None,
 ) -> dict:
     per_topic: dict[str, dict[str, dict]] = defaultdict(dict)
     for failure in failures:
@@ -293,6 +336,10 @@ def build_evidence(
         "truncated": [] if complete else list(keywords),
         "listing_complete": complete,
         "failure_count": len(failures),
+        # Every session scanned, matched or not: a complete scan with only
+        # unclassified failures is still an observed field (round 36).
+        "sessions": sorted(set(scanned or []) | {f["trace_id"] for f in failures}),
+        "namespace": namespace,
     }
 
 
@@ -320,10 +367,10 @@ def report(failures: list[dict], keywords: dict[str, list[str]]) -> tuple[list[s
             f"  {failure['trace_id'][:8]} #{failure['event_number']} {failure['tool']} ({failure['kind']}, x{failure['count']}): {failure['excerpt'][:110]}"
         )
     return lines, {
-        "failures": failures,
+        "failures": [public_failure(f) for f in failures],
         "by_kind": dict(by_kind),
         "by_topic": {t: by_topic.get(t, 0) for t in keywords},
-        "blind_spots": blind,
+        "blind_spots": [public_failure(f) for f in blind],
         "sessions": sorted(sessions),
     }
 
@@ -332,7 +379,18 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--repo-dir", required=True)
+    where = parser.add_mutually_exclusive_group(required=True)
+    where.add_argument("--repo-dir", help="mine the local sessions recorded in this folder")
+    where.add_argument(
+        "--namespace",
+        help="mine every session shared to this traces.com namespace (e.g. @gagan114); "
+        "for runners with no local sessions",
+    )
+    parser.add_argument(
+        "--traces-key",
+        default=None,
+        help="API key passed as --key to every traces call (CI); omit when logged in locally",
+    )
     parser.add_argument("--agents", default=",".join(measure_mod.DEFAULT_ANCHOR_AGENTS))
     parser.add_argument("--policy", default=None)
     parser.add_argument("--history", default=str(policy_mod.HISTORY_PATH))
@@ -374,8 +432,14 @@ def main(argv: list[str]) -> int:
         else [a.strip() for a in args.agents.split(",") if a.strip()]
     )
 
+    if args.traces_key:
+        EXTRA_CLI_ARGS[:] = ["--key", args.traces_key]
+
     try:
-        traces, complete = list_traces(args.traces_bin, args.repo_dir, agents, args.limit)
+        if args.namespace:
+            traces, complete = list_namespace_traces(args.traces_bin, args.namespace, agents)
+        else:
+            traces, complete = list_traces(args.traces_bin, args.repo_dir, agents, args.limit)
         if not complete:
             print(
                 f"::warning::session listing hit --limit {args.limit}; evidence counts are marked unknown, raise --limit"
@@ -384,6 +448,8 @@ def main(argv: list[str]) -> int:
         for trace in traces:
             if agents is None and trace.get("agentId") == VERIFIER_AGENT:
                 pass  # "all" deliberately includes the verifier's own sessions
+            if args.namespace:
+                sync_trace(args.traces_bin, trace["id"])
             failures.extend(mine_trace(args.traces_bin, trace))
     except TracesCliError as exc:
         print(f"::error::{exc}", file=sys.stderr)
@@ -393,12 +459,22 @@ def main(argv: list[str]) -> int:
     summary["traces_scanned"] = len(traces)
     summary["listing_complete"] = complete
     summary["repo_dir"] = args.repo_dir
+    summary["namespace"] = args.namespace
     for line in lines:
         print(line)
     if args.save_evidence:
         Path(args.save_evidence).write_text(
             json.dumps(
-                build_evidence(failures, search_keywords, args.repo_dir, agents, complete), indent=2
+                build_evidence(
+                    failures,
+                    search_keywords,
+                    args.repo_dir or "",
+                    agents,
+                    complete,
+                    scanned=[t["id"] for t in traces],
+                    namespace=args.namespace,
+                ),
+                indent=2,
             )
             + "\n"
         )

@@ -511,15 +511,25 @@ def test_rolled_back_configuration_is_not_retried_on_the_same_evidence():
             "policy": {**parent, "version": 3, "parent": 2, "origin": "rollback"},
         },
     ]
-    current = {**parent, "version": 3, "parent": 2, "origin": "rollback"}
-    again = revise.decide(
+    current = {**parent, "version": 3, "parent": 2, "origin": "rollback", "restored_version": 1}
+    # The rollback has to serve its own waiting period first (Codex, round 36).
+    waiting = revise.decide(
         _archive(), current, history, measure.measure(_archive(), current, None), NOW
     )
+    assert waiting["action"] == "none" and "waiting for" in waiting["reason"]
+    stamped = [
+        {**e, "policy_version": 3, "policy_hash": policy_mod.policy_hash(current)}
+        for e in _archive()
+    ]
+    measurement_r = measure.measure(stamped, current, None)
+    rollback_entry = next(e for e in history if e.get("origin") == "rollback")
+    rollback_entry["archive_digest"] = measurement_r["archive_digest"]
+    again = revise.decide(stamped, current, history, measurement_r, NOW)
     assert again["action"] == "none"
     assert "rolled back" in again["reason"]
     # New archive content lifts the block.
     grown = [
-        *_archive(),
+        *stamped,
         {
             "round": 4,
             "occurred_at": "2026-09-14T18:00:00Z",
@@ -1112,8 +1122,10 @@ def test_swapped_policy_and_history_destinations_are_refused_before_any_write(
         },
     )
     before_policy = policy_path.read_text()
-    with pytest.raises(PermissionError, match="policy component"):
-        revise.main(
+    # Swapped arguments are refused either by the lineage check (the policy
+    # file is not a history) or by the role check; neither may write.
+    try:
+        code = revise.main(
             [
                 "r",
                 str(archive),
@@ -1129,6 +1141,10 @@ def test_swapped_policy_and_history_destinations_are_refused_before_any_write(
                 NOW,
             ]
         )
+    except PermissionError as exc:
+        assert "policy component" in str(exc)
+    else:
+        assert code == 1
     assert policy_path.read_text() == before_policy
     assert history.read_text() == ""
     # The library guards agree with the CLI: a policy may not be saved to the
@@ -1137,3 +1153,160 @@ def test_swapped_policy_and_history_destinations_are_refused_before_any_write(
         policy_mod.save_policy(policy_mod.builtin_policy(), history)
     with pytest.raises(PermissionError, match="history component"):
         policy_mod.append_history({"version": 1}, policy_path)
+
+
+def test_rollback_to_the_root_version_still_waits_before_being_judged():
+    # judged_from() is None for a rollback to v1 (no parent), which used to
+    # skip the waiting period and let the rejected configuration be
+    # re-proposed after a single clean round (Codex, round 36).
+    v1 = policy_mod.builtin_policy()
+    v2 = policy_mod.new_version(
+        v1, topics=dict(v1["topics"]), threshold=v1["threshold"], origin="revision", rationale="x"
+    )
+    v3 = policy_mod.new_version(
+        v2,
+        topics=dict(v1["topics"]),
+        threshold=v1["threshold"],
+        origin="rollback",
+        rationale="back",
+        restored_version=1,
+    )
+    history = [
+        {"version": 2, "policy": v2, "replaced_policy_hash": policy_mod.policy_hash(v1)},
+        {
+            "version": 3,
+            "origin": "rollback",
+            "policy": v3,
+            "replaced_policy_hash": policy_mod.policy_hash(v2),
+        },
+    ]
+    entries = [
+        {
+            "round": 1,
+            "findings": [],
+            "occurred_at": "2026-09-14T15:00:00Z",
+            "policy_version": 3,
+            "policy_hash": policy_mod.policy_hash(v3),
+        }
+    ]
+    measurement = measure.measure(entries, v3, None)
+    decision = revise.decide(entries, v3, history, measurement, NOW)
+    assert decision["action"] == "none"
+    assert "waiting for" in decision["reason"]
+
+
+def test_a_rolled_back_configuration_is_never_a_rollback_target():
+    # v2 was rolled back; the restored configuration (v3) must not be judged
+    # "worse than v2" on coverage two rounds later and rolled back INTO v2,
+    # or the loop would ping-pong forever.
+    v1 = policy_mod.builtin_policy()
+    v2 = policy_mod.new_version(
+        v1,
+        topics={**v1["topics"], "queue-overflow": {"keywords": ["queue overflow"], "weight": 1.0}},
+        threshold=v1["threshold"],
+        origin="revision",
+        rationale="mined",
+    )
+    v3 = policy_mod.new_version(
+        v2,
+        topics=dict(v1["topics"]),
+        threshold=v1["threshold"],
+        origin="rollback",
+        rationale="worse",
+        restored_version=1,
+    )
+    history = [
+        {"version": 1, "policy": v1},
+        {"version": 2, "policy": v2, "replaced_policy_hash": policy_mod.policy_hash(v1)},
+        {
+            "version": 3,
+            "origin": "rollback",
+            "policy": v3,
+            "replaced_policy_hash": policy_mod.policy_hash(v2),
+        },
+    ]
+    entries = [
+        {**e, "policy_version": 3, "policy_hash": policy_mod.policy_hash(v3)} for e in _archive()
+    ]
+    decision = revise.decide(entries, v3, history, measure.measure(entries, v3, None), NOW)
+    assert decision["action"] != "rollback"
+    assert revise.rolled_back_hashes(history) == {policy_mod.policy_hash(v2)}
+
+
+def test_coverage_lost_at_a_grandparent_still_triggers_rollback():
+    # v1 knew "quartz"; v2 dropped it; v3 added something unrelated. On v3's
+    # own rounds v3 and v2 tie at 0 coverage, so a parent-only comparison
+    # never rolls back, but v1 covers everything (Codex full-branch review,
+    # finding 5).
+    v1 = policy_mod.builtin_policy()
+    v1["topics"]["quartz-crashes"] = {"keywords": ["quartz"], "weight": 1.0}
+    v2 = policy_mod.new_version(
+        v1,
+        topics={k: v for k, v in v1["topics"].items() if k != "quartz-crashes"},
+        threshold=v1["threshold"],
+        origin="revision",
+        rationale="dropped",
+    )
+    v3 = policy_mod.new_version(
+        v2,
+        topics={**v2["topics"], "unrelated": {"keywords": ["zzunrelated"], "weight": 1.0}},
+        threshold=v2["threshold"],
+        origin="revision",
+        rationale="added",
+    )
+    history = [
+        {"version": 1, "policy": v1},
+        {"version": 2, "policy": v2, "replaced_policy_hash": policy_mod.policy_hash(v1)},
+        {"version": 3, "policy": v3, "replaced_policy_hash": policy_mod.policy_hash(v2)},
+    ]
+    entries = [
+        {
+            "round": n,
+            "occurred_at": f"2026-09-14T1{n}:00:00Z",
+            "findings": [f"**[P2]** quartz renderer crashed again ({n})."],
+            "policy_version": 3,
+            "policy_hash": policy_mod.policy_hash(v3),
+        }
+        for n in (1, 2)
+    ]
+    decision = revise.decide(entries, v3, history, measure.measure(entries, v3, None), NOW)
+    assert decision["action"] == "rollback"
+    assert decision["policy"]["restored_version"] == 1
+
+
+def test_main_refuses_a_policy_whose_lineage_metadata_was_edited(tmp_path, monkeypatch, capsys):
+    # Changing only `origin` used to switch the wait gate off: the hash does
+    # not cover lineage metadata (Codex full-branch review, finding 1).
+    v1 = policy_mod.builtin_policy()
+    v2 = policy_mod.new_version(
+        v1, topics=dict(v1["topics"]), threshold=v1["threshold"], origin="revision", rationale="x"
+    )
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    history = tmp_path / "history.jsonl"
+    history.write_text(json.dumps({"version": 2, "policy": v2}) + "\n")
+    edited = {**v2, "origin": "init", "parent": None}
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(edited))
+    m_path = tmp_path / "m.json"
+    m_path.write_text(json.dumps(measure.measure(_archive(), edited, None)))
+    code = revise.main(
+        [
+            "r",
+            str(archive),
+            "--measurement",
+            str(m_path),
+            "--policy",
+            str(policy_path),
+            "--history",
+            str(history),
+            "--dry-run",
+            "--now",
+            NOW,
+        ]
+    )
+    assert code == 1
+    assert "lineage metadata" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="history records no versions"):
+        policy_mod.assert_policy_matches_history(v2, [])
+    policy_mod.assert_policy_matches_history(v2, [{"version": 2, "policy": v2}])

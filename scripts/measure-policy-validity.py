@@ -97,23 +97,37 @@ def parse_timestamp_ms(value: object) -> int | None:
     return int(parsed.timestamp() * 1000)
 
 
+def round_key(entry: dict) -> str:
+    """Identity of a round. Automated rounds are identified by the commit
+    they reviewed: two archive proposals opened before either merged both
+    computed the same next round number, and merging by number alone
+    collapsed two reviews into one evaluation round (Codex full-branch
+    review, workflows finding 2). Legacy hand-written rounds without a
+    source_sha keep their number as identity (placeholder + result pairs)."""
+    sha = entry.get("source_sha")
+    if isinstance(sha, str) and sha:
+        return f"sha:{sha}"
+    return f"round:{entry.get('round')}"
+
+
 def rounds_in_order(entries: list[dict]) -> list[dict]:
-    """Merge archive entries by round number (a round may be recorded as a
-    'pending' placeholder and later as its result) and carry the latest
-    parseable timestamp forward so every epoch has a time."""
-    by_round: dict[int, dict] = {}
+    """Merge archive entries by round identity (a legacy round may be
+    recorded as a 'pending' placeholder and later as its result) and carry
+    the latest parseable timestamp forward so every epoch has a time."""
+    by_round: dict[str, dict] = {}
     for entry in entries:
         round_num = entry.get("round")
         if not isinstance(round_num, int):
             continue
+        key = round_key(entry)
         merged = by_round.setdefault(
-            round_num, {"round": round_num, "findings": [], "timestamp_ms": None}
+            key, {"round": round_num, "key": key, "findings": [], "timestamp_ms": None}
         )
         merged["findings"].extend(f for f in entry.get("findings", []) if isinstance(f, str))
         ts = parse_timestamp_ms(entry.get("occurred_at"))
         if ts is not None and (merged["timestamp_ms"] is None or ts > merged["timestamp_ms"]):
             merged["timestamp_ms"] = ts
-    ordered = [by_round[r] for r in sorted(by_round)]
+    ordered = [by_round[k] for k in sorted(by_round, key=lambda k: (by_round[k]["round"], k))]
     last_ts: int | None = None
     for rnd in ordered:
         if rnd["timestamp_ms"] is None:
@@ -284,7 +298,7 @@ def measure_epoch(
                 unclassified.append({"round": rnd["round"], "finding": finding})
                 continue
             classified += 1
-            dev_rounds[topic].add(rnd["round"])
+            dev_rounds[topic].add(rnd.get("key", rnd["round"]))
     dev = {t: len(dev_rounds[t]) for t in topics}
     # The detector decides on weighted recurrence, so validity must be
     # measured on the same signal, or discounting a topic could never
@@ -328,9 +342,15 @@ def measure_epoch(
 
 
 def evidence_trace_ids(evidence: dict | None) -> set[str]:
+    """Every session the evidence observed: the scanned-session list when
+    the snapshot records one, plus any session a topic matched. A complete
+    scan whose failures were all unclassified is an observed field with
+    confirmed zero counts, not an empty anchor (Codex review of PR #10,
+    round 36)."""
     if evidence is None:
         return set()
-    return {t["id"] for traces in evidence.get("topics", {}).values() for t in traces}
+    scanned = {s for s in evidence.get("sessions") or [] if isinstance(s, str)}
+    return scanned | {t["id"] for traces in evidence.get("topics", {}).values() for t in traces}
 
 
 def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:

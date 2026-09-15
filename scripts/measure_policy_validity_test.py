@@ -371,3 +371,47 @@ def test_anchor_counts_use_the_evidence_searched_under_the_topics_own_definition
     assert measure.anchor_counts_at(
         evidence, ["archive-branch"], None, {"archive-branch": ["x"]}
     ) == {"archive-branch": None}
+
+
+def test_a_scan_that_matched_nothing_is_still_an_observed_field():
+    evidence = _evidence()
+    for topic in evidence["topics"]:
+        evidence["topics"][topic] = []
+    evidence["sessions"] = ["s1", "s2", "s3"]
+    result = measure.measure(_archive(), policy_mod.builtin_policy(), evidence)
+    assert result["anchor"]["traces_considered"] == 3
+    assert all(v == 0 for v in result["current"]["anchor"].values())
+    # Without a session list, no matches really is no evidence.
+    del evidence["sessions"]
+    current = measure.measure(_archive(), policy_mod.builtin_policy(), evidence)["current"]
+    assert current["anchor"] is None
+
+
+def test_two_reviews_that_collided_on_a_round_number_stay_two_rounds():
+    # Two archive proposals opened before either merged both got round 11;
+    # their source SHAs differ, so they are two rounds (Codex full-branch
+    # review, workflows finding 2). Legacy placeholder+result pairs without a
+    # SHA still merge by number.
+    entries = [
+        {
+            "round": 11,
+            "source_sha": "aaa",
+            "findings": ["**[P1]** one."],
+            "occurred_at": "2026-09-14T15:00:00Z",
+        },
+        {
+            "round": 11,
+            "source_sha": "bbb",
+            "findings": ["**[P1]** two."],
+            "occurred_at": "2026-09-14T15:05:00Z",
+        },
+        {"round": 12, "findings": [], "occurred_at": "2026-09-14T15:10:00Z"},
+        {"round": 12, "findings": ["**[P2]** result."], "occurred_at": "2026-09-14T15:11:00Z"},
+    ]
+    rounds = measure.rounds_in_order(entries)
+    assert [(r["round"], r["key"]) for r in rounds] == [
+        (11, "sha:aaa"),
+        (11, "sha:bbb"),
+        (12, "round:12"),
+    ]
+    assert measure.round_key({"round": 3}) == "round:3"

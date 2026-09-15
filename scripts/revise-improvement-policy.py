@@ -458,6 +458,18 @@ def candidate_anchor(current: dict, policy: dict) -> dict | None:
     return result
 
 
+def rolled_back_hashes(history: list[dict]) -> set[str]:
+    """Configurations a rollback has already rejected. They are never
+    rollback targets themselves: after v2 is rolled back for validity, the
+    restored v1 would otherwise be judged worse than v2 on coverage two
+    rounds later and 'rolled back' to v2, and so on forever."""
+    return {
+        e["replaced_policy_hash"]
+        for e in history
+        if e.get("origin") == "rollback" and isinstance(e.get("replaced_policy_hash"), str)
+    }
+
+
 def rejected_configuration(candidate: dict, history: list[dict], measurement: dict) -> dict | None:
     """A configuration rolled back on the same archive and evidence is not
     retried: the rollback's history entry records the rejected hash and
@@ -535,7 +547,7 @@ def rounds_under(entries: list[dict], policy: dict) -> int:
     # (Codex review of PR #10, round 7).
     return len(
         {
-            e["round"]
+            measure_mod.round_key(e)
             for e in entries
             if e.get("policy_hash") == wanted
             and e.get("policy_version") == version
@@ -631,20 +643,40 @@ def decide(
                 parent_now = measure_mod.measure(own_rounds, parent, None)["current"]["coverage"]
                 own_coverage = measure_mod.measure(own_rounds, policy, None)["current"]["coverage"]
                 child_validity = validity_under(policy, covered, candidate_anchor(current, policy))
+                rejected = rolled_back_hashes(history)
                 worse_coverage = (
                     parent_now is not None
                     and own_coverage is not None
                     and own_coverage < parent_now
+                    and policy_mod.policy_hash(parent) not in rejected
                 )
                 # Compare against every ancestor in the unjudged chain, not
                 # only the parent: the best-scoring ancestor is the rollback
                 # target when the current policy is worse than any of them.
                 best: dict | None = None
                 best_validity: float | None = None
+                # Coverage is compared with every ancestor too: a topic a
+                # grandparent recognised and the parent dropped is invisible
+                # in a parent-only comparison (Codex full-branch review,
+                # finding 5).
+                best_cov: dict | None = None
+                best_cov_value: float | None = None
                 for ancestor in unjudged_ancestors(policy, history):
+                    if policy_mod.policy_hash(ancestor) in rejected:
+                        continue
                     v = validity_under(ancestor, covered, candidate_anchor(current, ancestor))
                     if v is not None and (best_validity is None or v > best_validity):
                         best, best_validity = ancestor, v
+                    c = measure_mod.measure(own_rounds, ancestor, None)["current"]["coverage"]
+                    if c is not None and (best_cov_value is None or c > best_cov_value):
+                        best_cov, best_cov_value = ancestor, c
+                if (
+                    best_cov_value is not None
+                    and own_coverage is not None
+                    and best_cov_value > own_coverage
+                ):
+                    worse_coverage = True
+                    parent, parent_now = best_cov, best_cov_value
                 worse_validity = best_validity is not None and (
                     child_validity is None or child_validity < best_validity
                 )
@@ -690,7 +722,10 @@ def decide(
     # introduced against ITS parent could never be rolled back (Codex review
     # of PR #10, round 6). Wait until MIN_ROUNDS_TO_JUDGE rounds have run
     # under it; the rollback check above already covered the judged case.
-    if policy.get("origin") in {"revision", "rollback"} and base_version is not None:
+    # The wait does not depend on having an ancestor to compare with: a
+    # rollback to the root version has none, and skipping the wait there let
+    # a rejected configuration be re-proposed after one round (round 36).
+    if policy.get("origin") in {"revision", "rollback"}:
         under = rounds_under(entries, policy)
         if under < MIN_ROUNDS_TO_JUDGE:
             return {
@@ -878,6 +913,11 @@ def main(argv: list[str]) -> int:
     entries = measure_mod.load_archive(args.archive_path)
     policy = policy_mod.load_policy(args.policy)
     history = policy_mod.load_history(args.history)
+    try:
+        policy_mod.assert_policy_matches_history(policy, history)
+    except ValueError as exc:
+        print(f"::error::{exc}", file=sys.stderr)
+        return 1
     with open(args.measurement) as f:
         measurement = json.load(f)
     if measurement.get("policy_hash") != policy_mod.policy_hash(policy):

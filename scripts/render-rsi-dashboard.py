@@ -196,6 +196,13 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
     def y(v: float) -> float:
         return pad_t + (h - pad_t - pad_b) * (1 - v)
 
+    def y_validity(v: float) -> float:
+        # Validity is a correlation in [-1, 1]; it gets its own scale so a
+        # policy predicting the OPPOSITE of the field is drawn below zero
+        # instead of clamped onto it (Codex full-branch review, docs finding 1).
+        v = max(-1.0, min(1.0, v))
+        return pad_t + (h - pad_t - pad_b) * (1 - (v + 1) / 2)
+
     def path(points: list[tuple[float, float]]) -> str:
         return " ".join(
             f"{'M' if i == 0 else 'L'}{x:.1f},{yy:.1f}" for i, (x, yy) in enumerate(points)
@@ -211,6 +218,13 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
         parts.append(
             f'<text x="{pad_l - 6}" y="{y(tick) + 4:.1f}" font-size="11" text-anchor="end" fill="{GREY}">{tick:.2f}</text>'
         )
+    for tick in (-1.0, 0.0, 1.0):
+        parts.append(
+            f'<text x="{w - pad_r + 4}" y="{y_validity(tick) + 4:.1f}" font-size="11" text-anchor="start" fill="{NAVY}">{tick:+.0f}</text>'
+        )
+    parts.append(
+        f'<line x1="{pad_l}" y1="{y_validity(0.0):.1f}" x2="{w - pad_r}" y2="{y_validity(0.0):.1f}" stroke="{NAVY}" stroke-dasharray="2 4" opacity="0.6"/>'
+    )
     parts.append(
         f'<line x1="{pad_l}" y1="{y(min_coverage):.1f}" x2="{w - pad_r}" y2="{y(min_coverage):.1f}" stroke="{RED}" stroke-dasharray="6 4"/>'
     )
@@ -230,7 +244,7 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
         v = epochs_a[i].get("validity") if i < len(epochs_a) else None
         if v is not None:
             parts.append(
-                f'<rect x="{xs[i] - 3:.1f}" y="{y(max(0, v)) - 3:.1f}" width="6" height="6" fill="{NAVY}"/>'
+                f'<rect x="{xs[i] - 3:.1f}" y="{y_validity(v) - 3:.1f}" width="6" height="6" fill="{NAVY}"/>'
             )
     # revision / rollback markers at the epoch they were created after
     marker_n = 0
@@ -247,7 +261,7 @@ def trigger_chart(before: dict, after: dict, versions: list[dict], min_coverage:
                 f'<text x="{x - 6:.1f}" y="{label_y}" font-size="11" text-anchor="end" fill="{color}">v{esc(v["version"])} {esc(v["origin"])}</text>'
             )
     parts.append(
-        f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">grey: coverage under v1 · orange: coverage under v{after["policy_version"]} · navy squares: v{after["policy_version"]} validity vs field anchor</text>'
+        f'<text x="{pad_l}" y="{h - 6}" font-size="11" fill="{GREY}">grey: coverage under v1 · orange: coverage under v{after["policy_version"]} · navy squares: v{after["policy_version"]} validity vs field anchor (right axis, -1..+1)</text>'
     )
     parts.append("</svg>")
     return "".join(parts)

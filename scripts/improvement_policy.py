@@ -90,15 +90,62 @@ def load_policy_or_builtin(path: Path | str = POLICY_PATH) -> dict:
     return builtin_policy()
 
 
+VALID_ORIGINS = frozenset({"init", "revision", "rollback"})
+
+
+def assert_policy_matches_history(policy: dict, history: list[dict]) -> None:
+    """The policy's lineage metadata (version, parent, origin,
+    restored_version) is not part of its content hash, yet the wait gate and
+    rollback logic depend on it. So a policy in force must be exactly the
+    snapshot its history recorded for that version, metadata included; a
+    root policy must not claim to be a revision or rollback. Otherwise an
+    edit to `origin` alone would switch the evaluation gates off (Codex
+    full-branch review, finding 1)."""
+    if not history:
+        if policy.get("origin") != "init" or policy.get("parent") is not None:
+            raise ValueError(
+                "policy claims a revision/rollback lineage but the history records no versions"
+            )
+        return
+    latest = history[-1]
+    snapshot = latest.get("policy") or {}
+    if latest.get("version") != policy.get("version"):
+        raise ValueError(
+            f"policy is v{policy.get('version')} but the history's latest entry is "
+            f"v{latest.get('version')}; the policy and its history must be written together"
+        )
+    for key in ("version", "parent", "origin", "restored_version"):
+        if snapshot.get(key) != policy.get(key):
+            raise ValueError(
+                f"policy.{key}={policy.get(key)!r} differs from the recorded v{policy.get('version')} "
+                f"snapshot ({snapshot.get(key)!r}); lineage metadata may not be edited in place"
+            )
+    if policy_hash(snapshot) != policy_hash(policy):
+        raise ValueError(
+            f"policy content hashes to {policy_hash(policy)} but the recorded v{policy.get('version')} "
+            f"snapshot hashes to {policy_hash(snapshot)}"
+        )
+
+
 def validate_policy(policy: dict) -> None:
     if not isinstance(policy.get("version"), int) or policy["version"] < 1:
         raise ValueError("policy.version must be a positive integer")
     if not isinstance(policy.get("threshold"), int) or policy["threshold"] < 1:
         raise ValueError("policy.threshold must be a positive integer")
+    if policy.get("origin") not in VALID_ORIGINS:
+        raise ValueError(f"policy.origin must be one of {sorted(VALID_ORIGINS)}")
     topics = policy.get("topics")
     if not isinstance(topics, dict) or not topics:
         raise ValueError("policy.topics must be a non-empty object")
     for name, spec in topics.items():
+        if not isinstance(name, str) or not name or "@" in name or name != name.strip():
+            # `name@tag` keys are reserved for older definitions of a name in
+            # the evidence; a topic named that way would be skipped by the
+            # candidate anchor and escape the validity comparison (Codex
+            # full-branch review, finding 2).
+            raise ValueError(
+                f"topic name {name!r} is invalid (non-empty, no '@', no surrounding whitespace)"
+            )
         keywords = spec.get("keywords")
         if (
             not isinstance(keywords, list)
@@ -249,9 +296,25 @@ def assert_safe_output(
         raise PermissionError(
             f"{rel} is a canonical evidence snapshot; only --save-evidence may write it"
         )
+    # Identity is by path AND by inode: a hard link to the archive named
+    # report.json resolves to a different path but is the same file (Codex
+    # full-branch review, finding 6).
+    for protected in (
+        *PROTECTED_OUTPUT_FILES,
+        *(() if kind == "evidence" else CANONICAL_EVIDENCE_FILES),
+    ):
+        if same_file(REPO_ROOT / protected, path):
+            raise PermissionError(f"{rel} is the same file as protected {protected}")
     for source in inputs:
-        if source and Path(source).resolve() == Path(path).resolve():
+        if source and (Path(source).resolve() == Path(path).resolve() or same_file(source, path)):
             raise PermissionError(f"{rel} is an input of this run; choose another output path")
+
+
+def same_file(a: Path | str, b: Path | str) -> bool:
+    try:
+        return Path(a).samefile(b)
+    except OSError:
+        return False
 
 
 def save_policy(

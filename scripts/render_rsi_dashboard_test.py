@@ -183,8 +183,10 @@ def test_trigger_chart_plots_current_policy_validity():
     after = {"policy_version": 2, "epochs": [{"round": 1, "coverage": 0.8, "validity": 0.1}]}
     svg = render.trigger_chart(before, after, [], 0.8)
     # y(v) = pad_t + (h - pad_t - pad_b) * (1 - v): 0.1 -> 236, 0.9 -> 44 (minus the 3px offset)
-    assert 'y="233.0" width="6" height="6"' in svg
-    assert 'y="41.0" width="6" height="6"' not in svg
+    # validity 0.1 on the -1..+1 axis: 20 + 240 * (1 - 0.55) - 3
+    assert 'y="125.0" width="6" height="6"' in svg
+    # v1's 0.9 would sit at 29.0; it is not drawn
+    assert 'y="29.0" width="6" height="6"' not in svg
     assert "v2 validity" in svg
 
 
@@ -265,3 +267,20 @@ def test_reproduce_commands_only_use_flags_their_scripts_define():
     footer = render.render(_archive(), policy_mod.builtin_policy(), [], None, None, "abc123")
     assert "mine-trace-failures.py" in footer
     assert "--repo-dir" not in footer.split("measure-policy-validity.py", 1)[1].split("</code>")[0]
+
+
+def test_negative_validity_is_drawn_below_zero_not_clamped_onto_it():
+    before = {"epochs": [{"round": 1, "coverage": 0.5}, {"round": 2, "coverage": 0.5}]}
+    after = {
+        "policy_version": 2,
+        "epochs": [
+            {"round": 1, "coverage": 0.5, "validity": -1.0},
+            {"round": 2, "coverage": 0.5, "validity": 1.0},
+        ],
+    }
+    svg = render.trigger_chart(before, after, [], 0.8)
+    rects = [line for line in svg.split("<rect") if 'fill="#' in line][:2]
+    ys = [float(r.split('y="')[1].split('"')[0]) for r in rects]
+    assert ys[0] > ys[1], "a -1 correlation must sit lower on the page than +1"
+    assert ys[0] > 140 + 3, "a -1 correlation sits below the zero line, not on it"
+    assert "right axis, -1..+1" in svg

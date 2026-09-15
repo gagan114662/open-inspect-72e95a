@@ -17,9 +17,10 @@ name: Revise Improvement Policy
 #   4. opens ONE pull request carrying the policy, its history entry, the
 #      measurement, and the dashboard. A human merges it, or closes it.
 #
-# The field anchor (Traces evidence) is a committed snapshot refreshed on a
-# developer machine, because working-session traces are not on a runner.
-# Without a snapshot the anchor is absent: coverage is still measured and
+# The field anchor (Traces evidence) is refreshed on every run from the
+# shared traces.com namespace when a read-only TRACES_API_KEY is present
+# (hourly on the schedule above); otherwise the committed snapshot is used.
+# Without any snapshot the anchor is absent: coverage is still measured and
 # can still trigger a revision, validity is reported as null, and the
 # workflow says so rather than pretending it was checked.
 
@@ -30,6 +31,11 @@ on:
       - docs/self-improvement-archive.jsonl
       # A refreshed field snapshot is new evidence too (Codex review of PR #10, round 10).
       - docs/rsi/trace-evidence.json
+  schedule:
+    # Hourly: refresh the field anchor from the shared Traces namespace,
+    # re-measure, and let the fixed acceptance rule decide. Off the hour so
+    # it does not queue behind every other project's :00 cron.
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -67,13 +73,46 @@ jobs:
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Check for a Traces API key
+        id: traces-key
+        env:
+          HAS_KEY: ${{ secrets.TRACES_API_KEY != '' }}
+        run: echo "present=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Install Traces CLI
+        if: steps.traces-key.outputs.present == 'true'
+        run: |
+          curl -fsSL https://www.traces.com/install | bash
+          echo "$HOME/.traces/bin" >> "$GITHUB_PATH"
+
+      - name: Refresh the field anchor from the shared Traces namespace
+        # Working sessions live on developers' machines, but every session
+        # they share lands in the traces.com namespace, which a read-only key
+        # can list and sync. The miner keeps only tool results the tool
+        # itself reported as errors, so the anchor is failures, never
+        # narration. Without a key the committed snapshot is used and its
+        # age is reported instead of silently reused (Codex review of
+        # PR #10, round 3).
+        if: steps.traces-key.outputs.present == 'true'
+        env:
+          TRACES_API_KEY: ${{ secrets.TRACES_API_KEY }}
+          TRACES_NAMESPACE: ${{ vars.TRACES_NAMESPACE || '@gagan114' }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/rsi
+          if python3 scripts/mine-trace-failures.py \
+              --namespace "$TRACES_NAMESPACE" --traces-key "$TRACES_API_KEY" \
+              --save-evidence docs/rsi/trace-evidence.json \
+              --out-json "$RUNNER_TEMP/field-failures.json" > "$RUNNER_TEMP/mine.txt"; then
+            head -n 30 "$RUNNER_TEMP/mine.txt"
+          else
+            echo "::warning::Traces refresh failed; using the committed evidence snapshot instead."
+            sed -n '1,40p' "$RUNNER_TEMP/mine.txt" || true
+            git checkout -- docs/rsi/trace-evidence.json 2>/dev/null || true
+            rm -f "$RUNNER_TEMP/field-failures.json"
+          fi
+
       - name: Measure policy validity
-        # The field anchor is Traces evidence from WORKING sessions, which
-        # live on developers' machines, not on this runner: a fresh runner
-        # has an empty Traces database, so there is nothing here to search.
-        # The anchor is therefore a committed snapshot, refreshed locally with
-        #   python3 scripts/mine-trace-failures.py --repo-dir <folder with the working sessions> \
-        #     --save-evidence docs/rsi/trace-evidence.json
         # This step reports the snapshot's age so a stale anchor is visible
         # rather than silently reused (Codex review of PR #10, round 3).
         run: |
@@ -95,8 +134,11 @@ jobs:
         id: revise
         run: |
           set -euo pipefail
-          python3 scripts/revise-improvement-policy.py docs/self-improvement-archive.jsonl \
-            --measurement docs/rsi/measurement.json --out-json decision.json > revise.txt
+          args=(docs/self-improvement-archive.jsonl --measurement docs/rsi/measurement.json --out-json decision.json)
+          # Fresh field blind spots (from this run's Traces refresh) feed
+          # topic mining the same way unclassified review findings do.
+          [ -f "$RUNNER_TEMP/field-failures.json" ] && args+=(--field-failures "$RUNNER_TEMP/field-failures.json")
+          python3 scripts/revise-improvement-policy.py "${args[@]}" > revise.txt
           sed -n '1,/^---/p' revise.txt
           action=$(python3 -c 'import json; print(json.load(open("decision.json"))["action"])')
           echo "action=$action" >> "$GITHUB_OUTPUT"
@@ -137,12 +179,35 @@ jobs:
           fi
           version=$(python3 -c 'import json; print(json.load(open("docs/improvement-policy.json"))["version"])')
           default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/improvement-policy.json docs/improvement-policy-history.jsonl; then
+            # Only the evidence, measurement and dashboard moved (the hourly
+            # refresh with no decision). One standing evidence branch, updated
+            # in place, so the hourly run never opens a new PR per hour; a
+            # human merges it whenever, and merging it re-triggers this
+            # workflow through the trace-evidence.json path filter.
+            branch="improvement-evidence-refresh"
+            title="chore(rsi): refresh the Traces field anchor"
+            body="Automatically refreshed by [\`revise-improvement-policy.yml\`](../blob/main/.github/workflows/revise-improvement-policy.yml) from the shared Traces namespace at \`${SOURCE_SHA}\`. The fixed acceptance rule proposed no policy change on this evidence (action: **${ACTION}**). This changes only the evidence snapshot, the measurement and the dashboard; the policy is untouched."
+            git checkout -b "$branch"
+            git add docs/rsi/
+            git commit -m "$title"
+            git push --force origin "$branch"
+            existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+            if [ -n "$existing_pr" ]; then
+              echo "Updated the open evidence PR #$existing_pr in place."
+              exit 0
+            fi
+            gh pr create --title "$title" --body "$body" --label "self-improvement-archive" \
+              --base "$default_branch" --head "$branch"
+            exit 0
+          fi
           # One standing proposal branch: a newer archive round supersedes an
           # open proposal instead of opening a competing one with the same
           # version and parent (Codex review of PR #10, round 5).
           branch="improvement-policy-proposal"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
           git add docs/improvement-policy.json docs/improvement-policy-history.jsonl docs/rsi/
           git commit -m "chore(rsi): ${ACTION} of the improvement policy (v${version})"

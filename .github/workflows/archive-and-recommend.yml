@@ -127,14 +127,18 @@ jobs:
               per_page: 100,
             });
 
-            // Both checks matter: the author check stops a PR commenter
+            // All three checks matter: the author check stops a PR commenter
             // from forging a review-shaped comment; the SHA marker stops
             // an old (correctly bot-authored) review comment from a prior
-            // commit being mistaken for this run's review.
+            // commit being mistaken for this run's review; and the marker
+            // must be the comment's LAST line — the footer the workflow
+            // itself appends — so a marker quoted inside another commit's
+            // review text cannot claim that review for this SHA (Codex
+            // full-branch review, workflows finding 1).
             const reviewComments = comments.filter(
               (c) =>
                 (c.body || "").startsWith("### Codex independent review") &&
-                (c.body || "").includes(marker) &&
+                (c.body || "").trimEnd().endsWith(marker) &&
                 c.user?.type === "Bot" &&
                 c.user?.login === "github-actions[bot]"
             );

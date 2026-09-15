@@ -342,8 +342,10 @@ jobs:
             if (body.length > 60000) {
               body = body.slice(0, 60000) + '\n\n...(truncated)';
             }
-            // The review text must not be able to forge the stamp.
-            body = body.replace(/codex-review-status/g, 'codex-review-status​');
+            // The review text must not be able to forge either footer marker:
+            // a review of commit B that quotes A's SHA marker would otherwise be
+            // archived as A's review (Codex full-branch review, workflows finding 1).
+            body = body.replace(/codex-review-(status|sha)/g, 'codex-review-$1​');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

@@ -32,7 +32,7 @@ def _events():
             "callId": "c1",
             "toolName": "Bash",
             "status": "error",
-            "output": "Exit code 1\n3 failed, 10 passed",
+            "output": "FAILED scripts/x_test.py::test_y\n3 failed, 10 passed",
             "timestamp": 5,
             "eventNumber": 3,
         },
@@ -378,3 +378,89 @@ def test_retired_topics_count_as_evidence_but_do_not_hide_blind_spots(
     report = json.loads(out.read_text())
     assert "pytest-runs" not in report["by_topic"]
     assert any("failed" in b["excerpt"] for b in report["blind_spots"])
+
+
+def test_evidence_records_every_scanned_session_even_without_matches(monkeypatch):
+    # A complete scan whose failures are all unclassified is an observed field
+    # with confirmed zero counts, not an empty anchor (Codex, round 36).
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": _events(), "t2": []}))
+    keywords = {"nothing-matches": ["zzzz-never"]}
+    traces, complete = mine.list_traces("traces", "/repo", ["claude-code"], 50)
+    failures = [f for t in traces for f in mine.mine_trace("traces", t)]
+    evidence = mine.build_evidence(
+        failures, keywords, "/repo", ["claude-code"], complete, scanned=[t["id"] for t in traces]
+    )
+    assert evidence["topics"] == {"nothing-matches": []}
+    assert evidence["sessions"] == ["t1", "t2"]
+    assert sys.modules["measure_policy_validity"].evidence_trace_ids(evidence) == {"t1", "t2"}
+    result = sys.modules["measure_policy_validity"].measure(
+        [
+            {
+                "round": 1,
+                "findings": ["**[P1]** zzzz-never happened."],
+                "occurred_at": "2026-09-14T15:00:00Z",
+            }
+        ],
+        {
+            "version": 1,
+            "parent": None,
+            "origin": "init",
+            "threshold": 3,
+            "topics": {"nothing-matches": {"keywords": ["zzzz-never"], "weight": 1.0}},
+        },
+        evidence,
+    )
+    assert result["current"]["anchor"] == {"nothing-matches": 0}
+    assert result["anchor"]["traces_considered"] == 2
+
+
+def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, monkeypatch, capsys):
+    calls: list[list[str]] = []
+
+    def run(_bin, args):
+        calls.append(list(args))
+        if args[0] == "list":
+            assert args[1] == "@gagan114" and "--all" in args
+            return {
+                "traces": [
+                    {"id": "remote-1", "agentId": "claude-code", "timestamp": 5},
+                    {"id": "remote-2", "agentId": "codex", "timestamp": 6},
+                ]
+            }
+        if args[0] == "sync":
+            return {"traceId": args[1]}
+        if args[0] == "show":
+            return {"events": _events() if args[1] == "remote-1" else []}
+        raise AssertionError(args)
+
+    monkeypatch.setattr(mine, "run_traces_json", run)
+    monkeypatch.setattr(mine, "EXTRA_CLI_ARGS", [])
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(policy_mod.builtin_policy()))
+    evidence = tmp_path / "evidence.json"
+    code = mine.main(
+        [
+            "m",
+            "--namespace",
+            "gagan114",
+            "--agents",
+            "claude-code",
+            "--traces-key",
+            "tr_secret",
+            "--policy",
+            str(policy),
+            "--history",
+            str(tmp_path / "h.jsonl"),
+            "--save-evidence",
+            str(evidence),
+        ]
+    )
+    assert code == 0
+    assert mine.EXTRA_CLI_ARGS == ["--key", "tr_secret"]
+    assert ["sync", "remote-1"] in calls
+    assert not any(c[:2] == ["sync", "remote-2"] for c in calls), "codex sessions were filtered out"
+    saved = json.loads(evidence.read_text())
+    assert saved["namespace"] == "gagan114"
+    assert saved["sessions"] == ["remote-1"]
+    assert saved["listing_complete"] is True
+    assert "tr_secret" not in capsys.readouterr().out

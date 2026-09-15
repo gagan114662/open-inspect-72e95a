@@ -94,10 +94,17 @@ should fail the suite, not wait for a reviewer.
    differs from what it is deciding on; topic order is part of the hash.
 5. **Rounds are stamped.** Each archived round records the policy version and hash that decided it;
    a revision is judged only on rounds stamped with its own version and hash, and no further
-   revision is layered on one that has not yet run for `MIN_ROUNDS_TO_JUDGE` rounds. Clean reviews
-   are archived as rounds with no findings, so a policy that eliminates findings still accumulates
-   the rounds needed to judge it.
-6. **Ancestry is followed through rollbacks.** Rollback compares the current policy with every
+   revision is layered on one that has not yet run for `MIN_ROUNDS_TO_JUDGE` rounds — a rollback
+   included, even a rollback to the root version that has no ancestor left to compare with. Clean
+   reviews the workflow stamped as completed are archived as rounds with no findings, so a policy
+   that eliminates findings still accumulates the rounds needed to judge it. A round's identity is
+   the commit it reviewed (`source_sha`), not its number: two proposals that collided on a number
+   stay two rounds. The policy in force must equal the snapshot its history recorded for that
+   version, lineage metadata included, so `origin` or `parent` cannot be edited to switch the gates
+   off.
+6. **Ancestry is followed through rollbacks.** Coverage and validity are both compared with every
+   unjudged ancestor, and a configuration a rollback already rejected is never a rollback target (or
+   v1 → v2 → v1 → v2 would ping-pong forever). Rollback compares the current policy with every
    unjudged ancestor, following a rollback to the ancestry of the version it restored, and rolls
    back to the best-scoring ancestor; the recorded coverage is the restored policy's own.
 7. **No candidate regresses.** A revision is refused if it lowers coverage or validity against the
@@ -130,9 +137,12 @@ definitions it was searched under. Failures no topic claims are the field's blin
 least `MIN_FIELD_BLIND_SPOTS` of them exist, `revise-improvement-policy.py --field-failures` mines
 topics from their output the same way it mines unclassified review findings.
 
-First strict run over the working sessions in this folder: 96 distinct failures across 3 sessions,
-validity 0.55 against the review signal, 69 blind spots dominated by "permission denied by the
-auto-mode classifier" (28), tool input errors, and missing tools.
+First strict run over the working sessions in this folder (a local observation on 2026-09-14,
+recorded here as history — the committed `docs/rsi/trace-evidence.json` keeps per-topic session
+references and the aggregate failure count, not the per-failure breakdown, so these three figures
+are not reproducible from the repository alone): 96 distinct failures across 3 sessions, validity
+0.55 against the review signal, 69 blind spots dominated by "permission denied by the auto-mode
+classifier" (28), tool input errors, and missing tools.
 
 ## First real run
 
@@ -140,9 +150,11 @@ Measured against the archive as of round 10 with policy v1: coverage 0.61, ancho
 sessions for this repository are indexed in Traces yet). The rule fired on coverage and proposed v2:
 one mined topic covering 8 of the 11 blind-spot findings, coverage 0.61 → 0.89 (the remaining three
 are single-occurrence findings no bounded rule may claim). A second pass under v2 proposes nothing.
-With the verifier's own review sessions counted as the anchor, validity reads 0.95: the number
-agrees with the review signal because it _is_ the review signal, which is why the default excludes
-them.
+With the verifier's own review sessions counted as the anchor, validity read 0.95 in the first local
+run: the number agrees with the review signal because it _is_ the review signal, which is why the
+default excludes them. The committed `docs/rsi/trace-evidence-verifier.json` is empty (the miner
+keeps only failures, and the verifier's sessions contain none), so that figure is historical and the
+dashboard's echo check now reports no verifier traces rather than a number.
 
 Reproduce:
 
