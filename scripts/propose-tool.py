@@ -172,10 +172,13 @@ sys.modules["check_{slug}"] = check
 _spec.loader.exec_module(check)
 
 
+WORD = {word!r}
+
+
 def test_reports_added_lines_that_touch_the_class_and_skips_removed_ones():
-    diff = "+ first {word} here\\n- removed {word}\\n+ unrelated line\\n"
+    diff = "+ first " + WORD + " here\\n- removed " + WORD + "\\n+ unrelated line\\n"
     hits = check.scan(diff)
-    assert [(n, w) for n, w, _ in hits] == [(1, {word!r})]
+    assert [(n, w) for n, w, _ in hits] == [(1, WORD)]
     assert "1 line(s)" in check.report(hits)
 
 
@@ -185,7 +188,7 @@ def test_clean_text_reports_nothing_and_strict_mode_fails_on_hits(tmp_path, caps
     assert check.main(["c", str(clean)]) == 0
     assert "nothing touches" in capsys.readouterr().out
     dirty = tmp_path / "dirty.diff"
-    dirty.write_text("+ {word} again\\n")
+    dirty.write_text("+ " + WORD + " again\\n")
     assert check.main(["c", str(dirty), "--strict"]) == 1
 '''
 

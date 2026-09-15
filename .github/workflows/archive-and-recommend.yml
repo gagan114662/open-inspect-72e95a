@@ -542,13 +542,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
+          branch="tool-proposals"
           git add -A proposals/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No new or changed tool proposals."
+            # A standing proposal PR whose topics are no longer eligible is
+            # withdrawn, not left open (Codex review of PR #61, finding 2).
+            stale_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+            if [ -n "$stale_pr" ]; then
+              gh pr close "$stale_pr" --delete-branch \
+                --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
+              echo "Closed the stale tool-proposal PR #$stale_pr."
+            fi
             exit 0
           fi
-          default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
-          branch="tool-proposals"
           topics=$(python3 -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

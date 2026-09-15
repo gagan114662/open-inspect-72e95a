@@ -112,3 +112,22 @@ def test_main_never_writes_under_scripts_or_tools(tmp_path):
         propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]) == 0
     )
     assert (out / "shell-semantics" / "README.md").exists()
+
+
+def test_keywords_with_quotes_still_produce_valid_generated_tests(tmp_path):
+    policy = policy_mod.builtin_policy()
+    policy["topics"]["quoted"] = {"keywords": ['say "hi"', "it's"], "weight": 1.0}
+    entries = [
+        {"round": n, "source_sha": f"q{n}", "findings": [f'[P2] say "hi" broke run {n}']}
+        for n in range(1, 4)
+    ]
+    rec = propose.topics_needing_a_tool(entries, policy, {"tools": []})
+    quoted = next(r for r in rec if r["topic"] == "quoted")
+    propose.draft("quoted", quoted, entries, policy, tmp_path)
+    folder = tmp_path / "quoted"
+    tests = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(folder)],
+        capture_output=True,
+        text=True,
+    )
+    assert tests.returncode == 0, tests.stdout + tests.stderr
