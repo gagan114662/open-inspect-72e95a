@@ -146,9 +146,13 @@ def run_traces_json(traces_bin: str, args: list[str], *, retries: int = 1) -> di
         payload = parse_cli_json(stdout)
         if payload is not None:
             if not payload.get("ok"):
-                raise TracesCliError(f"`{traces_bin} {' '.join(args)}` reported failure: {payload}")
+                # Error payloads and stray stdout are scrubbed like stderr:
+                # main() prints these exceptions (round 40).
+                raise TracesCliError(
+                    f"`{traces_bin} {' '.join(args)}` reported failure: {safe_stderr(json.dumps(payload))}"
+                )
             return payload["data"]
-        last_error = stdout[:120].replace("\n", " ")
+        last_error = safe_stderr(stdout).replace("\n", " ")[:120]
         if attempt < retries:
             continue
     raise TracesCliError(f"Non-JSON output from `{traces_bin} {' '.join(args)}`: {last_error}")

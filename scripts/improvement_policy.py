@@ -104,6 +104,10 @@ _SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
     re.compile(
         r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*[\"']?)[^\s\"']{4,}"
     ),
+    # Command-line flags: --password VALUE, --token=VALUE, -p VALUE (round 40).
+    re.compile(
+        r"(?i)(--?(?:[a-z0-9-]*)(?:token|secret|password|passwd|api-?key|access-?key|private-?key|auth|key)\b(?:\s+|=))[^\s\"']{4,}"
+    ),
     # Quoted JSON/YAML fields: {"password": "..."} (round 39).
     re.compile(
         r"(?i)(\"[a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\"\s*:\s*\")[^\"]{4,}"

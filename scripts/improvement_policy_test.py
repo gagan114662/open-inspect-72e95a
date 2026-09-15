@@ -178,3 +178,13 @@ def test_scrub_secrets_removes_credential_shapes_but_keeps_the_failure_readable(
         scrub("ordinary Exit code 1: 3 failed, 10 passed")
         == "ordinary Exit code 1: 3 failed, 10 passed"
     )
+
+
+def test_scrub_secrets_covers_command_line_flag_forms():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub(
+        "mysql --host db --password FAKE_FLAG_PW --user admin; vault login -token=FAKE_TOK_1234 ok"
+    )
+    assert "FAKE_FLAG_PW" not in out and "FAKE_TOK_1234" not in out
+    assert "--user admin" in out and "--host db" in out
+    assert scrub("git --no-pager log --oneline -3") == "git --no-pager log --oneline -3"

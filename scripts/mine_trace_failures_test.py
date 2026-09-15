@@ -610,3 +610,25 @@ def test_a_diagnostic_first_seen_later_keeps_its_own_timestamp(monkeypatch):
     assert trace["timestamp"] == 100, (
         "evidence first observed at t=100 must not be backdated to t=1"
     )
+
+
+def test_cli_stdout_error_paths_are_scrubbed_too(monkeypatch, tmp_path):
+    monkeypatch.setattr(mine, "EXTRA_CLI_ARGS", ["--key", "tr_SENTINEL_KEY"])
+
+    class Result:
+        returncode = 0
+        stderr = ""
+
+    def fake_run(argv, stdout=None, **_k):
+        stdout.write(fake_run.body)
+        return Result()
+
+    monkeypatch.setattr(mine.subprocess, "run", fake_run)
+    fake_run.body = json.dumps({"ok": False, "error": "key tr_SENTINEL_KEY rejected"})
+    with pytest.raises(mine.TracesCliError) as exc:
+        mine.run_traces_json("traces", ["list", "@slug", "--all"])
+    assert "tr_SENTINEL_KEY" not in str(exc.value) and "reported failure" in str(exc.value)
+    fake_run.body = "Unexpected: Authorization: Bearer tr_SENTINEL_KEY is not valid here"
+    with pytest.raises(mine.TracesCliError) as exc:
+        mine.run_traces_json("traces", ["list", "@slug", "--all"], retries=0)
+    assert "tr_SENTINEL_KEY" not in str(exc.value)
