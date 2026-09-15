@@ -106,9 +106,7 @@ def test_topic_names_cannot_escape_the_output_directory(tmp_path, monkeypatch):
 
 
 def test_tool_registry_matches_the_scripts_directory():
-    manifest = json.loads(
-        (REPO / "tools" / "manifest.json").read_text()
-    )
+    manifest = json.loads((REPO / "tools" / "manifest.json").read_text())
     registered = {t["script"] for t in manifest["tools"]}
     for script in registered:
         assert (REPO / script).exists(), f"{script} is registered but missing"
