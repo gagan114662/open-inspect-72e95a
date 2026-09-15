@@ -464,3 +464,65 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
     assert saved["sessions"] == ["remote-1"]
     assert saved["listing_complete"] is True
     assert "tr_secret" not in capsys.readouterr().out
+
+
+def test_secrets_in_failed_output_never_reach_reports_or_evidence(monkeypatch, tmp_path):
+    events = [
+        {
+            "type": "tool_call",
+            "callId": "c1",
+            "args": {"command": "psql postgres://admin:FAKE_PW_123@db/app"},
+        },
+        {
+            "type": "tool_result",
+            "callId": "c1",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 1,
+            "eventNumber": 2,
+            "output": "psql: error: connection to server failed: password authentication failed for user admin\nAPI_KEY=sk-livefakekey1234567890 was rejected",
+        },
+    ]
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    lines, summary = mine.report(failures, keywords)
+    evidence = mine.build_evidence(failures, keywords, "/repo", None)
+    blob = "\n".join(lines) + json.dumps(summary) + json.dumps(evidence)
+    assert "FAKE_PW_123" not in blob and "sk-livefakekey1234567890" not in blob
+    assert "_text" not in json.dumps(summary)
+    # The failure is still classifiable (credential-redaction keywords match)
+    assert evidence["topics"]["credential-redaction"]
+
+
+def test_repeated_failures_keep_every_occurrences_diagnostics_for_matching(monkeypatch):
+    # Same header and same excerpt (the matched line plus the next one);
+    # only the later diagnostics differ.
+    head = "Exit code 1\njob crashed\n"
+    events = [
+        {"type": "tool_call", "callId": "c1", "args": {"command": "python3 job.py"}},
+        {
+            "type": "tool_result",
+            "callId": "c1",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 1,
+            "eventNumber": 2,
+            "output": head + "plain failure, nothing else",
+        },
+        {"type": "tool_call", "callId": "c2", "args": {"command": "python3 job.py"}},
+        {
+            "type": "tool_result",
+            "callId": "c2",
+            "toolName": "Bash",
+            "status": "error",
+            "timestamp": 2,
+            "eventNumber": 4,
+            "output": head + "PermissionError: token expired for the session",
+        },
+    ]
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
+    failures = mine.mine_trace("traces", {"id": "t1", "agentId": "claude-code"})
+    assert len(failures) == 1 and failures[0]["count"] == 2
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    assert "auth-lifecycle" in mine.matching_topics(failures[0], keywords)

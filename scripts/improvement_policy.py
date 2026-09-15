@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -91,6 +92,35 @@ def load_policy_or_builtin(path: Path | str = POLICY_PATH) -> dict:
 
 
 VALID_ORIGINS = frozenset({"init", "revision", "rollback"})
+
+# Shapes of secrets that show up in failed commands and their output. Text
+# that reaches a report, a log, or the policy's `mined_from` evidence passes
+# through scrub_secrets first, because a proposal PR is public the moment it
+# is pushed (Codex review of PR #10, round 38).
+_SECRET_SHAPES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://[^/\s:@]+:)[^@\s]+@"),  # scheme://user:PASS@
+    re.compile(r"(?i)\b(bearer\s+)[a-z0-9._~+/=-]{8,}"),
+    re.compile(r"(?i)\b(authorization\s*[:=]\s*)\S+"),
+    re.compile(
+        r"(?i)\b((?:[a-z0-9_]*)(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|auth)[a-z0-9_]*\s*[=:]\s*[\"']?)[^\s\"']{4,}"
+    ),
+    re.compile(r"\b(sk|ghp|gho|ghu|ghs|ghr|vcp|xox[abp]|npm_|pypi-|glpat-|AKIA)[A-Za-z0-9_-]{8,}"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),  # JWT
+)
+
+
+def scrub_secrets(text: str) -> str:
+    """Replace credential-shaped substrings with [REDACTED], keeping the
+    surrounding words so the failure stays classifiable."""
+    for pattern in _SECRET_SHAPES:
+        if pattern.groups:
+            text = pattern.sub(
+                lambda m: f"{m.group(1)}[REDACTED]" + ("@" if m.group(0).endswith("@") else ""),
+                text,
+            )
+        else:
+            text = pattern.sub("[REDACTED]", text)
+    return text
 
 
 def round_key(entry: dict) -> str:

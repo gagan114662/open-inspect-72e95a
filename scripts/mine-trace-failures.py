@@ -60,6 +60,7 @@ measure_mod = _load_sibling_module("measure_policy_validity", "measure-policy-va
 VERIFIER_AGENT = "codex"
 PAGE_SIZE = 200
 EXCERPT_CHARS = 160
+MAX_TEXT_CHARS = 400_000  # per failure, all occurrences' output kept for matching
 
 # Failure shapes, each named so a report can say what kind of thing broke.
 FAILURE_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -248,16 +249,25 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
         call = calls.get(str(event.get("callId")), {})
         args = call.get("args") or {}
         command = str(args.get("command") or args.get("file_path") or args.get("pattern") or "")
-        excerpt = excerpt_for(kind, output)
+        # Anything that leaves this process is scrubbed first: a report, a
+        # log line, or the policy's mined_from evidence is public the moment
+        # the proposal PR is pushed (Codex review of PR #10, round 38).
+        excerpt = policy_mod.scrub_secrets(excerpt_for(kind, output))
+        command = policy_mod.scrub_secrets(command)
         # The command is part of identity: two commands with the same output
         # are two failures, and classification reads the command
         # (Codex review of PR #10, round 28).
         key = (tool, " ".join(command.split())[:EXCERPT_CHARS], excerpt)
         if key in failures:
             failures[key]["count"] += 1
+            # A repeat with the same header but different later diagnostics
+            # still contributes its text to topic matching (round 38).
+            failures[key]["_text"] = (failures[key]["_text"] + " " + output.lower())[
+                :MAX_TEXT_CHARS
+            ]
             continue
         failures[key] = {
-            "_text": f"{command} {output}".lower(),
+            "_text": f"{command} {output}".lower()[:MAX_TEXT_CHARS],
             "trace_id": trace["id"],
             "agent": trace.get("agentId"),
             "event_number": event.get("eventNumber"),

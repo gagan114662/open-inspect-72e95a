@@ -160,3 +160,21 @@ def test_hard_linked_outputs_are_refused(tmp_path, monkeypatch):
     os.link(protected, alias2)
     with pytest.raises(PermissionError, match="same file as protected"):
         improvement_policy.assert_safe_output(alias2)
+
+
+def test_scrub_secrets_removes_credential_shapes_but_keeps_the_failure_readable():
+    scrub = improvement_policy.scrub_secrets
+    out = scrub(
+        "psql postgres://admin:FAKE_PASSWORD@db.internal:5432/app failed: connection refused"
+    )
+    assert "FAKE_PASSWORD" not in out and "postgres://admin:[REDACTED]@db.internal" in out
+    assert "connection refused" in out
+    out = scrub(
+        'curl -H "Authorization: Bearer abcdef123456789" https://x; GITHUB_TOKEN=ghp_abcdefghijklmnop123 git push'
+    )
+    assert "abcdef123456789" not in out and "ghp_abcdefghijklmnop123" not in out
+    assert "git push" in out
+    assert (
+        scrub("ordinary Exit code 1: 3 failed, 10 passed")
+        == "ordinary Exit code 1: 3 failed, 10 passed"
+    )

@@ -315,7 +315,11 @@ def mine_topics(
                 "name": name,
                 "keywords": topic_keywords,
                 "evidence": [
-                    {"round": item["round"], "finding": item["finding"][:160]} for item in covering
+                    {
+                        "round": item["round"],
+                        "finding": policy_mod.scrub_secrets(item["finding"])[:160],
+                    }
+                    for item in covering
                 ],
             }
         )
@@ -590,7 +594,7 @@ def field_blind_spots(field_failures: dict | None, keywords: dict[str, list[str]
         # failure would otherwise be the most frequent token and name a topic
         # that classifies no real failure text (round 34). The kind travels
         # as metadata.
-        excerpt = str(failure.get("excerpt", "")).strip()
+        excerpt = policy_mod.scrub_secrets(str(failure.get("excerpt", "")).strip())
         if not excerpt or excerpt in seen:
             continue
         if policy_mod.classify_finding(excerpt, keywords) is not None:
