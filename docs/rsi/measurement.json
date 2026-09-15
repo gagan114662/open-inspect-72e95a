@@ -1,7 +1,7 @@
 {
   "policy_version": 3,
   "policy_hash": "11e8243663fa",
-  "archive_digest": "4911463ee068",
+  "archive_digest": "481bb4c395fb",
   "anchor": {
     "source": "trace-failures",
     "agents": [
@@ -2335,21 +2335,56 @@
       "validity": 0.971,
       "dev_only_topics": [],
       "anchor_only_topics": []
+    },
+    {
+      "round": 64,
+      "timestamp_ms": 1789485323562,
+      "findings_total": 147,
+      "findings_classified": 88,
+      "coverage": 0.5986,
+      "dev": {
+        "credential-redaction": 27,
+        "shell-semantics": 4,
+        "env-var-precedence": 2,
+        "fork-pr-permissions": 1,
+        "auth-lifecycle": 7,
+        "archive-branch": 24
+      },
+      "dev_weighted": {
+        "credential-redaction": 27.0,
+        "shell-semantics": 4.0,
+        "env-var-precedence": 2.0,
+        "fork-pr-permissions": 1.0,
+        "auth-lifecycle": 7.0,
+        "archive-branch": 24.0
+      },
+      "anchor": {
+        "credential-redaction": 3,
+        "shell-semantics": 1,
+        "env-var-precedence": 1,
+        "fork-pr-permissions": 0,
+        "auth-lifecycle": 2,
+        "archive-branch": 2
+      },
+      "anchor_unknown_topics": [],
+      "validity": 0.971,
+      "dev_only_topics": [],
+      "anchor_only_topics": []
     }
   ],
   "current": {
-    "round": 63,
+    "round": 64,
     "timestamp_ms": null,
-    "findings_total": 144,
-    "findings_classified": 87,
-    "coverage": 0.6042,
+    "findings_total": 147,
+    "findings_classified": 88,
+    "coverage": 0.5986,
     "dev": {
       "credential-redaction": 27,
       "shell-semantics": 4,
       "env-var-precedence": 2,
       "fork-pr-permissions": 1,
       "auth-lifecycle": 7,
-      "archive-branch": 23
+      "archive-branch": 24
     },
     "dev_weighted": {
       "credential-redaction": 27.0,
@@ -2357,7 +2392,7 @@
       "env-var-precedence": 2.0,
       "fork-pr-permissions": 1.0,
       "auth-lifecycle": 7.0,
-      "archive-branch": 23.0
+      "archive-branch": 24.0
     },
     "anchor": {
       "credential-redaction": 3,
@@ -2597,12 +2632,20 @@
       {
         "round": 62,
         "finding": "**[P2]** The rollback rule can undo this taxonomy correction. [docs/improvement-policy.json:4](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/docs/improvement-policy.json:4) records v3 as an ordinary revision, so lower coverage than v2 triggers a rollback proposal after two rounds. With two synthetic v3 findings containing \u201cpre-existing\u201d and \u201cRe-evaluate,\u201d `decide()` proposed restoring v2, including `-e` and `exit code`. Account for intentional removal of false matches in rollback evaluation so those same false positives cannot justify restoring the rejected keywords."
+      },
+      {
+        "round": 64,
+        "finding": "**[P2]** [Topic names can escape the output directory](</home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill-skills.py:153>). Policy validation accepts names such as `../outside`; `assert_safe_output()` does not enforce containment within `--out-dir`. A temporary reproduction overwrote an existing file outside that directory. Validate topic names as filename components and enforce resolved-path containment before writing."
+      },
+      {
+        "round": 64,
+        "finding": "**[P2]** [The registry test breaks after a legitimate policy revision](</home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill_skills_test.py:113>). The new configuration hardcodes policy version `2` and its topic list, while these assertions require both to match the evolving policy. The revision workflow updates the policy and skills but never updates that configuration. Subsequent policy revisions therefore make this test fail. Reference the canonical policy or regenerate the configuration alongside it."
       }
     ],
     "dev_only_topics": [],
     "anchor_only_topics": [],
     "validity_all_rounds": 0.971,
-    "rounds_after_evidence": 2,
+    "rounds_after_evidence": 3,
     "anchor_definitions": {
       "credential-redaction": [
         "redact",
