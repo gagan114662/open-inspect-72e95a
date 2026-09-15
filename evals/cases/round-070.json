@@ -25,6 +25,6 @@
   "diff_truncated": false,
   "diff_chars": 10519,
   "omitted_files": [],
-  "scorable": true,
-  "not_scorable_reason": null
+  "scorable": false,
+  "not_scorable_reason": "findings name files the reviewed diff does not touch: scripts/worker.py"
 }

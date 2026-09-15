@@ -119,15 +119,30 @@ def run_codex(prompt: str, codex_bin: str = "codex") -> ReviewerRun:
     )
 
 
-def parse_findings(text: str) -> list[dict]:
+def parse_findings(text: str) -> tuple[list[dict], str | None]:
+    """The reviewer's findings, or (None-findings, reason) when the output is
+    not the documented shape: a JSON object whose `findings` is a list of
+    objects with string `topic` and `summary`. Prose, `{"findings": null}`
+    or a list of numbers is a reviewer that did not review, not an empty
+    review (Codex review of PR #72, round 3, finding 5)."""
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
-        return []
+        return [], "reviewer output is not JSON"
     try:
         data = json.loads(text[start : end + 1])
-    except json.JSONDecodeError:
-        return []
-    return [f for f in data.get("findings", []) if isinstance(f, dict)]
+    except json.JSONDecodeError as exc:
+        return [], f"reviewer output is not JSON: {exc.msg}"
+    if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
+        return [], "reviewer output has no `findings` list"
+    findings = data["findings"]
+    if not all(
+        isinstance(f, dict)
+        and isinstance(f.get("topic"), str)
+        and isinstance(f.get("summary"), str)
+        for f in findings
+    ):
+        return [], "reviewer output has a finding without string `topic` and `summary`"
+    return findings, None
 
 
 def grade_codex(case: dict, keywords: dict[str, list[str]], runner=run_codex) -> dict:
@@ -147,7 +162,18 @@ def grade_codex(case: dict, keywords: dict[str, list[str]], runner=run_codex) ->
             "method": "codex exec review",
             "error": f"reviewer exited {ran.returncode}: {error}",
         }
-    findings = parse_findings(ran.text)
+    findings, invalid = parse_findings(ran.text)
+    if invalid:
+        return {
+            "id": case["id"],
+            "round": case["round"],
+            "expected_topics": sorted(case["expected_topics"]),
+            "found_topics": [],
+            "recall": None,
+            "status": "error",
+            "method": "codex exec review",
+            "error": f"{invalid}: {ran.text.strip()[-300:]}",
+        }
     # Each finding is credited to exactly one topic: the one the reviewer
     # named, or, only when it named none of ours ("other" or an unknown
     # label), the topic its summary classifies under by the policy's own

@@ -2,11 +2,11 @@
   "grader": "keywords",
   "policy_version": 3,
   "policy_hash": "11e8243663fa",
-  "ran_at": "2026-09-15T18:49:13+00:00",
+  "ran_at": "2026-09-15T19:30:48+00:00",
   "summary": {
-    "cases": 41,
+    "cases": 38,
     "errors": 0,
-    "mean_recall": 0.9634,
+    "mean_recall": 0.9605,
     "per_topic_recall": {
       "archive-branch": 1.0,
       "auth-lifecycle": 0.8,
@@ -277,34 +277,6 @@
       "method": "policy keywords present in the diff"
     },
     {
-      "id": "round-040",
-      "round": 40,
-      "expected_topics": [
-        "archive-branch",
-        "credential-redaction"
-      ],
-      "found_topics": [
-        "archive-branch",
-        "credential-redaction"
-      ],
-      "recall": 1.0,
-      "status": "completed",
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-042",
-      "round": 42,
-      "expected_topics": [
-        "credential-redaction"
-      ],
-      "found_topics": [
-        "credential-redaction"
-      ],
-      "recall": 1.0,
-      "status": "completed",
-      "method": "policy keywords present in the diff"
-    },
-    {
       "id": "round-043",
       "round": 43,
       "expected_topics": [
@@ -522,19 +494,6 @@
     {
       "id": "round-069",
       "round": 69,
-      "expected_topics": [
-        "credential-redaction"
-      ],
-      "found_topics": [
-        "credential-redaction"
-      ],
-      "recall": 1.0,
-      "status": "completed",
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-070",
-      "round": 70,
       "expected_topics": [
         "credential-redaction"
       ],

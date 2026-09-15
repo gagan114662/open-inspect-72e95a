@@ -156,14 +156,36 @@ def scrub_secrets(text: str, shapes: tuple[re.Pattern[str], ...] = _SECRET_SHAPE
 
 
 # Source code is redacted with the same shapes except the two that treat any
-# bare word after `name =` / `--flag` as a secret: in code those are
-# expressions and variable references, not credentials. Quoted literals with
-# a credential-shaped name, prefixed tokens, JWTs and long mixed tokens are
-# still removed (Codex review of PR #72, finding 3).
+# bare word after `name =` / `--flag` as a secret: in code those are usually
+# expressions and variable references. In their place, a value whose NAME says
+# credential is redacted whatever its shape or length (quoted `'demo123'`,
+# YAML `password: samplepass`, `--password "samplepass"`, `--token=tok1`),
+# while an expression (`len(items)`, `request.headers.get(...)`), a number, a
+# keyword (None/true/null) or a `$reference` after such a name survives
+# (Codex review of PR #72, findings 3 and round-3 2).
+_CREDENTIAL_WORD = (
+    r"(?:password|passwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key"
+    r"|auth|credential|bearer)"
+)
+_SOURCE_BARE_VALUE = (
+    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)(?!\d+(?:\.\d+)?(?![\w.]))"
+    r"[^\s\"'(\[{,;)]+(?![\w(\[.])"
+)
+_SOURCE_ASSIGNMENT_SHAPE = re.compile(
+    r"(?i)(?<![\w.])([a-z0-9_]*" + _CREDENTIAL_WORD + r"[a-z0-9_]*\s*[=:]\s*)"
+    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|" + _SOURCE_BARE_VALUE + r")"
+)
+_SOURCE_FLAG_SHAPE = re.compile(
+    r"(?i)((?<!\S)--?[a-z0-9-]*" + _CREDENTIAL_WORD + r"\b(?:\s+|=))"
+    r"(\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'|(?!\$)(?!-)[^\s\"']+)"
+)
 _SOURCE_SECRET_SHAPES: tuple[re.Pattern[str], ...] = tuple(
-    _LITERAL_ASSIGNMENT_SHAPE if p is _ASSIGNMENT_SHAPE else p
+    _SOURCE_ASSIGNMENT_SHAPE
+    if p is _ASSIGNMENT_SHAPE
+    else _SOURCE_FLAG_SHAPE
+    if p is _FLAG_SHAPE
+    else p
     for p in _SECRET_SHAPES
-    if p is not _FLAG_SHAPE
 )
 
 

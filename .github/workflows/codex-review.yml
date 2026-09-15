@@ -154,6 +154,19 @@ jobs:
           if git show "origin/${BASE_REF}:scripts/redact-secrets.py" > "$RUNNER_TEMP/trusted/redact-secrets.py" 2>/tmp/trusted-extract-err.txt; then
             chmod 444 "$RUNNER_TEMP/trusted/redact-secrets.py"
             echo "available=true" >> "$GITHUB_OUTPUT"
+            # The diff capper runs outside the sandbox with the review
+            # credentials in its environment, so it too is taken from the
+            # base branch, never from the PR (Codex review of PR #72, round
+            # 3, finding 1). Missing on the base branch (the PR that
+            # introduces it) is not fatal: the prompt is then not capped.
+            if git show "origin/${BASE_REF}:scripts/cap-review-diff.py" > "$RUNNER_TEMP/trusted/cap-review-diff.py" 2>/dev/null; then
+              chmod 444 "$RUNNER_TEMP/trusted/cap-review-diff.py"
+              echo "capper=true" >> "$GITHUB_OUTPUT"
+            else
+              rm -f "$RUNNER_TEMP/trusted/cap-review-diff.py"
+              echo "::notice::scripts/cap-review-diff.py is not on origin/${BASE_REF}; the review prompt will not be capped (the PR's own copy is never executed)."
+              echo "capper=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "::error::scripts/redact-secrets.py was not found on origin/${BASE_REF} — no trusted baseline to review from. Failing closed rather than trusting this PR's own copy."
             cat /tmp/trusted-extract-err.txt
@@ -232,7 +245,15 @@ jobs:
             # truncated prompt says what it does not show (PR #72).
             git diff "origin/${BASE_REF}...HEAD" -- . ':(exclude)evals/cases/**' ':(exclude)evals/results/**' \
               > $RUNNER_TEMP/codex-review-diff.txt
-            python3 scripts/cap-review-diff.py $RUNNER_TEMP/codex-review-diff.txt --max-chars 900000
+            # Only the trusted base-branch copy of the capper is executed
+            # (extracted above, next to the redactor); without one the diff
+            # passes through uncapped rather than running PR-controlled code
+            # with credentials in the environment.
+            if [ -f "$RUNNER_TEMP/trusted/cap-review-diff.py" ]; then
+              python3 -I "$RUNNER_TEMP/trusted/cap-review-diff.py" $RUNNER_TEMP/codex-review-diff.txt --max-chars 900000
+            else
+              cat $RUNNER_TEMP/codex-review-diff.txt
+            fi
             generated=$(git diff --stat "origin/${BASE_REF}...HEAD" -- evals/cases evals/results | tail -1)
             if [ -n "$generated" ]; then
               echo

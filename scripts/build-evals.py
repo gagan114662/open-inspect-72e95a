@@ -133,14 +133,21 @@ def cap_diff(
 ) -> tuple[str, bool, list[str], str | None]:
     """Keep the diff under the cap without dropping the files the findings
     name: those patches go first, whole; the rest fill what is left. Returns
-    (diff, truncated, omitted_files, not_scorable_reason). A truncated case
-    whose findings name no file, or name one that did not fit, cannot be
-    scored (Codex review of PR #72, finding 2)."""
-    if len(diff) <= max_diff_chars:
-        return diff, False, [], None
+    (diff, truncated, omitted_files, not_scorable_reason). A case whose
+    findings name a file the reviewed diff never touched has no evidence for
+    that finding and is not scorable, capped or not; a truncated case whose
+    findings name no file, or name one that did not fit, cannot be scored
+    either (Codex review of PR #72, finding 2 and round-3 finding 4)."""
     patches = split_patches(diff)
     present = {path for path, _ in patches}
-    wanted = [f for f in referenced if any(p == f or p.endswith("/" + f) for p in present)]
+    absent = [f for f in referenced if not any(p == f or p.endswith("/" + f) for p in present)]
+    if absent:
+        reason = f"findings name files the reviewed diff does not touch: {', '.join(absent)}"
+        if len(diff) <= max_diff_chars:
+            return diff, False, [], reason
+    if len(diff) <= max_diff_chars:
+        return diff, False, [], None
+    wanted = list(referenced)
 
     def is_wanted(path: str) -> bool:
         return any(path == f or path.endswith("/" + f) for f in wanted)
@@ -158,7 +165,9 @@ def cap_diff(
         else:
             omitted.append(path)
     reason = None
-    if not wanted:
+    if absent:
+        reason = f"findings name files the reviewed diff does not touch: {', '.join(absent)}"
+    elif not wanted:
         reason = "diff truncated and the findings name no file in it"
     else:
         missing = [f for f in wanted if any(is_wanted(o) and o.endswith(f) for o in omitted)]
@@ -228,6 +237,34 @@ def build(
     return cases, skipped
 
 
+_GENERATED_CASE = re.compile(r"^round-\d{3}\.json$")
+
+
+def write_cases(cases: list[dict], out_dir: Path, inputs: list[str | None]) -> list[str]:
+    """Write every case and remove generated case files for rounds no longer
+    produced (an unreachable commit, a removed entry), so the runner never
+    scores a stale case (Codex review of PR #72, round 3, finding 3). Only
+    files named like a generated case are touched; anything else in the
+    folder is left alone. Returns the removed file names."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    produced = set()
+    for case in cases:
+        target = out_dir / f"{case['id']}.json"
+        policy_mod.assert_safe_output(target, inputs=inputs)
+        target.write_text(json.dumps(case, indent=2) + "\n")
+        produced.add(target.name)
+    removed = []
+    for stale in sorted(out_dir.iterdir()):
+        if stale.name in produced or not _GENERATED_CASE.match(stale.name):
+            continue
+        if stale.is_symlink() or not stale.is_file():
+            continue
+        policy_mod.assert_safe_output(stale, inputs=inputs)
+        stale.unlink()
+        removed.append(stale.name)
+    return removed
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -253,17 +290,14 @@ def main(argv: list[str]) -> int:
         entries, policy_mod.topic_keywords(policy), reviewed_diff, args.max_diff_chars
     )
     out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for case in cases:
-        target = out_dir / f"{case['id']}.json"
-        policy_mod.assert_safe_output(target, inputs=[args.archive_path, args.policy])
-        target.write_text(json.dumps(case, indent=2) + "\n")
+    removed = write_cases(cases, out_dir, inputs=[args.archive_path, args.policy])
     print(
         json.dumps(
             {
                 "cases": len(cases),
                 "scorable": sum(1 for c in cases if c["scorable"]),
                 "skipped": skipped,
+                "removed_stale": removed,
                 "policy_version": policy["version"],
                 "out_dir": policy_mod.relative_to_repo(out_dir),
             },

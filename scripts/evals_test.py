@@ -76,7 +76,10 @@ def test_codex_grader_scores_recall_from_the_reviewers_json():
     assert result["recall"] == 1.0, (
         "an 'other' finding still counts when its summary classifies under the topic"
     )
-    assert run.grade_codex(cases[1], KW, reviewer_babbles)["recall"] == 0.0
+    # Prose instead of the documented JSON is a reviewer that did not review
+    # (Codex review of PR #72, round 3, finding 5), not an empty review.
+    babbled = run.grade_codex(cases[1], KW, reviewer_babbles)
+    assert babbled["status"] == "error" and babbled["recall"] is None
 
 
 def test_main_writes_a_result_file_outside_protected_paths(tmp_path):
@@ -246,3 +249,91 @@ def test_a_finding_labelled_with_a_valid_topic_is_credited_once():
 
     result = run.grade_codex(case, KW, reviewer)
     assert result["found_topics"] == ["fork-pr-permissions"] and result["recall"] == 0.5
+
+
+def test_source_scrubbing_redacts_credential_literals_of_any_shape_and_length():
+    """Codex review of PR #72, round 3, finding 2: `password = 'demo123'`,
+    YAML `password: samplepass` and `--password "samplepass"` survived the
+    source scrubber (8-char minimum, bare values excluded, flags dropped).
+    A value whose name says credential is redacted whatever its shape or
+    length; expressions and references still survive."""
+    src = "\n".join(
+        [
+            "password = 'demo123'",
+            "password: samplepass",
+            'run: deploy --password "samplepass" --token=tok1 --api-key abc',
+            "token_count = len(items)",
+            "timeout = 30",
+            "auth = request.headers.get('Authorization')",
+            "token: ${{ secrets.GITHUB_TOKEN }}",
+            "secret = None",
+        ]
+    )
+    out = build.scrub_source(src)
+    for leaked in ("demo123", "samplepass", "tok1", "--api-key abc"):
+        assert leaked not in out, out
+    for kept in (
+        "token_count = len(items)",
+        "timeout = 30",
+        "auth = request.headers.get('Authorization')",
+        "token: ${{ secrets.GITHUB_TOKEN }}",
+        "secret = None",
+    ):
+        assert kept in out, out
+    assert out.count("[REDACTED]") == 5
+
+
+def test_rebuilding_removes_obsolete_generated_cases_only(tmp_path):
+    """Codex review of PR #72, round 3, finding 3: a case whose round is no
+    longer produced (commit unreachable, entry removed) stayed on disk and
+    the runner kept scoring it."""
+    out_dir = tmp_path / "cases"
+    out_dir.mkdir()
+    (out_dir / "round-099.json").write_text('{"id": "round-099", "stale": true}')
+    (out_dir / "notes.md").write_text("human notes")
+    (out_dir / "round-001.json").write_text("{}")
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    removed = build.write_cases(cases, out_dir, inputs=[])
+    assert removed == ["round-099.json"]
+    assert sorted(p.name for p in out_dir.iterdir()) == [
+        "notes.md",
+        "round-001.json",
+        "round-002.json",
+    ]
+    assert json.loads((out_dir / "round-001.json").read_text())["id"] == "round-001"
+
+
+def test_a_finding_naming_a_file_absent_from_the_diff_is_not_scorable_even_uncapped():
+    """Codex review of PR #72, round 3, finding 4: an uncapped diff was
+    scorable without checking the files the findings name, and the capped
+    path dropped absent references before validating them."""
+    entry = {"round": 1, "source_sha": "s", "findings": ["[P2] missing.py leaks the token"]}
+    diff = _patch("other.py", "token = read()")
+    case = build.build_case(entry, "base", diff, KW, max_diff_chars=60_000)
+    assert case["scorable"] is False and "missing.py" in case["not_scorable_reason"]
+    # The capped path validates the same way.
+    case = build.build_case(entry, "base", diff + _patch("noise.txt", "x" * 500), KW, 200)
+    assert case["scorable"] is False and "missing.py" in case["not_scorable_reason"]
+    # A present reference stays scorable on both paths.
+    present = {"round": 2, "source_sha": "s", "findings": ["[P2] other.py leaks the token"]}
+    assert build.build_case(present, "base", diff, KW, 60_000)["scorable"] is True
+
+
+def test_malformed_reviewer_output_is_an_error_not_an_empty_review():
+    """Codex review of PR #72, round 3, finding 5: non-JSON output became a
+    completed review with recall 0, and {"findings": null} raised TypeError
+    and aborted the run before results were saved."""
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    for bad in (
+        "I could not review this.",
+        '{"findings": null}',
+        '{"findings": [1, 2]}',
+        '{"nope": []}',
+    ):
+        result = run.grade_codex(cases[0], KW, lambda _p, bad=bad: bad)
+        assert result["status"] == "error" and result["recall"] is None, bad
+        assert "reviewer output" in result["error"], bad
+    ok = run.grade_codex(cases[0], KW, lambda _p: '{"findings": []}')
+    assert ok["status"] == "completed" and ok["recall"] == 0.0
+    summary = run.summarize([ok, run.grade_codex(cases[0], KW, lambda _p: "garbage")])
+    assert summary["errors"] == 1 and summary["cases"] == 1
