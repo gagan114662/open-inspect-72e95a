@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -604,3 +605,115 @@ def test_source_scrubbing_covers_item_assignments_triple_quotes_and_quoted_keys(
         '"user": "bob"',
     ):
         assert kept in out, kept
+
+
+def test_source_scrubbing_covers_multiline_triple_quotes_and_typed_assignments():
+    """Codex review of PR #72, round 7, finding 1: a triple-quoted password
+    spanning lines and a typed assignment (`const password: string = "x"`)
+    survived; the typed form even redacted the type instead of the value."""
+    src = "\n".join(
+        [
+            'password = """first line',
+            'second line"""',
+            'const password: string = "syntheticpass";',
+            "let token: string = 'tok-abc-123';",
+            'api_key: str = "pyKey_9"',
+            "timeout: number = 30;",
+            "token_count: int = len(items)",
+        ]
+    )
+    out = build.scrub_source(src)
+    for secret in ("first line", "second line", "syntheticpass", "tok-abc-123", "pyKey_9"):
+        assert secret not in out, (secret, out)
+    assert "const password: string = " in out, "the type annotation is kept"
+    assert "let token: string = " in out
+    assert "api_key: str = " in out
+    assert "timeout: number = 30;" in out and "token_count: int = len(items)" in out
+
+
+def test_unexpected_finding_fields_are_dropped_before_saving_or_printing(tmp_path, capsys):
+    """Codex review of PR #72, round 7, finding 2: values were scrubbed but a
+    finding carrying an extra `"password": "syntheticpass"` property passed
+    validation and kept the credential. Only the documented fields survive."""
+    reply = json.dumps(
+        {
+            "findings": [
+                {
+                    "topic": "credential-redaction",
+                    "summary": "a token is logged",
+                    "password": "syntheticpass",
+                    "nested": {"secret": "syntheticpass"},
+                }
+            ]
+        }
+    )
+    findings, invalid = run.parse_findings(reply)
+    assert invalid is None
+    assert findings == [{"topic": "credential-redaction", "summary": "a token is logged"}]
+    cases, _ = build.build(_entries(), KW, _diffs_with_base, 60_000)
+    result = run.grade_codex(cases[0], KW, lambda _p: reply)
+    assert "syntheticpass" not in json.dumps(result)
+    print(json.dumps(result))
+    assert "syntheticpass" not in capsys.readouterr().out
+
+
+def test_answer_bearing_patches_are_removed_from_the_case_diff():
+    """Codex review of PR #72, round 7, finding 3: the prompt carried the
+    whole reviewed diff, so a branch that itself updated the review archive
+    (or evals, docs/rsi, skills, proposals) handed the answers to the
+    reviewer. Those patches are dropped from the case and recorded."""
+    diff = (
+        _patch("scripts/x.py", "token = 'abc'")
+        + _patch("docs/self-improvement-archive.jsonl", '{"findings": ["[P1] leaked token"]}')
+        + _patch("evals/cases/round-001.json", '{"expected": []}')
+        + _patch("docs/rsi/measurement.json", "{}")
+    )
+    entry = {"round": 5, "source_sha": "s5", "findings": ["[P1] leaked token in scripts/x.py"]}
+    case = build.build_case(entry, "base", diff, KW, 60_000)
+    assert "scripts/x.py" in case["diff"]
+    for answer in ("self-improvement-archive", "evals/cases", "docs/rsi"):
+        assert answer not in case["diff"], answer
+    assert case["answer_paths_removed"] == [
+        "docs/rsi/measurement.json",
+        "docs/self-improvement-archive.jsonl",
+        "evals/cases/round-001.json",
+    ]
+    assert case["scorable"]
+    # A finding whose only evidence was an answer path has nothing left to score.
+    only_answers = {
+        "round": 6,
+        "source_sha": "s6",
+        "findings": ["[P2] bad archive entry in docs/self-improvement-archive.jsonl"],
+    }
+    case = build.build_case(only_answers, "base", diff, KW, 60_000)
+    assert not case["scorable"] and "answer" in case["not_scorable_reason"]
+
+
+def test_the_default_runner_receives_the_checkout_as_its_working_directory(tmp_path, monkeypatch):
+    """Codex review of PR #72, round 7, finding 4: `runner(prompt, workdir)`
+    handed the checkout to run_codex's second positional parameter, the
+    binary path, so the default runner failed with PermissionError."""
+    repo, _a, _c = _repo_with_a_merged_branch(tmp_path)
+    head = _git(repo, "rev-parse", "HEAD")
+    monkeypatch.setattr(run, "REPO_ROOT", repo)
+    fake = _fake_codex(
+        tmp_path, '{"findings": [{"topic": "credential-redaction", "summary": "s"}]}'
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "codex").write_bytes(fake.read_bytes())
+    (bin_dir / "codex").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    case = {
+        "id": "round-001",
+        "round": 1,
+        "source_sha": head,
+        "expected_topics": ["credential-redaction"],
+        "diff": "+x",
+        "scorable": True,
+    }
+    result = run.grade_codex(case, KW)  # the DEFAULT runner
+    assert result["status"] != "error", result
+    assert result["recall"] == 1.0
+    cwd = Path((tmp_path / "cwd-record.txt").read_text())
+    assert cwd.resolve() != repo.resolve() and not cwd.exists()

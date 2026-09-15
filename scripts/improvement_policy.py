@@ -174,23 +174,34 @@ _SOURCE_BARE_VALUE = (
 # The value of a CREDENTIAL-named assignment or flag: numbers are secrets
 # too (`password = 123456`), only expressions, references and literals such
 # as None/true survive (Codex review of PR #72, round 5).
+# A bare value followed by `=` is a type annotation (`token_count: int =
+# len(items)`), not a credential (Codex review of PR #72, round 7).
 _SOURCE_CREDENTIAL_VALUE = (
-    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)[^\s\"'(\[{,;)}\]]+(?![\w(\[.])"
+    r"(?!(?:none|true|false|null|nil|undefined)\b)(?!\$)[^\s\"'(\[{,;)}\]]+(?![\w(\[.])(?!\s*=)"
 )
 # String literals a credential can hide in: triple-quoted first (a
 # `"""..."""` is not an empty `""`), then single-line quoted (Codex review
 # of PR #72, round 6).
 _SOURCE_QUOTED_VALUE = (
-    r"\"\"\"(?:(?!\"\"\")[^\n])*\"\"\"|'''(?:(?!''')[^\n])*'''"
+    # Triple-quoted literals span lines (Codex review of PR #72, round 7).
+    r"\"\"\"(?:(?!\"\"\")[\s\S])*\"\"\"|"
+    r"'''(?:(?!''')[\s\S])*'''"
     r"|\"(?:\\.|[^\"\\])+\"|'(?:\\.|[^'\\])+'"
 )
+# A type annotation between a credential name and its `=`:
+# `const password: string = "x"`, `api_key: str = "x"`. The annotation is
+# kept and the VALUE redacted; without it the annotation itself was taken
+# for the value (Codex review of PR #72, round 7).
+_SOURCE_TYPE_ANNOTATION = r"\s*:\s*[\w\[\]<>|?.]+(?:\s*[|,]\s*[\w\[\]<>|?.]+)*\s*=\s*"
 _SOURCE_ASSIGNMENT_SHAPE = re.compile(
     # `self.password`, `config.api_key`, `settings['db'].secret`: an attribute
     # or item prefix before the credential name is still that credential; so
     # is a quoted key, `config["password"] =` or `{"password":` (round 6).
     r"(?i)(?<![\w.])((?:[\w\[\]\"']+\.)*[\"']?[a-z0-9_]*"
     + _CREDENTIAL_WORD
-    + r"[a-z0-9_]*[\"']?\]?\s*[=:]\s*)"
+    + r"[a-z0-9_]*[\"']?\]?(?:"
+    + _SOURCE_TYPE_ANNOTATION
+    + r"|\s*[=:]\s*))"
     r"(" + _SOURCE_QUOTED_VALUE + r"|" + _SOURCE_CREDENTIAL_VALUE + r")"
 )
 # Short credential flags (`-a samplepass`, `-p VALUE`, `-pVALUE`, as in
@@ -436,6 +447,23 @@ PROTECTED_OUTPUT_FILES: tuple[str, ...] = (
     "docs/improvement-policy.json",
     "docs/improvement-policy-history.jsonl",
 )
+# Paths whose contents ARE the eval answers (expected findings, the archive
+# the cases were built from, generated playbooks and proposals). Never in the
+# reviewer's working directory, never in a case's diff (Codex review of PR
+# #72, rounds 5 and 7).
+EVAL_ANSWER_PATHS: tuple[str, ...] = (
+    "evals",
+    "docs/self-improvement-archive.jsonl",
+    "docs/rsi",
+    "skills",
+    "proposals",
+)
+
+
+def is_answer_path(path: str) -> bool:
+    return any(path == a or path.startswith(a + "/") for a in EVAL_ANSWER_PATHS)
+
+
 # The committed field anchors: only a deliberate evidence refresh may write
 # them, never a report or decision output (Codex review of PR #10, round 15).
 CANONICAL_EVIDENCE_FILES: tuple[str, ...] = (

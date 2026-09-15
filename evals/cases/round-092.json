@@ -22,6 +22,7 @@
   "diff_truncated": false,
   "diff_chars": 19343,
   "omitted_files": [],
+  "answer_paths_removed": [],
   "scorable": false,
   "not_scorable_reason": "findings name files the reviewed diff does not touch: docs/rsi/trace-evidence.json"
 }

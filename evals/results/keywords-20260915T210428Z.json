@@ -2,14 +2,14 @@
   "grader": "keywords",
   "policy_version": 3,
   "policy_hash": "11e8243663fa",
-  "ran_at": "2026-09-15T20:49:42+00:00",
+  "ran_at": "2026-09-15T21:04:28+00:00",
   "summary": {
-    "cases": 44,
+    "cases": 40,
     "errors": 0,
-    "mean_recall": 0.9659,
+    "mean_recall": 0.9625,
     "per_topic_recall": {
       "archive-branch": 1.0,
-      "auth-lifecycle": 0.8,
+      "auth-lifecycle": 0.75,
       "credential-redaction": 1.0,
       "env-var-precedence": 1.0,
       "fork-pr-permissions": 1.0,
@@ -104,21 +104,6 @@
       "method": "policy keywords present in the diff"
     },
     {
-      "id": "round-018",
-      "round": 18,
-      "expected_topics": [
-        "archive-branch",
-        "auth-lifecycle"
-      ],
-      "found_topics": [
-        "archive-branch",
-        "auth-lifecycle"
-      ],
-      "recall": 1.0,
-      "status": "completed",
-      "method": "policy keywords present in the diff"
-    },
-    {
       "id": "round-019",
       "round": 19,
       "expected_topics": [
@@ -173,47 +158,8 @@
       "method": "policy keywords present in the diff"
     },
     {
-      "id": "round-024",
-      "round": 24,
-      "expected_topics": [
-        "archive-branch"
-      ],
-      "found_topics": [
-        "archive-branch"
-      ],
-      "recall": 1.0,
-      "status": "completed",
-      "method": "policy keywords present in the diff"
-    },
-    {
       "id": "round-025",
       "round": 25,
-      "expected_topics": [
-        "archive-branch"
-      ],
-      "found_topics": [
-        "archive-branch"
-      ],
-      "recall": 1.0,
-      "status": "completed",
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-026",
-      "round": 26,
-      "expected_topics": [
-        "archive-branch"
-      ],
-      "found_topics": [
-        "archive-branch"
-      ],
-      "recall": 1.0,
-      "status": "completed",
-      "method": "policy keywords present in the diff"
-    },
-    {
-      "id": "round-028",
-      "round": 28,
       "expected_topics": [
         "archive-branch"
       ],

@@ -109,13 +109,7 @@ class ReviewerRun(NamedTuple):
 # Paths whose contents ARE the answers (expected findings, the archive the
 # cases were built from, generated playbooks and proposals). They never sit
 # in the reviewer's working directory (Codex review of PR #72, round 5).
-ANSWER_PATHS: tuple[str, ...] = (
-    "evals",
-    "docs/self-improvement-archive.jsonl",
-    "docs/rsi",
-    "skills",
-    "proposals",
-)
+ANSWER_PATHS: tuple[str, ...] = policy_mod.EVAL_ANSWER_PATHS
 
 
 class CheckoutUnavailable(RuntimeError):
@@ -242,7 +236,10 @@ def parse_findings(text: str) -> tuple[list[dict], str | None]:
         for f in findings
     ):
         return [], "reviewer output has a finding without string `topic` and `summary`"
-    return findings, None
+    # Only the documented fields survive: an undocumented property is
+    # reviewer-controlled text that would otherwise be saved under a key the
+    # scrubber never looks at (Codex review of PR #72, round 7, finding 2).
+    return [{"topic": f["topic"], "summary": f["summary"]} for f in findings], None
 
 
 def _wants_checkout(runner) -> bool:
@@ -278,7 +275,9 @@ def grade_codex(case: dict, keywords: dict[str, list[str]], runner=run_codex) ->
     if _wants_checkout(runner):
         try:
             with historical_checkout(sha) as (workdir, listing):
-                ran = runner(prompt, workdir)
+                # By keyword: the second POSITIONAL parameter of run_codex is
+                # the binary path (Codex review of PR #72, round 7, finding 4).
+                ran = runner(prompt, cwd=workdir)
         except CheckoutUnavailable as exc:
             return _error(case, f"no isolated checkout: {exc}")
     else:

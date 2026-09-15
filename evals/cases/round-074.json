@@ -25,6 +25,7 @@
   "diff_truncated": false,
   "diff_chars": 27626,
   "omitted_files": [],
+  "answer_paths_removed": [],
   "scorable": true,
   "not_scorable_reason": null
 }

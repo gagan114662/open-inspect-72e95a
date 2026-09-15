@@ -101,7 +101,7 @@ scrub_source = policy_mod.scrub_source_secrets
 # markdown link is not a file the diff can be checked for, and a match may
 # not start in the middle of a hyphenated directory name.
 _PATH_RE = re.compile(
-    r"(?<![\w/.-])((?:[\w.-]+/)*[\w.-]+\.(?:py|yml|yaml|ts|tsx|js|mjs|json|md|sh|toml|txt))\b"
+    r"(?<![\w/.-])((?:[\w.-]+/)*[\w.-]+\.(?:py|yml|yaml|ts|tsx|js|mjs|json|jsonl|html|md|sh|toml|txt))\b"
 )
 
 
@@ -192,13 +192,34 @@ def build_case(
         for f in findings
     ]
     referenced = referenced_files(findings)
+    answers_removed: list[str] = []
     if diff is None:
         capped, truncated, omitted, reason = "", False, [], "no reviewed base is recoverable"
         diff_chars = 0
     else:
-        scrubbed = scrub_source(diff)
+        # Patches to answer-bearing paths (the archive, evals, generated
+        # playbooks) never reach the reviewer: a branch that updated the
+        # archive would otherwise hand it the expected findings (Codex review
+        # of PR #72, round 7, finding 3).
+        kept_patches = []
+        for path, patch in split_patches(diff):
+            if policy_mod.is_answer_path(path):
+                answers_removed.append(path)
+            else:
+                kept_patches.append(patch)
+        answers_removed.sort()
+        scrubbed = scrub_source("".join(kept_patches))
         capped, truncated, omitted, reason = cap_diff(scrubbed, referenced, max_diff_chars)
         diff_chars = len(scrubbed)
+        if reason and answers_removed and referenced:
+            only_answers = all(
+                any(a == f or a.endswith("/" + f) for a in answers_removed) for f in referenced
+            )
+            if only_answers:
+                reason = (
+                    "findings reference only answer-bearing paths removed from the diff: "
+                    + ", ".join(answers_removed)
+                )
     return {
         "id": f"round-{int(entry['round']):03d}",
         "round": entry["round"],
@@ -213,6 +234,7 @@ def build_case(
         "diff_truncated": truncated,
         "diff_chars": diff_chars,
         "omitted_files": omitted,
+        "answer_paths_removed": answers_removed,
         "scorable": reason is None,
         "not_scorable_reason": reason,
     }
