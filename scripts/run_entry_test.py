@@ -224,3 +224,46 @@ def test_repo_dir_is_resolved_against_the_callers_directory(tmp_path, monkeypatc
     monkeypatch.chdir(tmp_path)
     assert run.main(["run.py", "--refresh", "--repo-dir", "."]) == 0
     assert seen["repo_dir"] == str(tmp_path.resolve())
+
+
+def test_refresh_never_writes_through_a_planted_staging_link(tmp_path, monkeypatch):
+    """Codex review of PR #68, round 5: the destination was validated but the
+    staging file next to it was not, so `trace-evidence.json.tmp` planted as
+    a symlink or hard link to the archive let the copy overwrite the archive
+    before the atomic replace. The staging file is now created exclusively
+    under a unique name, so a planted path is never opened for writing."""
+    run = load_run("run_entry_staging")
+    root = tmp_path / "repo"
+    (root / "docs" / "rsi").mkdir(parents=True)
+    (root / "scripts").mkdir()
+    shutil.copyfile(
+        ROOT / "scripts" / "improvement_policy.py", root / "scripts" / "improvement_policy.py"
+    )
+    archive = root / "docs" / "self-improvement-archive.jsonl"
+    archive.write_text('{"round": 1}\n')
+    policy = root / "docs" / "improvement-policy.json"
+    shutil.copyfile(ROOT / "docs" / "improvement-policy.json", policy)
+    original_policy = policy.read_bytes()
+    evidence = root / "docs" / "rsi" / "trace-evidence.json"
+    evidence.write_text("{}")
+    # Both link kinds at the old staging path.
+    (root / "docs" / "rsi" / "trace-evidence.json.tmp").symlink_to(archive)
+    (root / "scripts" / "mine-trace-failures.py").write_text(
+        "import sys, json\na=sys.argv\n"
+        "open(a[a.index('--save-evidence')+1],'w').write(json.dumps({'sessions': ['s1'], 'topics': {}}))\n"
+        "open(a[a.index('--out-json')+1],'w').write('{}')\nprint('1 distinct failure(s)')\n"
+    )
+    monkeypatch.setattr(run, "ROOT", root)
+    run.main(["run.py", "--refresh", "--repo-dir", str(tmp_path)])
+    assert archive.read_text() == '{"round": 1}\n', "symlinked staging path was written through"
+    assert json.loads(evidence.read_text()) == {"sessions": ["s1"], "topics": {}}
+    (root / "docs" / "rsi" / "trace-evidence.json.tmp").unlink()
+    (root / "docs" / "rsi" / "trace-evidence.json.tmp").hardlink_to(policy)
+    run.main(["run.py", "--refresh", "--repo-dir", str(tmp_path)])
+    assert policy.read_bytes() == original_policy, "hard-linked staging path was written through"
+    leftovers = [
+        p.name
+        for p in (root / "docs" / "rsi").iterdir()
+        if p.name.startswith("trace-evidence.json.") and p.name != "trace-evidence.json.tmp"
+    ]
+    assert leftovers == [], f"staging files left behind: {leftovers}"

@@ -17,8 +17,10 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -49,9 +51,19 @@ def replace_evidence(fresh: Path, dest: Path) -> str | None:
         return str(exc)
     if dest.exists() and dest.stat().st_nlink > 1:
         return f"{dest.relative_to(ROOT)} has other hard links; evidence must be a regular file"
-    staged = dest.with_name(dest.name + ".tmp")
-    staged.write_bytes(fresh.read_bytes())
-    staged.replace(dest)
+    # The staging file is created exclusively under a unique name (O_EXCL),
+    # never at a predictable path: a `trace-evidence.json.tmp` planted as a
+    # symlink or hard link to the archive would otherwise be opened for
+    # writing before the atomic replace (Codex review of PR #68, round 5).
+    fd, staged_name = tempfile.mkstemp(prefix=dest.name + ".", suffix=".staging", dir=dest.parent)
+    staged = Path(staged_name)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(fresh.read_bytes())
+        staged.replace(dest)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
     return None
 
 
