@@ -99,9 +99,17 @@ def evidence_after(evidence: dict | None, cutoff_ms: int | None) -> dict | None:
         return evidence
     topics: dict[str, list[dict]] = {}
     for topic, traces in (evidence.get("topics") or {}).items():
-        if any(not isinstance(t.get("timestamp"), int | float) for t in traces):
+        # A session counts after the cutoff when ANY of its matches came
+        # after it: the snapshot's `timestamps` lists every dated match, so
+        # a failure that recurred after a revision is not lost behind its
+        # earliest occurrence (Codex review of PR #70, round 5). A snapshot
+        # without that list, or with an undated match, cannot place the
+        # session in time: the topic's held-out count is unknown.
+        if any(not isinstance(t.get("timestamps"), list) or not t["timestamps"] for t in traces):
             continue
-        topics[topic] = [t for t in traces if t["timestamp"] > cutoff_ms]
+        if any(not isinstance(ts, int | float) for t in traces for ts in t["timestamps"]):
+            continue
+        topics[topic] = [t for t in traces if max(t["timestamps"]) > cutoff_ms]
     kept_ids = {t["id"] for traces in topics.values() for t in traces}
     sessions = [s for s in evidence.get("sessions") or [] if s in kept_ids]
     return {**evidence, "topics": topics, "sessions": sessions}

@@ -31,7 +31,7 @@
       "rounds_oos": 59,
       "findings_oos": 119,
       "coverage_oos": 0.6471,
-      "validity_oos": -0.6211,
+      "validity_oos": null,
       "coverage_all": 0.6727,
       "validity_all": 0.8533
     },

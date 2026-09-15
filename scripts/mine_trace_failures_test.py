@@ -800,3 +800,28 @@ def test_namespace_dedicated_to_the_repository_keeps_sessions_without_metadata(
     # A namespace dedicated to the repository: every session belongs to it.
     assert mine.main([*base, "--namespace-is-repository"]) == 0
     assert json.loads(evidence.read_text())["sessions"] == ["r1"]
+
+
+def test_evidence_keeps_every_dated_match_per_session():
+    """Codex review of PR #70, round 5: only the earliest match was stored,
+    so a session matching at 100 and 300 vanished from a window after 200."""
+    failure = {
+        "trace_id": "s1",
+        "agent": "claude-code",
+        "command": "x",
+        "excerpt": "",
+        "timestamp": 100,
+        "_occurrences": [
+            {"timestamp": 100, "text": "pipefail missing"},
+            {"timestamp": 200, "text": "unrelated"},
+            {"timestamp": 300, "text": "pipefail again"},
+        ],
+    }
+    words = ["pipefail"]
+    assert mine.match_timestamps(failure, words) == [100, 300]
+    assert mine.first_match_timestamp(failure, words) == 100
+    undated = dict(failure, _occurrences=[{"timestamp": None, "text": "pipefail"}])
+    assert mine.match_timestamps(undated, words) is None
+    evidence = mine.build_evidence([failure], {"shell-semantics": words}, ".", [], True, ["s1"])
+    trace = evidence["topics"]["shell-semantics"][0]
+    assert trace["timestamp"] == 100 and trace["timestamps"] == [100, 300]

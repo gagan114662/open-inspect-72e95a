@@ -350,7 +350,7 @@ def mine_trace(traces_bin: str, trace: dict) -> list[dict]:
             "excerpt": excerpt,
             "count": 1,
         }
-    return sorted(failures.values(), key=lambda f: (f["event_number"] or 0))
+    return sorted(failures.values(), key=lambda f: f["event_number"] or 0)
 
 
 def occurrences(failure: dict) -> list[tuple[int | float | None, str]]:
@@ -367,6 +367,33 @@ def occurrences(failure: dict) -> list[tuple[int | float | None, str]]:
 
 def failure_text(failure: dict) -> str:
     return " ".join(text for _, text in occurrences(failure))
+
+
+def match_timestamps(failure: dict, words: list[str]) -> list[int | float] | None:
+    """Every time this failure showed the topic's keywords, sorted, or None
+    when any match is undated or a truncated earlier occurrence may hide
+    one. A session that matched before AND after a policy revision must
+    still count after it (Codex review of PR #70, round 5)."""
+    matched: list[int | float | None] = []
+    blind_before: list[int | float | None] = []
+    occurrences = failure.get("_occurrences") or [
+        {
+            "timestamp": failure.get("timestamp"),
+            "text": f"{failure['command']} {failure['excerpt']}",
+        }
+    ]
+    for o in occurrences:
+        text = str(o.get("text", "")).lower() if o.get("text") is not None else ""
+        if any(w.lower() in text for w in words):
+            matched.append(o.get("timestamp"))
+        elif o.get("truncated"):
+            blind_before.append(o.get("timestamp"))
+    if not matched or any(not isinstance(ts, int | float) for ts in matched):
+        return None
+    dated = sorted(ts for ts in matched if isinstance(ts, int | float))
+    if any(not isinstance(ts, int | float) or ts < dated[0] for ts in blind_before):
+        return None
+    return dated
 
 
 def first_match_timestamp(failure: dict, words: list[str]) -> int | float | None:
@@ -432,15 +459,27 @@ def build_evidence(
             unknown.update(t for t in keywords if t not in matched)
         for topic in matched:
             when = first_match_timestamp(failure, keywords[topic])
+            every = match_timestamps(failure, keywords[topic])
             entry = per_topic[topic].setdefault(
                 failure["trace_id"],
-                {"id": failure["trace_id"], "agentId": failure["agent"], "timestamp": when},
+                {
+                    "id": failure["trace_id"],
+                    "agentId": failure["agent"],
+                    "timestamp": when,
+                    "timestamps": every,
+                },
             )
             # A session's timestamp for a topic is the earliest dated match;
             # any undated match makes it unknown (historical epochs then
-            # treat the count as unknown rather than guessing).
+            # treat the count as unknown rather than guessing). `timestamps`
+            # keeps every dated match so a later window can count the
+            # session again (Codex review of PR #70, round 5).
             if entry["timestamp"] is not None and (when is None or when < entry["timestamp"]):
                 entry["timestamp"] = when
+            if entry.get("timestamps") is not None:
+                entry["timestamps"] = (
+                    None if every is None else sorted(set(entry["timestamps"]) | set(every))
+                )
     return {
         "source": "trace-failures",
         "collected_at": policy_mod.utc_now_iso(),

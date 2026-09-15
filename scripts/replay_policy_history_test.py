@@ -143,7 +143,7 @@ def _evidence_for(policy, timestamps: list[int]) -> dict:
         "definitions": {t: list(w) for t, w in keywords.items()},
         "topics": {
             t: [
-                {"id": f"s{i}", "agentId": "claude-code", "timestamp": ts}
+                {"id": f"s{i}", "agentId": "claude-code", "timestamp": ts, "timestamps": [ts]}
                 for i, ts in enumerate(timestamps)
             ]
             for t in keywords
@@ -168,8 +168,19 @@ def test_held_out_validity_only_counts_field_evidence_after_the_revision():
     kept = replay.evidence_after(mixed, cutoff)
     assert all(len(traces) == 1 and traces[0]["id"] == "s1" for traces in kept["topics"].values())
     assert kept["sessions"] == ["s1"]
+    # Codex review of PR #70, round 5: a session that matched at t=100 and
+    # again at t=300 is still evidence after a cutoff at t=200.
+    recurring = _evidence_for(v2, [cutoff - 60_000])
+    for traces in recurring["topics"].values():
+        traces[0]["timestamps"] = [cutoff - 60_000, cutoff + 60_000]
+    kept = replay.evidence_after(recurring, cutoff)
+    assert all(len(traces) == 1 for traces in kept["topics"].values())
+    # An older snapshot without the per-match list cannot place the session.
+    legacy = _evidence_for(v2, [cutoff + 60_000])
+    legacy["topics"]["quartz-crashes"][0].pop("timestamps")
+    assert "quartz-crashes" not in replay.evidence_after(legacy, cutoff)["topics"]
     undated = _evidence_for(v2, [cutoff + 60_000])
-    undated["topics"]["quartz-crashes"][0].pop("timestamp")
+    undated["topics"]["quartz-crashes"][0]["timestamps"] = [None]
     assert "quartz-crashes" not in replay.evidence_after(undated, cutoff)["topics"], (
         "a trace that cannot be placed in time makes the topic's held-out count unknown"
     )
