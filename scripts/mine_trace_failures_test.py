@@ -428,6 +428,7 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
                     {"id": "remote-1", "agentId": "claude-code", "timestamp": 5},
                     {"id": "remote-2", "agentId": "codex", "timestamp": 6},
                     {"id": "remote-3", "agentId": "claude-code", "timestamp": 7},
+                    {"id": "remote-4", "agentId": "claude-code", "timestamp": 8},
                 ]
             }
         if args[0] == "sync":
@@ -441,6 +442,7 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
                     "gitRemoteUrl": "https://github.com/someone/other-project",
                     "directory": "/w/other",
                 },
+                "remote-4": {"directory": "/home/me/scratch-folder"},
             }.get(args[1], {})
             return {"trace": meta, "events": _events() if args[1] == "remote-1" else []}
         raise AssertionError(args)
@@ -457,6 +459,8 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
             "gagan114",
             "--match",
             "github.com/gagan114662/open-inspect-72e95a",
+            "--match",
+            "w/scratch-folder",
             "--agents",
             "claude-code",
             "--traces-key",
@@ -475,7 +479,9 @@ def test_namespace_mode_syncs_each_shared_session_before_reading_it(tmp_path, mo
     assert not any(c[:2] == ["sync", "remote-2"] for c in calls), "codex sessions were filtered out"
     saved = json.loads(evidence.read_text())
     assert saved["namespace"] == "gagan114"
-    assert saved["sessions"] == ["remote-1"], "remote-3 belongs to another repository"
+    assert saved["sessions"] == ["remote-1", "remote-4"], (
+        "remote-3 belongs to another repository; remote-4 matches the second needle"
+    )
     assert saved["listing_complete"] is True
     assert mine.session_belongs_to(
         {"directory": "/x/open-inspect-72e95a"}, "github.com/o/open-inspect-72e95a"

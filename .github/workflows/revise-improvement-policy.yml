@@ -97,14 +97,19 @@ jobs:
         env:
           TRACES_API_KEY: ${{ secrets.TRACES_API_KEY }}
           TRACES_NAMESPACE: ${{ vars.TRACES_NAMESPACE || '@gagan114' }}
+          # Optional extra folder name whose sessions also count as this
+          # repository's (a scratch folder with no git remote). Repo variable.
+          TRACES_EXTRA_MATCH: ${{ vars.TRACES_EXTRA_MATCH || '' }}
         run: |
           set -euo pipefail
           mkdir -p docs/rsi
           # --match scopes the namespace to sessions whose git remote is THIS
           # repository; a namespace holds every project its owner shares.
+          extra=()
+          [ -n "$TRACES_EXTRA_MATCH" ] && extra=(--match "$TRACES_EXTRA_MATCH")
           if python3 scripts/mine-trace-failures.py \
               --namespace "$TRACES_NAMESPACE" --traces-key "$TRACES_API_KEY" \
-              --match "github.com/${GITHUB_REPOSITORY}" \
+              --match "github.com/${GITHUB_REPOSITORY}" "${extra[@]}" \
               --save-evidence docs/rsi/trace-evidence.json \
               --out-json "$RUNNER_TEMP/field-failures.json" > "$RUNNER_TEMP/mine.txt"; then
             head -n 30 "$RUNNER_TEMP/mine.txt"

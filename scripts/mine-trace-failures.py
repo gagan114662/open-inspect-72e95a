@@ -476,9 +476,11 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument(
         "--match",
+        action="append",
         default=None,
         help="with --namespace: keep only sessions whose git remote contains this text "
-        "(e.g. github.com/owner/repo) or whose folder name equals its last segment",
+        "(e.g. github.com/owner/repo) or whose folder name equals its last segment; "
+        "repeatable, e.g. to include a scratch folder that has no git remote",
     )
     parser.add_argument(
         "--traces-key",
@@ -551,7 +553,8 @@ def main(argv: list[str]) -> int:
                 pass  # "all" deliberately includes the verifier's own sessions
             if args.namespace:
                 sync_trace(args.traces_bin, trace["id"])
-                if not session_belongs_to(trace_metadata(args.traces_bin, trace["id"]), args.match):
+                meta = trace_metadata(args.traces_bin, trace["id"])
+                if not any(session_belongs_to(meta, needle) for needle in args.match):
                     continue
             kept.append(trace)
             failures.extend(mine_trace(args.traces_bin, trace))
