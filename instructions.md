@@ -29,6 +29,11 @@ human as a pull request.
 - Re-propose a configuration that was rolled back on the same archive and the same field
   observations.
 
+## Entry point
+
+`python3 run.py` runs one pass of the schedule locally: measure, decide (dry run), render, distill,
+propose. The workflows in `.github/workflows/` run the same steps unattended.
+
 ## Invariants
 
 The eleven invariants the meta-improver holds, with the rounds that forced each one, are in

@@ -1454,3 +1454,234 @@ def test_field_derived_keywords_come_only_from_the_safe_vocabulary():
     # A word an archived (public) review finding already contains is allowed.
     vocab = revise.field_vocabulary([{"findings": ["**[P1]** violetorchard renderer crashed."]}])
     assert "violetorchard" in vocab
+
+
+def test_mining_never_names_a_topic_after_paths_or_the_repositorys_background_vocabulary():
+    # The loop's first autonomous proposal (PR #54) mined "scripts-evidence"
+    # from path fragments and words present in most findings, classifying 52
+    # findings as one class. Locations are stripped before tokenizing and
+    # background vocabulary is excluded from mining.
+    assert revise.tokenize(
+        "**[P2]** Rollback evaluates rounds. In [revise-improvement-policy.py:541]"
+        "(/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:541), see docs/x.md"
+    ) == {"rollback", "evaluates", "rounds"}
+    entries = [
+        {
+            "round": i,
+            "source_sha": f"s{i}",
+            "findings": [
+                f"**[P2]** scripts evidence topic broke thing-{i} in /home/runner/x{i}.py"
+            ],
+        }
+        for i in range(10)
+    ] + [{"round": 10, "source_sha": "s10", "findings": ["**[P2]** disk quota exceeded on runner"]}]
+    background = revise.background_tokens(entries)
+    assert {"scripts", "evidence", "topic"} <= background
+    assert "quota" not in background
+    unclassified = [{"round": i, "finding": e["findings"][0]} for i, e in enumerate(entries)]
+    mined = revise.mine_topics(unclassified, {}, None, background)
+    for topic in mined:
+        assert not ({"scripts", "evidence", "topic", "home", "runner"} & set(topic["keywords"])), (
+            topic
+        )
+
+
+def test_the_real_archive_no_longer_mines_location_words(tmp_path):
+    archive = Path(__file__).resolve().parent.parent / "docs" / "self-improvement-archive.jsonl"
+    if not archive.exists():
+        return
+    entries = [json.loads(line) for line in archive.read_text().splitlines() if line.strip()]
+    policy = policy_mod.load_policy()
+    current = measure.measure(entries, policy, None)["current"]
+    mined = revise.mine_topics(
+        list(current["unclassified_findings"]),
+        policy_mod.topic_keywords(policy),
+        revise.field_vocabulary(entries),
+        revise.background_tokens(entries),
+    )
+    banned = {"scripts", "home", "runner", "work", "open-inspect", "evidence", "topic", "policy"}
+    for topic in mined:
+        assert not (banned & set(topic["keywords"])), topic["keywords"]
+
+
+def test_slash_separated_prose_and_small_recurrences_still_mine():
+    # Codex review of PR #56: "deadlock/livelock" is prose, not a location,
+    # and a word in 3 of 10 findings is a recurring problem, not background.
+    assert {"deadlock", "livelock", "reader", "writer"} <= revise.tokenize(
+        "deadlock/livelock between reader/writer in /home/runner/x.py and scripts/y.py:3"
+    )
+    assert not (
+        {"home", "runner", "scripts"} & revise.tokenize("see /home/runner/x.py and scripts/y.py:3")
+    )
+    entries = [
+        {
+            "round": i,
+            "source_sha": f"d{i}",
+            "findings": [f"**[P2]** deadlock/livelock in worker pool {i}"],
+        }
+        for i in range(3)
+    ] + [
+        {
+            "round": 10 + i,
+            "source_sha": f"o{i}",
+            "findings": [f"**[P2]** unrelated item number {i}"],
+        }
+        for i in range(7)
+    ]
+    assert "deadlock" not in revise.background_tokens(entries)
+    unclassified = [{"round": e["round"], "finding": e["findings"][0]} for e in entries[:3]]
+    mined = revise.mine_topics(unclassified, {}, None, revise.background_tokens(entries))
+    assert mined and "deadlock" in mined[0]["keywords"]
+
+
+def test_a_defect_word_that_recurs_only_in_unclassified_findings_is_never_background():
+    # Ten "deadlock" findings among forty: not background, because none of the
+    # classified findings contain it (Codex review of PR #56, round 2).
+    keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
+    entries = [
+        {
+            "round": i,
+            "source_sha": f"c{i}",
+            "findings": [f"**[P1]** leaked credential in scripts run {i}"],
+        }
+        for i in range(30)
+    ] + [
+        {
+            "round": 100 + i,
+            "source_sha": f"d{i}",
+            "findings": [f"**[P2]** deadlock in worker pool {i}"],
+        }
+        for i in range(10)
+    ]
+    background = revise.background_tokens(entries, keywords)
+    assert "scripts" in background and "deadlock" not in background
+    unclassified = [{"round": e["round"], "finding": e["findings"][0]} for e in entries[30:]]
+    mined = revise.mine_topics(unclassified, keywords, None, background)
+    assert mined and "deadlock" in mined[0]["keywords"]
+
+
+def test_location_detection_is_linear_on_long_words():
+    import time
+
+    long_word = "a" * 200_000
+    start = time.perf_counter()
+    revise.tokenize(long_word + " and deadlock/livelock in /home/runner/x.py")
+    assert time.perf_counter() - start < 1.0
+    assert revise.is_location("/home/runner/x.py") and revise.is_location("scripts/a/b")
+    assert revise.is_location("revise-improvement-policy.py:541") and revise.is_location(
+        "https://x.y/z"
+    )
+    assert not revise.is_location("deadlock/livelock") and not revise.is_location("reader/writer")
+
+
+def test_location_detection_handles_punctuation_line_ranges_and_prose_with_many_slashes():
+    loc = revise.is_location
+    assert (
+        loc("`scripts/worker.py`.") and loc("scripts/worker.py:41-43") and loc("(docs/plans/x.md),")
+    )
+    assert loc("scripts/a/b") and loc("packages/web/src")
+    assert not loc("deadlock/livelock/starvation") and not loc("read/write/execute")
+    assert not (
+        {"scripts", "worker"}
+        & revise.tokenize("see `scripts/worker.py`. and scripts/worker.py:41-43")
+    )
+    assert {"deadlock", "livelock", "starvation"} <= revise.tokenize(
+        "deadlock/livelock/starvation in the pool"
+    )
+
+
+def test_markdown_links_keep_their_text_and_drop_their_target():
+    toks = revise.tokenize(
+        "see [details](https://github.com/acme/project/pull/42) and [x](scripts/a.py) for deadlock"
+    )
+    assert {"details", "deadlock"} <= toks
+    assert not ({"github", "acme", "project", "pull", "scripts"} & toks)
+    assert revise.is_location("details](https://github.com/acme/x)")
+
+
+def test_dot_directories_are_locations_and_unmatched_brackets_stay_linear():
+    import time
+
+    assert revise.is_location(".github/actions") and revise.is_location("(.github/workflows/x.yml)")
+    assert not ({"github", "actions"} & revise.tokenize("touches .github/actions here"))
+    start = time.perf_counter()
+    revise.tokenize("[" * 20000 + " deadlock")
+    assert time.perf_counter() - start < 1.0
+
+
+def test_markdown_titles_and_line_column_suffixes():
+    assert {"deadlock"} <= revise.tokenize('[deadlock](docs/locking.md "design notes") happened')
+    assert not (
+        {"docs", "locking", "design", "notes"}
+        & revise.tokenize('[deadlock](docs/locking.md "design notes")')
+    )
+    assert revise.is_location("renderer.ts:41:12") and revise.is_location(
+        "a/b/renderer.ts:41:12-15"
+    )
+
+
+def test_line_reference_stripping_is_linear():
+    import time
+
+    start = time.perf_counter()
+    revise.tokenize(":1" * 20000 + "x")
+    assert time.perf_counter() - start < 1.0
+    assert (
+        revise.strip_line_refs("a.py:41:12-15") == "a.py"
+        and revise.strip_line_refs("http://x:8080") == "http://x"
+    )
+
+
+def test_line_reference_stripping_stays_linear_when_every_suffix_matches():
+    import time
+
+    start = time.perf_counter()
+    assert revise.strip_line_refs("a.py" + ":1" * 20000) == "a.py"
+    assert time.perf_counter() - start < 1.0
+
+
+def test_decorated_file_references_are_still_locations():
+    loc = revise.is_location
+    assert loc("allocator.py#L41") and loc("allocator.py#L41-L43") and loc("`allocator.py`:41")
+    assert loc("(`scripts/x.py`:41),")
+    assert not loc("deadlock#1"), "a fragment on a plain word is not a location"
+    assert not (
+        {"allocator"} & revise.tokenize("see allocator.py#L41 and `allocator.py`:41 for the crash")
+    )
+
+
+def test_is_location_peels_nested_decorations_in_linear_time():
+    """Codex review of PR #56, round 10: peeling one decoration per pass and
+    copying the remainder was quadratic; a 480 KB finding took 2.2 s. The
+    peel now moves indexes over the original string, so a 1.2 MB tail of
+    nested decorations finishes well inside a second."""
+    import time
+
+    word = "allocator.py" + ':1`"' * 300_000
+    started = time.perf_counter()
+    assert revise.is_location(word)
+    elapsed = time.perf_counter() - started
+    assert elapsed < 3.0, f"is_location took {elapsed:.2f}s on {len(word)} chars"
+    # Fragment suffixes peel the same way and the answer is unchanged.
+    assert revise.is_location("(`allocator.py#L41-L43`):3")
+    assert not revise.is_location("(`deadlock/livelock`):3")
+    # Codex review of PR #56, round 11: an early colon plus repeated
+    # fragments made every pass copy and split the whole tail again.
+    word = "allocator.py:bad" + "#l1`" * 300_000
+    started = time.perf_counter()
+    assert not revise.is_location(word), "'allocator.py:bad' is not a file reference"
+    elapsed = time.perf_counter() - started
+    assert elapsed < 3.0, f"is_location took {elapsed:.2f}s on {len(word)} chars"
+    assert revise.strip_line_refs("allocator.py:bad:41") == "allocator.py:bad"
+    assert revise.strip_line_refs("x:41:12-15") == "x" and revise.strip_line_refs(":41") == ":41"
+
+
+def test_every_repository_file_type_is_a_location_not_a_keyword():
+    """Codex review of PR #56, round 12: `.tf` was missing, so `backend.tf:12`
+    contributed the token "backend" and two findings naming that file made a
+    topic whose only keyword was a filename."""
+    for word in ("backend.tf:12", "schema.sql", "main.tftpl", "(variables.hcl)", "app.css:3"):
+        assert revise.is_location(word), word
+    assert "backend" not in revise.tokenize("Terraform state drift in backend.tf:12 again")
+    # A slash-separated pair of prose words is still prose.
+    assert not revise.is_location("backend/frontend")

@@ -47,5 +47,6 @@
     "results": "evals/results/",
     "build": "scripts/build-evals.py",
     "run": "scripts/run-evals.py"
-  }
+  },
+  "entry": "run.py"
 }

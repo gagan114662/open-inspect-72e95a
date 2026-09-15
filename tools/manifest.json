@@ -78,6 +78,14 @@
       "inputs": ["--cases", "--grader keywords|codex", "--limit"],
       "writes": ["evals/results/*.json"],
       "covers": []
+    },
+    {
+      "name": "replay_policy_history",
+      "script": "scripts/replay-policy-history.py",
+      "purpose": "Judge every policy version out of sample: coverage and validity on rounds archived after the version existed.",
+      "inputs": ["archive path", "--policy", "--history", "--trace-evidence", "--out-json"],
+      "writes": ["docs/rsi/replay.json"],
+      "covers": []
     }
   ]
 }

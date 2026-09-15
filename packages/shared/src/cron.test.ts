@@ -1,11 +1,16 @@
+import { Effect } from "effect";
 import { describe, it, expect } from "vitest";
 import {
+  InvalidCronExpression,
+  InvalidTimeZone,
   cronIntervalMinutes,
   describeCron,
   isValidCron,
   isValidTimeZone,
   nextCronOccurrence,
+  parseCron,
   validateAutomationCron,
+  validateTimeZone,
 } from "./cron";
 
 describe("isValidCron", () => {
@@ -140,5 +145,43 @@ describe("automation schedule validation", () => {
   it("validates IANA time zones", () => {
     expect(isValidTimeZone("America/Los_Angeles")).toBe(true);
     expect(isValidTimeZone("not/a-time-zone")).toBe(false);
+  });
+});
+
+describe("parseCron (Effect)", () => {
+  it("fails with InvalidCronExpression carrying the expression and reason", () => {
+    const error = Effect.runSync(Effect.flip(parseCron("61 * * * *")));
+    expect(error).toBeInstanceOf(InvalidCronExpression);
+    expect(error.expression).toBe("61 * * * *");
+    expect(error.reason.length).toBeGreaterThan(0);
+  });
+
+  it("succeeds with a parsed expression that yields occurrences", () => {
+    const cron = Effect.runSync(
+      parseCron("0 9 * * *", { tz: "UTC", currentDate: new Date("2025-06-15T08:00:00Z") })
+    );
+    expect(cron.next().toDate().toISOString()).toBe("2025-06-15T09:00:00.000Z");
+  });
+
+  it("keeps the boolean wrappers in agreement with the typed error", () => {
+    for (const expression of ["*/15 * * * *", "0 9 * * 1", "invalid", "60 * * * *", ""]) {
+      const parsed = Effect.runSync(Effect.either(parseCron(expression)));
+      const fiveFields = expression.trim().split(/\s+/).length === 5;
+      expect(isValidCron(expression)).toBe(fiveFields && parsed._tag === "Right");
+    }
+  });
+});
+
+describe("validateTimeZone (Effect)", () => {
+  it("fails with InvalidTimeZone for an unknown zone", () => {
+    const error = Effect.runSync(Effect.flip(validateTimeZone("Mars/Olympus")));
+    expect(error).toBeInstanceOf(InvalidTimeZone);
+    expect(error.timeZone).toBe("Mars/Olympus");
+    expect(isValidTimeZone("Mars/Olympus")).toBe(false);
+  });
+
+  it("succeeds with the zone name for a known zone", () => {
+    expect(Effect.runSync(validateTimeZone("America/Toronto"))).toBe("America/Toronto");
+    expect(isValidTimeZone("America/Toronto")).toBe(true);
   });
 });

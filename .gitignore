@@ -108,3 +108,6 @@ terraform/environments/aws-production/plan.out
 
 # Traces namespace pin (local)
 .tracesrc
+
+# run.py --refresh scratch (never committed)
+docs/rsi/.refresh/

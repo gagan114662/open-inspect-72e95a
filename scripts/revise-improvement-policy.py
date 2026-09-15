@@ -241,12 +241,194 @@ STOPWORDS = frozenset(
 )
 
 _TOKEN_RE = re.compile(r"[a-z][a-z_-]{2,}")
+# Paths, URLs and file references name WHERE a finding is, never what class
+# of problem it is: "/home/runner/work/<repo>/scripts/x.py:41" must not
+# hand mining the tokens home, runner, scripts or the repository's own name
+# (the loop's first autonomous proposal, PR #54, did exactly that).
+# Every file type the repository actually contains (`git ls-files`, 2026-09-15),
+# not only source code: a Terraform or SQL file named in two findings must not
+# become a topic keyword either (Codex review of PR #56, round 12).
+_LOCATION_EXTENSIONS = (
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".yml",
+    ".yaml",
+    ".json",
+    ".jsonl",
+    ".md",
+    ".sh",
+    ".toml",
+    ".tf",
+    ".tftpl",
+    ".hcl",
+    ".sql",
+    ".css",
+    ".html",
+    ".svg",
+    ".txt",
+    ".snap",
+    ".lock",
+    ".example",
+    ".env",
+    ".cfg",
+    ".ini",
+    ".dockerfile",
+)
+
+
+_LOCATION_ROOTS = frozenset(
+    {
+        "scripts",
+        "docs",
+        "packages",
+        "terraform",
+        ".github",
+        "tools",
+        "skills",
+        "channels",
+        "schedules",
+        "agents",
+        "home",
+        "tmp",
+        "var",
+        "usr",
+        "etc",
+        "opt",
+        "users",
+        "runner",
+        "work",
+        "node_modules",
+        "src",
+        "lib",
+        "test",
+        "tests",
+        "dist",
+        "build",
+    }
+)
+
+
+_LINE_REF_CHARS = frozenset("0123456789-:")
+
+
+def line_ref_end(word: str, start: int, end: int) -> int:
+    """The end index of ``word[start:end]`` once trailing :41, :41-43, :41:12
+    suffixes are removed. Scans backwards over line-reference characters
+    only, so the work is bounded by the suffix, never by the whole word: a
+    colon early in the word ("allocator.py:bad…") no longer makes every
+    pass copy and split the entire tail (Codex review of PR #56, rounds 7,
+    8 and 11)."""
+    run = end
+    while run > start and word[run - 1] in _LINE_REF_CHARS:
+        run -= 1
+    while True:
+        colon = word.rfind(":", run, end)
+        if colon <= start:
+            break
+        tail = word[colon + 1 : end]
+        parts = tail.split("-")
+        if not tail or len(parts) > 2 or not all(part.isdigit() for part in parts):
+            break
+        end = colon
+    return end
+
+
+def strip_line_refs(word: str) -> str:
+    """Remove trailing :41, :41-43, :41:12 suffixes."""
+    return word[: line_ref_end(word, 0, len(word))]
+
+
+_LEADING_DECORATIONS = frozenset("()[]<>`'\"*_")
+_TRAILING_DECORATIONS = frozenset("()[]<>`'\",;.:!?*_")
+
+
+_FRAGMENT_CHARS = frozenset("l0123456789-")
+
+
+def _fragment_start(word: str, start: int, end: int) -> int | None:
+    """Index of a trailing #L41, #L41-L43, #41-43 fragment in
+    ``word[start:end]``, or None. Scans backwards over fragment characters
+    only, never the whole window, so a window without a fragment costs
+    O(1) per pass."""
+    i = end
+    while i > start and word[i - 1] in _FRAGMENT_CHARS:
+        i -= 1
+    hash_pos = i - 1
+    if hash_pos <= start or word[hash_pos] != "#":
+        return None
+    tail = word[i:end].lstrip("l").replace("-l", "-").replace("-", "")
+    return hash_pos if tail.isdigit() else None
+
+
+def is_location(word: str) -> bool:
+    """A URL, an absolute or explicitly relative path, a file reference
+    (x.py, x.py:41, x.py:41-43, with surrounding punctuation), or a path
+    whose first segment is a known directory. Slash-separated prose such as
+    deadlock/livelock/starvation is not a location. Plain string tests per
+    whitespace-separated word, linear on long inputs (Codex review of PR
+    #56, rounds 2 and 3)."""
+    # Trailing punctuation only, and no leading dot: ".github/actions" is a
+    # directory, not "github/actions" (Codex review of PR #56, round 5).
+    lowered = word.lower()
+    # Decorations can nest: `allocator.py`:41, allocator.py#L41-L43, (x.py:3).
+    # Peel punctuation, line suffixes and fragments until nothing changes,
+    # moving a [start, end) window over the original string instead of
+    # copying it each pass, so nested decorations peel in linear time
+    # (Codex review of PR #56, rounds 9 and 10).
+    start, end = 0, len(lowered)
+    while True:
+        before = (start, end)
+        while start < end and lowered[start] in _LEADING_DECORATIONS:
+            start += 1
+        while end > start and lowered[end - 1] in _TRAILING_DECORATIONS:
+            end -= 1
+        end = line_ref_end(lowered, start, end)
+        fragment = _fragment_start(lowered, start, end)
+        if fragment is not None:
+            end = fragment
+        if (start, end) == before:
+            break
+    w = lowered[start:end]
+    if not w:
+        return False
+    if "http://" in w or "https://" in w:
+        return True  # a URL glued to other characters is still a URL
+    if w.startswith(("/", "./", "../", "~/")):
+        return True
+    segments = w.split("/")
+    if any(seg.endswith(_LOCATION_EXTENSIONS) for seg in segments):
+        return True
+    return len(segments) > 1 and segments[0] in _LOCATION_ROOTS
+
+
+# A token present in more than this share of ALL archived findings is the
+# repository's background vocabulary ("policy", "evidence", "scripts"), not
+# a class of problem, and may not name or define a mined topic.
+MAX_BACKGROUND_SHARE = 0.2
+# ...and only once a token has been seen in at least this many findings: a
+# word in 3 of 10 findings is a recurring problem, not background.
+MIN_BACKGROUND_OCCURRENCES = 10
+
+
+# Bounded character classes: an unmatched "[" cannot make the scan retry
+# the rest of the text (Codex review of PR #56, round 5).
+_MARKDOWN_LINK_RE = re.compile(
+    r"\[([^\[\]]{0,300})\]\(([^()\s]{0,2000})(?:\s+\"[^\"]{0,300}\")?\)"  # optional "title"
+)
 
 
 def tokenize(text: str) -> set[str]:
+    # A markdown link keeps its text and drops its target: the target is a
+    # location by definition (Codex review of PR #56, round 4).
+    text = _MARKDOWN_LINK_RE.sub(r"\1 ", text)
+    text = " ".join(w for w in text.lower().split() if not is_location(w))
     return {
         tok.strip("-_")
-        for tok in _TOKEN_RE.findall(text.lower())
+        for tok in _TOKEN_RE.findall(text)
         if len(tok) >= MIN_TOKEN_LENGTH
         and tok not in STOPWORDS
         and tok != "redacted"  # the scrubber's marker is never a topic
@@ -432,6 +614,32 @@ SAFE_FIELD_VOCABULARY: frozenset[str] = frozenset(
 )
 
 
+def background_tokens(
+    entries: list[dict], keywords: dict[str, list[str]] | None = None
+) -> set[str]:
+    """Tokens that pervade the findings the taxonomy ALREADY classifies: what
+    this repository talks about across every class of problem ("scripts",
+    "policy", "evidence"). A word that recurs only in unclassified findings
+    ("deadlock", ten times) is a defect waiting for a topic, not background,
+    so it is never excluded however often it appears (Codex review of PR
+    #56, round 2)."""
+    findings = [
+        f
+        for e in entries
+        for f in e.get("findings", [])
+        if isinstance(f, str)
+        and (not keywords or policy_mod.classify_finding(f, keywords) is not None)
+    ]
+    if not findings:
+        return set()
+    df: Counter[str] = Counter(tok for f in findings for tok in tokenize(f))
+    return {
+        tok
+        for tok, n in df.items()
+        if n >= MIN_BACKGROUND_OCCURRENCES and n / len(findings) > MAX_BACKGROUND_SHARE
+    }
+
+
 def field_vocabulary(entries: list[dict]) -> set[str]:
     """Words that may be published from field failures: the safe vocabulary
     plus every token already public in an archived review finding."""
@@ -449,6 +657,7 @@ def mine_topics(
     unclassified: list[dict],
     keywords: dict[str, list[str]],
     vocabulary: set[str] | None = None,
+    background: set[str] | None = None,
 ) -> list[dict]:
     """Greedy, auditable topic mining over findings the policy could not
     classify: the most frequent significant token names a topic; its
@@ -456,7 +665,7 @@ def mine_topics(
     findings the new topic covers are removed and the process repeats.
     Field items (round `field:…`) contribute only tokens in `vocabulary`;
     with no vocabulary they contribute nothing (round 49)."""
-    taken = existing_keyword_tokens(keywords)
+    taken = existing_keyword_tokens(keywords) | set(background or ())
 
     def allowed(item: dict) -> set[str]:
         toks = tokenize(item["finding"]) - taken
@@ -977,7 +1186,9 @@ def decide(
     if field_trigger or coverage_trigger:
         mining_input.extend(blind)
     mined = (
-        mine_topics(mining_input, keywords, field_vocabulary(entries))
+        mine_topics(
+            mining_input, keywords, field_vocabulary(entries), background_tokens(entries, keywords)
+        )
         if (coverage_trigger or field_trigger)
         else []
     )

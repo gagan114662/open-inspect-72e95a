@@ -1,0 +1,54 @@
+{
+  "archive_digest": "6ebadd8ce78e",
+  "evidence_digest": "4bd5d9402889d1cc",
+  "common_window_after": "2026-09-15T13:46:14Z",
+  "common_rounds": 14,
+  "undated_excluded": 2,
+  "versions": [
+    {
+      "coverage_common": 0.4091,
+      "validity_common": null,
+      "held_out": "ok",
+      "version": 1,
+      "origin": "init",
+      "created_at": "2026-09-14T18:00:00Z",
+      "policy_hash": "b67e0cf82dbd",
+      "rounds_oos": 75,
+      "findings_oos": 165,
+      "coverage_oos": 0.4364,
+      "validity_oos": 0.9747,
+      "coverage_all": 0.4364,
+      "validity_all": 0.9747
+    },
+    {
+      "coverage_common": 0.7273,
+      "validity_common": null,
+      "held_out": "ok",
+      "version": 2,
+      "origin": "revision",
+      "created_at": "2026-09-14T20:01:51Z",
+      "policy_hash": "c3c6db9d8605",
+      "rounds_oos": 59,
+      "findings_oos": 119,
+      "coverage_oos": 0.6471,
+      "validity_oos": null,
+      "coverage_all": 0.6727,
+      "validity_all": 0.8533
+    },
+    {
+      "coverage_common": 0.6818,
+      "validity_common": null,
+      "held_out": "ok",
+      "version": 3,
+      "origin": "revision",
+      "created_at": "2026-09-15T13:46:14Z",
+      "policy_hash": "11e8243663fa",
+      "rounds_oos": 14,
+      "findings_oos": 22,
+      "coverage_oos": 0.6818,
+      "validity_oos": null,
+      "coverage_all": 0.6182,
+      "validity_all": 0.971
+    }
+  ]
+}
