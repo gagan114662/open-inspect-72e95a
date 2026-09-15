@@ -1618,3 +1618,15 @@ def test_markdown_titles_and_line_column_suffixes():
     assert revise.is_location("renderer.ts:41:12") and revise.is_location(
         "a/b/renderer.ts:41:12-15"
     )
+
+
+def test_line_reference_stripping_is_linear():
+    import time
+
+    start = time.perf_counter()
+    revise.tokenize(":1" * 20000 + "x")
+    assert time.perf_counter() - start < 1.0
+    assert (
+        revise.strip_line_refs("a.py:41:12-15") == "a.py"
+        and revise.strip_line_refs("http://x:8080") == "http://x"
+    )

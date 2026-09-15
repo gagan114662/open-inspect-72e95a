@@ -291,7 +291,20 @@ _LOCATION_ROOTS = frozenset(
         "build",
     }
 )
-_LINE_REF_RE = re.compile(r"(?::\d+(?:-\d+)?)+$")  # :41, :41-43, :41:12
+
+
+def strip_line_refs(word: str) -> str:
+    """Remove trailing :41, :41-43, :41:12 suffixes with a linear scan (a
+    regex with a repeated group went quadratic on ':1:1:1…x')."""
+    while True:
+        colon = word.rfind(":")
+        if colon <= 0:
+            return word
+        tail = word[colon + 1 :]
+        digits = tail.split("-", 1)
+        if not tail or not all(part.isdigit() for part in digits) or len(digits) > 2:
+            return word
+        word = word[:colon]
 
 
 def is_location(word: str) -> bool:
@@ -304,7 +317,7 @@ def is_location(word: str) -> bool:
     # Trailing punctuation only, and no leading dot: ".github/actions" is a
     # directory, not "github/actions" (Codex review of PR #56, round 5).
     w = word.lstrip("()[]<>`'\"*_").rstrip("()[]<>`'\",;.:!?*_").lower()
-    w = _LINE_REF_RE.sub("", w)
+    w = strip_line_refs(w)
     if not w:
         return False
     if "http://" in w or "https://" in w:
