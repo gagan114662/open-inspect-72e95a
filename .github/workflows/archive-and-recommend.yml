@@ -555,9 +555,22 @@ jobs:
               return 0
             fi
             if git diff --quiet "origin/$default_branch" HEAD; then
-              gh pr close "$stale_pr" --delete-branch \
+              gh pr close "$stale_pr" \
                 --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
               echo "Closed the stale tool-proposal PR #$stale_pr."
+              # The branch is deleted only if it still points at the commit
+              # this run inspected: a human commit pushed meanwhile keeps it
+              # (a leased delete, not `gh pr close --delete-branch`; Codex
+              # review of PR #61, round 13).
+              # The remote commit this run read or pushed (git updates the
+              # tracking ref on a successful push), never the local HEAD,
+              # which may hold an unpushed merge of the default branch.
+              inspected=$(git rev-parse "origin/$branch")
+              if git push --force-with-lease="refs/heads/${branch}:${inspected}" origin ":refs/heads/${branch}"; then
+                echo "Deleted $branch at ${inspected}."
+              else
+                echo "::notice::$branch moved since this run inspected it; the branch is kept for a person to look at."
+              fi
             else
               echo "::notice::No tool proposals remain, but $branch still differs from $default_branch (human changes). PR #$stale_pr stays open for a person to merge or close."
             fi
@@ -572,9 +585,16 @@ jobs:
           # there is never run with this job's write token (Codex review of
           # PR #61, round 9).
           trusted="$RUNNER_TEMP/trusted"
-          rm -rf "$trusted"
-          git worktree prune
-          git worktree add -q "$trusted" "origin/$default_branch"
+          refresh_trusted() {
+            # Rebuilt on every attempt at the default-branch commit that
+            # attempt merges in, so the archive, policy and registry the
+            # generator reads are never older than the branch being
+            # proposed (Codex review of PR #61, round 13).
+            git worktree remove --force "$trusted" 2>/dev/null || true
+            rm -rf "$trusted"
+            git worktree prune
+            git worktree add -q "$trusted" "origin/$default_branch"
+          }
           trap 'git worktree remove --force "$trusted" 2>/dev/null || true' EXIT
           # The standing branch is a shared workspace: a human may have
           # committed implementation fixes to a draft on it during review.
@@ -587,6 +607,7 @@ jobs:
           topics=""
           for attempt in 1 2 3; do
             git fetch -q origin "$default_branch"
+            refresh_trusted
             if git fetch -q origin "$branch" 2>/dev/null; then
               lease=$(git rev-parse "origin/$branch")
               git checkout -q -B "$branch" "origin/$branch"

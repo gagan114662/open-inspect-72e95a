@@ -18,7 +18,9 @@ GH_STUB = """#!/usr/bin/env bash
 # Minimal gh: default branch is main, no open PRs, creation is recorded.
 case "$1 $2" in
   "repo view") echo main ;;
-  "pr list") if [ -n "${GH_OPEN_PR:-}" ]; then echo "$GH_OPEN_PR"; else echo ""; fi ;;
+  "pr list")
+    if [ -n "${GH_ON_PR_LIST:-}" ]; then bash "$GH_ON_PR_LIST"; fi
+    if [ -n "${GH_OPEN_PR:-}" ]; then echo "$GH_OPEN_PR"; else echo ""; fi ;;
   "pr create")
     if [ -n "${GH_FAIL_CREATE_ONCE:-}" ] && [ -f "$GH_FAIL_CREATE_ONCE" ]; then
       rm -f "$GH_FAIL_CREATE_ONCE"; echo "create failed (simulated)" >&2; exit 1
@@ -310,9 +312,8 @@ def test_removing_the_last_draft_withdraws_the_open_pr(tmp_path):
     run = _run_step(ws2, env, tmp_path, {"GH_OPEN_PR": "41"})
     assert run.returncode == 0, run.stdout + run.stderr
     assert "closed 41" in (tmp_path / "gh.log").read_text(), "the emptied PR was not withdrawn"
-    _git(ws2, "fetch", "-q", "origin", env=env)
-    tree = _git(ws2, "ls-tree", "-r", "--name-only", "origin/tool-proposals", env=env)
-    assert "proposals/tools/shell-semantics" not in tree, "the stale draft was removed and pushed"
+    # Identical to main after the deletions, the branch itself is deleted (leased).
+    assert "tool-proposals" not in _git(ws2, "ls-remote", "--heads", "origin", env=env)
 
 
 def test_an_empty_archive_ends_the_step_cleanly_without_a_proposals_folder(tmp_path):
@@ -401,3 +402,62 @@ def test_already_merged_proposals_do_not_open_an_empty_pr(tmp_path):
     assert run.returncode == 0, run.stdout + run.stderr
     assert "nothing to propose" in run.stdout
     assert not (tmp_path / "gh.log").exists() or "created" not in (tmp_path / "gh.log").read_text()
+
+
+def test_withdrawal_never_deletes_a_branch_that_moved_since_it_was_inspected(tmp_path):
+    """Codex review of PR #61, round 13: `gh pr close --delete-branch`
+    deleted the remote branch without a lease, so a human commit pushed
+    after the run's last push was lost. Deletion is now a leased push of
+    the inspected commit; anything newer keeps the branch."""
+    origin, seed, env = _first_run(tmp_path)
+    _advance_main(
+        seed,
+        env,
+        {
+            "tools/manifest.json": json.dumps(
+                {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+            )
+        },
+    )
+    # While the step is running (at its `gh pr list` call), a human pushes.
+    human = _human_clone(tmp_path, origin, env)
+    hook = tmp_path / "on-pr-list.sh"
+    hook.write_text(
+        f"set -e\ncd {str(human)!r}\n"
+        "if [ ! -f .pushed ]; then git fetch -q origin && git reset -q --hard origin/tool-proposals && "
+        "mkdir -p proposals && echo late > proposals/LATE.md && git add -A && git commit -q -m late && "
+        "git push -q origin tool-proposals && touch .pushed; fi\n"
+    )
+    ws2 = tmp_path / "ws2"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws2), env=env)
+    run = _run_step(ws2, env, tmp_path, {"GH_OPEN_PR": "41", "GH_ON_PR_LIST": str(hook)})
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "closed 41" in (tmp_path / "gh.log").read_text()
+    assert (human / ".pushed").exists(), (
+        "the simulated late human push did not happen:\n" + run.stdout + run.stderr
+    )
+    _git(ws2, "fetch", "-q", "origin", env=env)
+    tree = _git(ws2, "ls-tree", "-r", "--name-only", "origin/tool-proposals", env=env)
+    assert "proposals/LATE.md" in tree, "the branch with the late human commit was deleted"
+    assert "moved since this run inspected it" in run.stdout
+    # Without a late commit the emptied branch is deleted, leased.
+    (tmp_path / "gh.log").unlink()
+    ws3 = tmp_path / "ws3"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws3), env=env)
+    # Bring the branch back to "identical to main" by removing the late file on main's side.
+    _advance_main(seed, env, {"proposals/LATE.md": "late\n"})
+    run = _run_step(ws3, env, tmp_path, {"GH_OPEN_PR": "41"})
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "Deleted tool-proposals" in run.stdout
+    assert "tool-proposals" not in _git(ws3, "ls-remote", "--heads", "origin", env=env)
+
+
+def test_the_trusted_worktree_is_rebuilt_on_every_attempt():
+    """Codex review of PR #61, round 13: the trusted worktree was created
+    once, so a retry after a lost lease merged a newer default branch into
+    the proposal branch but drafted from the older archive and registry."""
+    script = _step_script()
+    loop = script[script.index("for attempt in 1 2 3; do") :]
+    first_iteration = loop[: loop.index("python3 -I")]
+    assert "refresh_trusted" in first_iteration, "the worktree must be refreshed inside the loop"
+    assert 'git worktree add -q "$trusted" "origin/$default_branch"' in script
