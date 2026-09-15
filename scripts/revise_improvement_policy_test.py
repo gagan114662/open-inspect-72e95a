@@ -1665,3 +1665,12 @@ def test_is_location_peels_nested_decorations_in_linear_time():
     # Fragment suffixes peel the same way and the answer is unchanged.
     assert revise.is_location("(`allocator.py#L41-L43`):3")
     assert not revise.is_location("(`deadlock/livelock`):3")
+    # Codex review of PR #56, round 11: an early colon plus repeated
+    # fragments made every pass copy and split the whole tail again.
+    word = "allocator.py:bad" + "#l1`" * 300_000
+    started = time.perf_counter()
+    assert not revise.is_location(word), "'allocator.py:bad' is not a file reference"
+    elapsed = time.perf_counter() - started
+    assert elapsed < 3.0, f"is_location took {elapsed:.2f}s on {len(word)} chars"
+    assert revise.strip_line_refs("allocator.py:bad:41") == "allocator.py:bad"
+    assert revise.strip_line_refs("x:41:12-15") == "x" and revise.strip_line_refs(":41") == ":41"

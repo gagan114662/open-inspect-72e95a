@@ -293,13 +293,21 @@ _LOCATION_ROOTS = frozenset(
 )
 
 
+_LINE_REF_CHARS = frozenset("0123456789-:")
+
+
 def line_ref_end(word: str, start: int, end: int) -> int:
     """The end index of ``word[start:end]`` once trailing :41, :41-43, :41:12
-    suffixes are removed. Works on indexes into the original string, never
-    copying it, so ':1:1:1…x' costs linear time (Codex review of PR #56,
-    rounds 7 and 8)."""
+    suffixes are removed. Scans backwards over line-reference characters
+    only, so the work is bounded by the suffix, never by the whole word: a
+    colon early in the word ("allocator.py:bad…") no longer makes every
+    pass copy and split the entire tail (Codex review of PR #56, rounds 7,
+    8 and 11)."""
+    run = end
+    while run > start and word[run - 1] in _LINE_REF_CHARS:
+        run -= 1
     while True:
-        colon = word.rfind(":", start, end)
+        colon = word.rfind(":", run, end)
         if colon <= start:
             break
         tail = word[colon + 1 : end]
