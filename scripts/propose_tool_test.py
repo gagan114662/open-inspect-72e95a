@@ -362,3 +362,45 @@ def test_a_human_edit_to_a_generated_file_ends_the_generators_ownership(tmp_path
         "\n".join(ln for ln in readme.read_text().splitlines() if "generated-sha256" not in ln)
     )
     assert not propose.generator_owns(fresh / "shell-semantics")
+
+
+def test_a_human_note_in_the_readme_ends_the_generators_ownership(tmp_path):
+    """Codex review of PR #61, round 8: the README was excluded from the
+    content check, so promotion notes a human added to it were overwritten
+    by the next draft and deleted by cleanup."""
+    policy = policy_mod.builtin_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy))
+    archive = tmp_path / "archive.jsonl"
+    archive.write_text("\n".join(json.dumps(e) for e in _archive()) + "\n")
+    out = tmp_path / "proposals"
+    base = ["p", str(archive), "--policy", str(policy_path), "--out-dir", str(out)]
+    assert propose.main(base) == 0
+    folder = out / "shell-semantics"
+    assert propose.generator_owns(folder)
+    readme = folder / "README.md"
+    assert "README.md=" in readme.read_text(), "the README's own hash is recorded"
+    readme.write_text(readme.read_text() + "\n## Promotion notes\n\nReviewed on Tuesday; keep.\n")
+    assert not propose.generator_owns(folder)
+    edited = {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()}
+    assert propose.main(base) == 0, "the topic is skipped, not an error"
+    assert {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()} == edited
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+        )
+    )
+    assert propose.main([*base, "--manifest", str(manifest)]) == 0
+    assert {p.name: p.read_bytes() for p in folder.iterdir() if p.is_file()} == edited
+    # Re-drafting an untouched folder still works and keeps ownership.
+    fresh = out / "fresh"
+    assert (
+        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(fresh)])
+        == 0
+    )
+    assert (
+        propose.main(["p", str(archive), "--policy", str(policy_path), "--out-dir", str(fresh)])
+        == 0
+    )
+    assert propose.generator_owns(fresh / "shell-semantics")

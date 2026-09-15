@@ -202,11 +202,21 @@ def test_clean_text_reports_nothing_and_strict_mode_fails_on_hits(tmp_path, caps
 GENERATED_HASHES_PREFIX = "<!-- generated-sha256:"
 
 
+def without_hash_line(text: str) -> str:
+    """A README with its generated-sha256 record removed, in the one
+    canonical form both the writer and the verifier hash."""
+    return (
+        "\n".join(ln for ln in text.splitlines() if not ln.startswith(GENERATED_HASHES_PREFIX))
+        + "\n"
+    )
+
+
 def content_hashes(files: dict[str, str]) -> str:
-    """One line recording the sha256 of every generated file except the
-    README, so ownership can be verified against CONTENT, not names: a
-    human edit to the checker or its tests ends the generator's ownership
-    (Codex review of PR #61, round 7)."""
+    """One line recording the sha256 of every generated file, the README
+    included (hashed without this very line), so ownership is verified
+    against CONTENT, not names: a human edit to the checker, its tests or
+    the README's notes ends the generator's ownership (Codex review of PR
+    #61, rounds 7 and 8)."""
     parts = " ".join(
         f"{name}={hashlib.sha256(text.encode()).hexdigest()}"
         for name, text in sorted(files.items())
@@ -287,10 +297,14 @@ def generator_owns(folder: Path) -> bool:
             continue
         if child.name not in allowed or child.is_symlink() or not child.is_file():
             return False
-        if child.name != "README.md":
+        if child.name == "README.md":
+            body = without_hash_line(child.read_text())
+            present[child.name] = hashlib.sha256(body.encode()).hexdigest()
+        else:
             present[child.name] = hashlib.sha256(child.read_bytes()).hexdigest()
     # The README's recorded hashes must match what is on disk: an edited
-    # checker or test is a human's work now, never overwritten or deleted.
+    # checker, test or README (notes a human added) is a human's work now,
+    # never overwritten or deleted (Codex review of PR #61, round 8).
     recorded = next(
         (ln for ln in marker.read_text().splitlines() if ln.startswith(GENERATED_HASHES_PREFIX)),
         None,
@@ -345,7 +359,12 @@ def draft(
         "manifest-entry.json": json.dumps(manifest_entry(topic, words), indent=2) + "\n",
     }
     files = {folder / name: text for name, text in generated.items()}
-    files[folder / "README.md"] = readme(topic, rec, words, content_hashes(generated))
+    # Hashed exactly as the verifier sees it: rendered with a placeholder
+    # record line, which without_hash_line() strips.
+    readme_body = without_hash_line(readme(topic, rec, words, f"{GENERATED_HASHES_PREFIX} -->"))
+    files[folder / "README.md"] = readme(
+        topic, rec, words, content_hashes({**generated, "README.md": readme_body})
+    )
     assert {p.name for p in files} == generated_files(topic)
     # Every target is checked before anything is created, so a refused run
     # leaves no empty folder behind under a protected path.

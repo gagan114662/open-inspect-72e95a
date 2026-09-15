@@ -534,39 +534,72 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Draft proposals
-        run: |
-          set -euo pipefail
-          python3 scripts/propose-tool.py docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/proposals.json"
-          cat "$RUNNER_TEMP/proposals.json"
-
-      - name: Propose them as one pull request
+      - name: Draft proposals on the standing branch and propose them as one pull request
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
           branch="tool-proposals"
-          git add -A proposals/ 2>/dev/null || true
-          if git diff --cached --quiet; then
-            echo "No new or changed tool proposals."
-            # A standing proposal PR whose topics are no longer eligible is
-            # withdrawn, not left open (Codex review of PR #61, finding 2).
-            stale_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
-              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
-            if [ -n "$stale_pr" ]; then
-              gh pr close "$stale_pr" --delete-branch \
-                --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
-              echo "Closed the stale tool-proposal PR #$stale_pr."
-            fi
-            exit 0
-          fi
-          topics=$(python3 -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$branch"
-          git commit -q -m "chore(agent): propose tools for ${topics}"
-          git push --force origin "$branch"
+          # The standing branch is a shared workspace: a human may have
+          # committed implementation fixes to a draft on it during review.
+          # Rebuilding it from the default branch and force-pushing threw
+          # those away (Codex review of PR #61, round 8). Instead: start
+          # from the EXISTING branch, bring the default branch in, draft on
+          # top (propose-tool.py leaves every folder it no longer owns by
+          # content hash untouched), and push leased on the commit this run
+          # read, retrying on a lost lease exactly like the archive branch.
+          for attempt in 1 2 3; do
+            git fetch -q origin "$default_branch"
+            if git fetch -q origin "$branch" 2>/dev/null; then
+              lease=$(git rev-parse "origin/$branch")
+              git checkout -q -B "$branch" "origin/$branch"
+              if ! git merge -q --no-edit "origin/$default_branch"; then
+                git merge --abort
+                echo "::warning::$branch no longer merges with $default_branch; rebuilding it from $default_branch (the old branch stays at $lease in the reflog of this run)."
+                git checkout -q -B "$branch" "origin/$default_branch"
+              fi
+            else
+              lease=""
+              git checkout -q -B "$branch" "origin/$default_branch"
+            fi
+            python3 scripts/propose-tool.py docs/self-improvement-archive.jsonl > "$RUNNER_TEMP/proposals.json"
+            cat "$RUNNER_TEMP/proposals.json"
+            git add -A proposals/ 2>/dev/null || true
+            topics=$(python3 -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
+            if git diff --cached --quiet; then
+              if [ -z "$topics" ] && git diff --quiet "origin/$default_branch" -- proposals/; then
+                echo "No tool proposals apply."
+                # A standing proposal PR whose topics are no longer eligible is
+                # withdrawn, not left open (Codex review of PR #61, finding 2).
+                stale_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+                  --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+                if [ -n "$stale_pr" ]; then
+                  gh pr close "$stale_pr" --delete-branch \
+                    --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
+                  echo "Closed the stale tool-proposal PR #$stale_pr."
+                fi
+                exit 0
+              fi
+              if [ -n "$lease" ] && [ "$(git rev-parse HEAD)" = "$lease" ]; then
+                echo "Drafts unchanged; $branch already holds them."
+                exit 0
+              fi
+            else
+              git commit -q -m "chore(agent): propose tools for ${topics:-the current archive}"
+            fi
+            if git push --force-with-lease="refs/heads/${branch}:${lease}" origin "$branch"; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Could not push $branch after 3 attempts; someone keeps updating it."
+              exit 1
+            fi
+            echo "Lease lost on attempt ${attempt}; refetching and drafting again."
+            git checkout -q --detach
+          done
           existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
             --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           if [ -n "$existing_pr" ]; then
@@ -574,8 +607,8 @@ jobs:
             exit 0
           fi
           gh pr create \
-            --title "chore(agent): proposed tools for ${topics}" \
-            --body "Drafted by [\`scripts/propose-tool.py\`](../blob/main/scripts/propose-tool.py): each of these finding classes crossed the mechanism-fix threshold and no registered tool covers it. Each folder under \`proposals/tools/\` holds a pre-push check, its tests, a registry entry and a README with the promote steps. The agent cannot install a tool itself (\`scripts/\` and \`tools/\` are fixed infrastructure); merging this PR only accepts the drafts, and promoting one is a separate human commit." \
+            --title "chore(agent): proposed tools for ${topics:-the current archive}" \
+            --body "Drafted by [\`scripts/propose-tool.py\`](../blob/main/scripts/propose-tool.py): each of these finding classes crossed the mechanism-fix threshold and no registered tool covers it. Each folder under \`proposals/tools/\` holds a pre-push check, its tests, a registry entry and a README with the promote steps. The agent cannot install a tool itself (\`scripts/\` and \`tools/\` are fixed infrastructure); merging this PR only accepts the drafts, and promoting one is a separate human commit. Human commits on this branch survive later drafting runs." \
             --label "self-improvement-archive" \
             --base "$default_branch" \
             --head "$branch"
