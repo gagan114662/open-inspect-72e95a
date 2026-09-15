@@ -1,6 +1,6 @@
 {
-  "policy_version": 4,
-  "policy_hash": "619d9713f0b4",
+  "policy_version": 3,
+  "policy_hash": "11e8243663fa",
   "archive_digest": "cbd98f217845",
   "anchor": {
     "source": "trace-failures",
@@ -30,9 +30,7 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 0
       },
       "dev_weighted": {
         "credential-redaction": 1.0,
@@ -40,9 +38,7 @@
         "env-var-precedence": 0.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 0.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 0.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -50,14 +46,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -74,9 +65,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 0
       },
       "dev_weighted": {
         "credential-redaction": 2.0,
@@ -84,9 +73,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 0.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 0.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -94,14 +81,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "credential-redaction"
@@ -120,9 +102,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 0
       },
       "dev_weighted": {
         "credential-redaction": 3.0,
@@ -130,9 +110,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 0.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 0.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -140,14 +118,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "credential-redaction",
@@ -167,9 +140,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 0
       },
       "dev_weighted": {
         "credential-redaction": 4.0,
@@ -177,9 +148,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 0.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 0.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -187,14 +156,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "credential-redaction",
@@ -214,9 +178,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 0
       },
       "dev_weighted": {
         "credential-redaction": 5.0,
@@ -224,9 +186,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 0.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 0.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -234,14 +194,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "credential-redaction",
@@ -261,9 +216,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 0
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -271,9 +224,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 0.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 0.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -281,14 +232,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "credential-redaction",
@@ -308,9 +254,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 0
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -318,9 +262,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 0.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 0.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -328,14 +270,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "credential-redaction",
@@ -355,9 +292,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 1
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -365,9 +300,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 1.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 1.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -375,14 +308,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "credential-redaction",
@@ -402,9 +330,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 2,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 2
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -412,9 +338,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 2.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 2.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -422,14 +346,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "archive-branch",
@@ -450,9 +369,7 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 3,
-        "scripts-evidence": 0,
-        "automation-excluded": 0
+        "archive-branch": 3
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -460,9 +377,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 3.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 0.0
+        "archive-branch": 3.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -470,14 +385,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "archive-branch",
@@ -490,17 +400,15 @@
       "round": 11,
       "timestamp_ms": 1789407998467,
       "findings_total": 29,
-      "findings_classified": 26,
-      "coverage": 0.8966,
+      "findings_classified": 25,
+      "coverage": 0.8621,
       "dev": {
         "credential-redaction": 6,
         "shell-semantics": 2,
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 3,
-        "scripts-evidence": 0,
-        "automation-excluded": 1
+        "archive-branch": 3
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -508,9 +416,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 0.0,
-        "archive-branch": 3.0,
-        "scripts-evidence": 0.0,
-        "automation-excluded": 1.0
+        "archive-branch": 3.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -518,14 +424,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "archive-branch",
@@ -538,17 +439,15 @@
       "round": 12,
       "timestamp_ms": 1789408330652,
       "findings_total": 32,
-      "findings_classified": 29,
-      "coverage": 0.9062,
+      "findings_classified": 26,
+      "coverage": 0.8125,
       "dev": {
         "credential-redaction": 6,
         "shell-semantics": 2,
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 3,
-        "scripts-evidence": 1,
-        "automation-excluded": 1
+        "archive-branch": 3
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -556,9 +455,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 1.0,
-        "archive-branch": 3.0,
-        "scripts-evidence": 1.0,
-        "automation-excluded": 1.0
+        "archive-branch": 3.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -566,14 +463,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "archive-branch",
@@ -586,17 +478,15 @@
       "round": 13,
       "timestamp_ms": 1789409489917,
       "findings_total": 33,
-      "findings_classified": 30,
-      "coverage": 0.9091,
+      "findings_classified": 26,
+      "coverage": 0.7879,
       "dev": {
         "credential-redaction": 6,
         "shell-semantics": 2,
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 3,
-        "scripts-evidence": 1,
-        "automation-excluded": 2
+        "archive-branch": 3
       },
       "dev_weighted": {
         "credential-redaction": 6.0,
@@ -604,9 +494,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 1.0,
-        "archive-branch": 3.0,
-        "scripts-evidence": 1.0,
-        "automation-excluded": 2.0
+        "archive-branch": 3.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -614,14 +502,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "archive-branch",
@@ -634,17 +517,15 @@
       "round": 14,
       "timestamp_ms": 1789410109270,
       "findings_total": 37,
-      "findings_classified": 34,
-      "coverage": 0.9189,
+      "findings_classified": 28,
+      "coverage": 0.7568,
       "dev": {
         "credential-redaction": 7,
         "shell-semantics": 2,
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 4,
-        "scripts-evidence": 2,
-        "automation-excluded": 2
+        "archive-branch": 4
       },
       "dev_weighted": {
         "credential-redaction": 7.0,
@@ -652,9 +533,7 @@
         "env-var-precedence": 1.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 1.0,
-        "archive-branch": 4.0,
-        "scripts-evidence": 2.0,
-        "automation-excluded": 2.0
+        "archive-branch": 4.0
       },
       "anchor": {
         "credential-redaction": 0,
@@ -662,14 +541,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 0,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 0
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": null,
       "dev_only_topics": [
         "archive-branch",
@@ -682,17 +556,15 @@
       "round": 15,
       "timestamp_ms": 1789414228646,
       "findings_total": 42,
-      "findings_classified": 39,
-      "coverage": 0.9286,
+      "findings_classified": 31,
+      "coverage": 0.7381,
       "dev": {
         "credential-redaction": 8,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 5,
-        "scripts-evidence": 3,
-        "automation-excluded": 2
+        "archive-branch": 5
       },
       "dev_weighted": {
         "credential-redaction": 8.0,
@@ -700,9 +572,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 1.0,
-        "archive-branch": 5.0,
-        "scripts-evidence": 3.0,
-        "automation-excluded": 2.0
+        "archive-branch": 5.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -710,14 +580,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.7921,
       "dev_only_topics": [
         "env-var-precedence"
@@ -728,17 +593,15 @@
       "round": 16,
       "timestamp_ms": 1789415786081,
       "findings_total": 46,
-      "findings_classified": 43,
-      "coverage": 0.9348,
+      "findings_classified": 34,
+      "coverage": 0.7391,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 2,
-        "archive-branch": 6,
-        "scripts-evidence": 4,
-        "automation-excluded": 2
+        "archive-branch": 6
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -746,9 +609,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 2.0,
-        "archive-branch": 6.0,
-        "scripts-evidence": 4.0,
-        "automation-excluded": 2.0
+        "archive-branch": 6.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -756,14 +617,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.7259,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -775,17 +631,15 @@
       "round": 17,
       "timestamp_ms": 1789416327350,
       "findings_total": 49,
-      "findings_classified": 46,
-      "coverage": 0.9388,
+      "findings_classified": 35,
+      "coverage": 0.7143,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 2,
-        "archive-branch": 7,
-        "scripts-evidence": 5,
-        "automation-excluded": 2
+        "archive-branch": 7
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -793,9 +647,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 2.0,
-        "archive-branch": 7.0,
-        "scripts-evidence": 5.0,
-        "automation-excluded": 2.0
+        "archive-branch": 7.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -803,14 +655,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.7259,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -822,17 +669,15 @@
       "round": 18,
       "timestamp_ms": 1789416656649,
       "findings_total": 52,
-      "findings_classified": 49,
-      "coverage": 0.9423,
+      "findings_classified": 37,
+      "coverage": 0.7115,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 3,
-        "archive-branch": 8,
-        "scripts-evidence": 6,
-        "automation-excluded": 2
+        "archive-branch": 8
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -840,9 +685,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 3.0,
-        "archive-branch": 8.0,
-        "scripts-evidence": 6.0,
-        "automation-excluded": 2.0
+        "archive-branch": 8.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -850,14 +693,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -869,17 +707,15 @@
       "round": 19,
       "timestamp_ms": 1789417343138,
       "findings_total": 56,
-      "findings_classified": 53,
-      "coverage": 0.9464,
+      "findings_classified": 40,
+      "coverage": 0.7143,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 3,
-        "archive-branch": 9,
-        "scripts-evidence": 7,
-        "automation-excluded": 2
+        "archive-branch": 9
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -887,9 +723,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 3.0,
-        "archive-branch": 9.0,
-        "scripts-evidence": 7.0,
-        "automation-excluded": 2.0
+        "archive-branch": 9.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -897,14 +731,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.603,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -916,17 +745,15 @@
       "round": 20,
       "timestamp_ms": 1789417660645,
       "findings_total": 58,
-      "findings_classified": 55,
-      "coverage": 0.9483,
+      "findings_classified": 42,
+      "coverage": 0.7241,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 3,
-        "archive-branch": 10,
-        "scripts-evidence": 7,
-        "automation-excluded": 2
+        "archive-branch": 10
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -934,9 +761,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 3.0,
-        "archive-branch": 10.0,
-        "scripts-evidence": 7.0,
-        "automation-excluded": 2.0
+        "archive-branch": 10.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -944,14 +769,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -963,17 +783,15 @@
       "round": 21,
       "timestamp_ms": 1789418563420,
       "findings_total": 60,
-      "findings_classified": 57,
-      "coverage": 0.95,
+      "findings_classified": 43,
+      "coverage": 0.7167,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 3,
-        "archive-branch": 11,
-        "scripts-evidence": 8,
-        "automation-excluded": 2
+        "archive-branch": 11
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -981,9 +799,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 3.0,
-        "archive-branch": 11.0,
-        "scripts-evidence": 8.0,
-        "automation-excluded": 2.0
+        "archive-branch": 11.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -991,14 +807,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1010,17 +821,15 @@
       "round": 22,
       "timestamp_ms": 1789418908472,
       "findings_total": 63,
-      "findings_classified": 60,
-      "coverage": 0.9524,
+      "findings_classified": 45,
+      "coverage": 0.7143,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 4,
-        "archive-branch": 12,
-        "scripts-evidence": 9,
-        "automation-excluded": 2
+        "archive-branch": 12
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1028,9 +837,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 4.0,
-        "archive-branch": 12.0,
-        "scripts-evidence": 9.0,
-        "automation-excluded": 2.0
+        "archive-branch": 12.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1038,14 +845,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1057,17 +859,15 @@
       "round": 23,
       "timestamp_ms": 1789419296266,
       "findings_total": 66,
-      "findings_classified": 61,
-      "coverage": 0.9242,
+      "findings_classified": 46,
+      "coverage": 0.697,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 12,
-        "scripts-evidence": 9,
-        "automation-excluded": 2
+        "archive-branch": 12
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1075,9 +875,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 12.0,
-        "scripts-evidence": 9.0,
-        "automation-excluded": 2.0
+        "archive-branch": 12.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1085,14 +883,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1104,17 +897,15 @@
       "round": 24,
       "timestamp_ms": 1789419647418,
       "findings_total": 68,
-      "findings_classified": 63,
-      "coverage": 0.9265,
+      "findings_classified": 47,
+      "coverage": 0.6912,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 13,
-        "scripts-evidence": 10,
-        "automation-excluded": 2
+        "archive-branch": 13
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1122,9 +913,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 13.0,
-        "scripts-evidence": 10.0,
-        "automation-excluded": 2.0
+        "archive-branch": 13.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1132,14 +921,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1151,17 +935,15 @@
       "round": 25,
       "timestamp_ms": 1789420052495,
       "findings_total": 69,
-      "findings_classified": 64,
-      "coverage": 0.9275,
+      "findings_classified": 48,
+      "coverage": 0.6957,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 14,
-        "scripts-evidence": 10,
-        "automation-excluded": 2
+        "archive-branch": 14
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1169,9 +951,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 14.0,
-        "scripts-evidence": 10.0,
-        "automation-excluded": 2.0
+        "archive-branch": 14.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1179,14 +959,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1198,17 +973,15 @@
       "round": 26,
       "timestamp_ms": 1789420403988,
       "findings_total": 71,
-      "findings_classified": 66,
-      "coverage": 0.9296,
+      "findings_classified": 49,
+      "coverage": 0.6901,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 15,
-        "scripts-evidence": 11,
-        "automation-excluded": 2
+        "archive-branch": 15
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1216,9 +989,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 15.0,
-        "scripts-evidence": 11.0,
-        "automation-excluded": 2.0
+        "archive-branch": 15.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1226,14 +997,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1245,17 +1011,15 @@
       "round": 27,
       "timestamp_ms": 1789420680505,
       "findings_total": 73,
-      "findings_classified": 68,
-      "coverage": 0.9315,
+      "findings_classified": 49,
+      "coverage": 0.6712,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 15,
-        "scripts-evidence": 12,
-        "automation-excluded": 2
+        "archive-branch": 15
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1263,9 +1027,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 15.0,
-        "scripts-evidence": 12.0,
-        "automation-excluded": 2.0
+        "archive-branch": 15.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1273,14 +1035,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1292,17 +1049,15 @@
       "round": 28,
       "timestamp_ms": 1789421003997,
       "findings_total": 75,
-      "findings_classified": 70,
-      "coverage": 0.9333,
+      "findings_classified": 50,
+      "coverage": 0.6667,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 16,
-        "scripts-evidence": 13,
-        "automation-excluded": 2
+        "archive-branch": 16
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1310,9 +1065,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 16.0,
-        "scripts-evidence": 13.0,
-        "automation-excluded": 2.0
+        "archive-branch": 16.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1320,14 +1073,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1339,17 +1087,15 @@
       "round": 29,
       "timestamp_ms": 1789421395463,
       "findings_total": 78,
-      "findings_classified": 73,
-      "coverage": 0.9359,
+      "findings_classified": 51,
+      "coverage": 0.6538,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 14,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1357,9 +1103,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 14.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1367,14 +1111,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1386,17 +1125,15 @@
       "round": 30,
       "timestamp_ms": 1789421609644,
       "findings_total": 80,
-      "findings_classified": 75,
-      "coverage": 0.9375,
+      "findings_classified": 51,
+      "coverage": 0.6375,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 15,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1404,9 +1141,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 15.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1414,14 +1149,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1433,17 +1163,15 @@
       "round": 31,
       "timestamp_ms": 1789422022149,
       "findings_total": 82,
-      "findings_classified": 77,
-      "coverage": 0.939,
+      "findings_classified": 51,
+      "coverage": 0.622,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 16,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1451,9 +1179,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 0.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 16.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1461,14 +1187,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1480,17 +1201,15 @@
       "round": 32,
       "timestamp_ms": 1789422309357,
       "findings_total": 83,
-      "findings_classified": 78,
-      "coverage": 0.9398,
+      "findings_classified": 52,
+      "coverage": 0.6265,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 16,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1498,9 +1217,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 16.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1508,14 +1225,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1527,17 +1239,15 @@
       "round": 33,
       "timestamp_ms": 1789422617187,
       "findings_total": 85,
-      "findings_classified": 80,
-      "coverage": 0.9412,
+      "findings_classified": 52,
+      "coverage": 0.6118,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 17,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1545,9 +1255,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 17.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1555,14 +1263,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1574,17 +1277,15 @@
       "round": 34,
       "timestamp_ms": 1789423005347,
       "findings_total": 86,
-      "findings_classified": 81,
-      "coverage": 0.9419,
+      "findings_classified": 52,
+      "coverage": 0.6047,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 18,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1592,9 +1293,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 18.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1602,14 +1301,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1621,17 +1315,15 @@
       "round": 35,
       "timestamp_ms": 1789423397807,
       "findings_total": 88,
-      "findings_classified": 83,
-      "coverage": 0.9432,
+      "findings_classified": 52,
+      "coverage": 0.5909,
       "dev": {
         "credential-redaction": 9,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 19,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 9.0,
@@ -1639,9 +1331,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 19.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1649,14 +1339,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1668,17 +1353,15 @@
       "round": 36,
       "timestamp_ms": 1789423671124,
       "findings_total": 90,
-      "findings_classified": 85,
-      "coverage": 0.9444,
+      "findings_classified": 53,
+      "coverage": 0.5889,
       "dev": {
         "credential-redaction": 10,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 20,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 10.0,
@@ -1686,9 +1369,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 20.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1696,14 +1377,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1715,17 +1391,15 @@
       "round": 37,
       "timestamp_ms": 1789424184684,
       "findings_total": 92,
-      "findings_classified": 87,
-      "coverage": 0.9457,
+      "findings_classified": 53,
+      "coverage": 0.5761,
       "dev": {
         "credential-redaction": 10,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 17,
-        "scripts-evidence": 21,
-        "automation-excluded": 2
+        "archive-branch": 17
       },
       "dev_weighted": {
         "credential-redaction": 10.0,
@@ -1733,9 +1407,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 17.0,
-        "scripts-evidence": 21.0,
-        "automation-excluded": 2.0
+        "archive-branch": 17.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1743,14 +1415,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1762,17 +1429,15 @@
       "round": 38,
       "timestamp_ms": 1789424502929,
       "findings_total": 95,
-      "findings_classified": 90,
-      "coverage": 0.9474,
+      "findings_classified": 55,
+      "coverage": 0.5789,
       "dev": {
         "credential-redaction": 11,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 18,
-        "scripts-evidence": 22,
-        "automation-excluded": 2
+        "archive-branch": 18
       },
       "dev_weighted": {
         "credential-redaction": 11.0,
@@ -1780,9 +1445,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 18.0,
-        "scripts-evidence": 22.0,
-        "automation-excluded": 2.0
+        "archive-branch": 18.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1790,14 +1453,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1809,17 +1467,15 @@
       "round": 39,
       "timestamp_ms": 1789425000963,
       "findings_total": 96,
-      "findings_classified": 91,
-      "coverage": 0.9479,
+      "findings_classified": 56,
+      "coverage": 0.5833,
       "dev": {
         "credential-redaction": 11,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 19,
-        "scripts-evidence": 22,
-        "automation-excluded": 2
+        "archive-branch": 19
       },
       "dev_weighted": {
         "credential-redaction": 11.0,
@@ -1827,9 +1483,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 19.0,
-        "scripts-evidence": 22.0,
-        "automation-excluded": 2.0
+        "archive-branch": 19.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1837,14 +1491,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1856,17 +1505,15 @@
       "round": 40,
       "timestamp_ms": 1789425733848,
       "findings_total": 99,
-      "findings_classified": 94,
-      "coverage": 0.9495,
+      "findings_classified": 59,
+      "coverage": 0.596,
       "dev": {
         "credential-redaction": 12,
         "shell-semantics": 2,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 5,
-        "archive-branch": 20,
-        "scripts-evidence": 22,
-        "automation-excluded": 2
+        "archive-branch": 20
       },
       "dev_weighted": {
         "credential-redaction": 12.0,
@@ -1874,9 +1521,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 5.0,
-        "archive-branch": 20.0,
-        "scripts-evidence": 22.0,
-        "automation-excluded": 2.0
+        "archive-branch": 20.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1884,14 +1529,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.5941,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1903,17 +1543,15 @@
       "round": 41,
       "timestamp_ms": 1789425870799,
       "findings_total": 102,
-      "findings_classified": 97,
-      "coverage": 0.951,
+      "findings_classified": 61,
+      "coverage": 0.598,
       "dev": {
         "credential-redaction": 12,
         "shell-semantics": 3,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 20,
-        "scripts-evidence": 23,
-        "automation-excluded": 2
+        "archive-branch": 20
       },
       "dev_weighted": {
         "credential-redaction": 12.0,
@@ -1921,9 +1559,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 20.0,
-        "scripts-evidence": 23.0,
-        "automation-excluded": 2.0
+        "archive-branch": 20.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1931,14 +1567,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6831,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1950,17 +1581,15 @@
       "round": 42,
       "timestamp_ms": 1789426236693,
       "findings_total": 105,
-      "findings_classified": 100,
-      "coverage": 0.9524,
+      "findings_classified": 62,
+      "coverage": 0.5905,
       "dev": {
         "credential-redaction": 13,
         "shell-semantics": 3,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 20,
-        "scripts-evidence": 24,
-        "automation-excluded": 2
+        "archive-branch": 20
       },
       "dev_weighted": {
         "credential-redaction": 13.0,
@@ -1968,9 +1597,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 20.0,
-        "scripts-evidence": 24.0,
-        "automation-excluded": 2.0
+        "archive-branch": 20.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -1978,14 +1605,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6831,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -1997,17 +1619,15 @@
       "round": 43,
       "timestamp_ms": 1789427198860,
       "findings_total": 108,
-      "findings_classified": 103,
-      "coverage": 0.9537,
+      "findings_classified": 65,
+      "coverage": 0.6019,
       "dev": {
         "credential-redaction": 13,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 21,
-        "scripts-evidence": 24,
-        "automation-excluded": 2
+        "archive-branch": 21
       },
       "dev_weighted": {
         "credential-redaction": 13.0,
@@ -2015,9 +1635,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 21.0,
-        "scripts-evidence": 24.0,
-        "automation-excluded": 2.0
+        "archive-branch": 21.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2025,14 +1643,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6831,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -2044,17 +1657,15 @@
       "round": 44,
       "timestamp_ms": 1789427888606,
       "findings_total": 110,
-      "findings_classified": 105,
-      "coverage": 0.9545,
+      "findings_classified": 67,
+      "coverage": 0.6091,
       "dev": {
         "credential-redaction": 14,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 21,
-        "scripts-evidence": 24,
-        "automation-excluded": 2
+        "archive-branch": 21
       },
       "dev_weighted": {
         "credential-redaction": 14.0,
@@ -2062,9 +1673,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 21.0,
-        "scripts-evidence": 24.0,
-        "automation-excluded": 2.0
+        "archive-branch": 21.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2072,14 +1681,9 @@
         "env-var-precedence": 0,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6831,
       "dev_only_topics": [
         "auth-lifecycle",
@@ -2091,17 +1695,15 @@
       "round": 45,
       "timestamp_ms": 1789429030867,
       "findings_total": 112,
-      "findings_classified": 107,
-      "coverage": 0.9554,
+      "findings_classified": 67,
+      "coverage": 0.5982,
       "dev": {
         "credential-redaction": 14,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 21,
-        "scripts-evidence": 25,
-        "automation-excluded": 2
+        "archive-branch": 21
       },
       "dev_weighted": {
         "credential-redaction": 14.0,
@@ -2109,9 +1711,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 21.0,
-        "scripts-evidence": 25.0,
-        "automation-excluded": 2.0
+        "archive-branch": 21.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2119,14 +1719,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2137,17 +1732,15 @@
       "round": 46,
       "timestamp_ms": 1789429435144,
       "findings_total": 114,
-      "findings_classified": 109,
-      "coverage": 0.9561,
+      "findings_classified": 67,
+      "coverage": 0.5877,
       "dev": {
         "credential-redaction": 14,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 21,
-        "scripts-evidence": 26,
-        "automation-excluded": 2
+        "archive-branch": 21
       },
       "dev_weighted": {
         "credential-redaction": 14.0,
@@ -2155,9 +1748,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 21.0,
-        "scripts-evidence": 26.0,
-        "automation-excluded": 2.0
+        "archive-branch": 21.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2165,14 +1756,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2183,17 +1769,15 @@
       "round": 47,
       "timestamp_ms": 1789429846357,
       "findings_total": 116,
-      "findings_classified": 111,
-      "coverage": 0.9569,
+      "findings_classified": 67,
+      "coverage": 0.5776,
       "dev": {
         "credential-redaction": 14,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 21,
-        "scripts-evidence": 27,
-        "automation-excluded": 2
+        "archive-branch": 21
       },
       "dev_weighted": {
         "credential-redaction": 14.0,
@@ -2201,9 +1785,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 21.0,
-        "scripts-evidence": 27.0,
-        "automation-excluded": 2.0
+        "archive-branch": 21.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2211,14 +1793,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2229,17 +1806,15 @@
       "round": 48,
       "timestamp_ms": 1789430776976,
       "findings_total": 119,
-      "findings_classified": 114,
-      "coverage": 0.958,
+      "findings_classified": 68,
+      "coverage": 0.5714,
       "dev": {
         "credential-redaction": 14,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 22,
-        "scripts-evidence": 28,
-        "automation-excluded": 2
+        "archive-branch": 22
       },
       "dev_weighted": {
         "credential-redaction": 14.0,
@@ -2247,9 +1822,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 22.0,
-        "scripts-evidence": 28.0,
-        "automation-excluded": 2.0
+        "archive-branch": 22.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2257,14 +1830,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2275,17 +1843,15 @@
       "round": 49,
       "timestamp_ms": 1789431094870,
       "findings_total": 121,
-      "findings_classified": 116,
-      "coverage": 0.9587,
+      "findings_classified": 70,
+      "coverage": 0.5785,
       "dev": {
         "credential-redaction": 15,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 22,
-        "scripts-evidence": 28,
-        "automation-excluded": 2
+        "archive-branch": 22
       },
       "dev_weighted": {
         "credential-redaction": 15.0,
@@ -2293,9 +1859,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 22.0,
-        "scripts-evidence": 28.0,
-        "automation-excluded": 2.0
+        "archive-branch": 22.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2303,14 +1867,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2321,17 +1880,15 @@
       "round": 50,
       "timestamp_ms": 1789431359485,
       "findings_total": 124,
-      "findings_classified": 119,
-      "coverage": 0.9597,
+      "findings_classified": 73,
+      "coverage": 0.5887,
       "dev": {
         "credential-redaction": 16,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 6,
-        "archive-branch": 22,
-        "scripts-evidence": 28,
-        "automation-excluded": 2
+        "archive-branch": 22
       },
       "dev_weighted": {
         "credential-redaction": 16.0,
@@ -2339,9 +1896,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 6.0,
-        "archive-branch": 22.0,
-        "scripts-evidence": 28.0,
-        "automation-excluded": 2.0
+        "archive-branch": 22.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2349,14 +1904,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2367,17 +1917,15 @@
       "round": 51,
       "timestamp_ms": 1789431565165,
       "findings_total": 126,
-      "findings_classified": 121,
-      "coverage": 0.9603,
+      "findings_classified": 75,
+      "coverage": 0.5952,
       "dev": {
         "credential-redaction": 17,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 22,
-        "scripts-evidence": 28,
-        "automation-excluded": 2
+        "archive-branch": 22
       },
       "dev_weighted": {
         "credential-redaction": 17.0,
@@ -2385,9 +1933,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 22.0,
-        "scripts-evidence": 28.0,
-        "automation-excluded": 2.0
+        "archive-branch": 22.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2395,14 +1941,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2413,17 +1954,15 @@
       "round": 52,
       "timestamp_ms": 1789435570511,
       "findings_total": 128,
-      "findings_classified": 123,
-      "coverage": 0.9609,
+      "findings_classified": 77,
+      "coverage": 0.6016,
       "dev": {
         "credential-redaction": 18,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 22,
-        "scripts-evidence": 28,
-        "automation-excluded": 2
+        "archive-branch": 22
       },
       "dev_weighted": {
         "credential-redaction": 18.0,
@@ -2431,9 +1970,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 22.0,
-        "scripts-evidence": 28.0,
-        "automation-excluded": 2.0
+        "archive-branch": 22.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2441,14 +1978,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2459,17 +1991,15 @@
       "round": 53,
       "timestamp_ms": 1789435778610,
       "findings_total": 129,
-      "findings_classified": 124,
-      "coverage": 0.9612,
+      "findings_classified": 78,
+      "coverage": 0.6047,
       "dev": {
         "credential-redaction": 19,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 22,
-        "scripts-evidence": 28,
-        "automation-excluded": 2
+        "archive-branch": 22
       },
       "dev_weighted": {
         "credential-redaction": 19.0,
@@ -2477,9 +2007,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 22.0,
-        "scripts-evidence": 28.0,
-        "automation-excluded": 2.0
+        "archive-branch": 22.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2487,14 +2015,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2505,17 +2028,15 @@
       "round": 54,
       "timestamp_ms": 1789436040166,
       "findings_total": 131,
-      "findings_classified": 126,
-      "coverage": 0.9618,
+      "findings_classified": 80,
+      "coverage": 0.6107,
       "dev": {
         "credential-redaction": 20,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 28,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 20.0,
@@ -2523,9 +2044,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 28.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2533,14 +2052,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2551,17 +2065,15 @@
       "round": 55,
       "timestamp_ms": 1789436356425,
       "findings_total": 133,
-      "findings_classified": 128,
-      "coverage": 0.9624,
+      "findings_classified": 81,
+      "coverage": 0.609,
       "dev": {
         "credential-redaction": 21,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 29,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 21.0,
@@ -2569,9 +2081,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 29.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2579,14 +2089,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2597,17 +2102,15 @@
       "round": 56,
       "timestamp_ms": 1789436651548,
       "findings_total": 134,
-      "findings_classified": 129,
-      "coverage": 0.9627,
+      "findings_classified": 82,
+      "coverage": 0.6119,
       "dev": {
         "credential-redaction": 22,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 29,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 22.0,
@@ -2615,9 +2118,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 29.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2625,14 +2126,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2643,17 +2139,15 @@
       "round": 57,
       "timestamp_ms": 1789436926838,
       "findings_total": 135,
-      "findings_classified": 130,
-      "coverage": 0.963,
+      "findings_classified": 83,
+      "coverage": 0.6148,
       "dev": {
         "credential-redaction": 23,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 29,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 23.0,
@@ -2661,9 +2155,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 29.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2671,14 +2163,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.4201,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2689,17 +2176,15 @@
       "round": 58,
       "timestamp_ms": 1789437293689,
       "findings_total": 137,
-      "findings_classified": 132,
-      "coverage": 0.9635,
+      "findings_classified": 84,
+      "coverage": 0.6131,
       "dev": {
         "credential-redaction": 24,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 30,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 24.0,
@@ -2707,9 +2192,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 30.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2717,14 +2200,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2735,17 +2213,15 @@
       "round": 59,
       "timestamp_ms": 1789437732782,
       "findings_total": 139,
-      "findings_classified": 134,
-      "coverage": 0.964,
+      "findings_classified": 85,
+      "coverage": 0.6115,
       "dev": {
         "credential-redaction": 25,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 31,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 25.0,
@@ -2753,9 +2229,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 31.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2763,14 +2237,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2781,17 +2250,15 @@
       "round": 60,
       "timestamp_ms": 1789438197712,
       "findings_total": 141,
-      "findings_classified": 136,
-      "coverage": 0.9645,
+      "findings_classified": 86,
+      "coverage": 0.6099,
       "dev": {
         "credential-redaction": 26,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 32,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 26.0,
@@ -2799,9 +2266,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 32.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2809,14 +2274,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2827,17 +2287,15 @@
       "round": 61,
       "timestamp_ms": 1789438524648,
       "findings_total": 143,
-      "findings_classified": 138,
-      "coverage": 0.965,
+      "findings_classified": 87,
+      "coverage": 0.6084,
       "dev": {
         "credential-redaction": 27,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 33,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 27.0,
@@ -2845,9 +2303,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 33.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2855,14 +2311,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 0,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.414,
       "dev_only_topics": [
         "auth-lifecycle"
@@ -2873,17 +2324,15 @@
       "round": 62,
       "timestamp_ms": 1789480146009,
       "findings_total": 144,
-      "findings_classified": 139,
-      "coverage": 0.9653,
+      "findings_classified": 87,
+      "coverage": 0.6042,
       "dev": {
         "credential-redaction": 27,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 34,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 27.0,
@@ -2891,9 +2340,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 34.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2901,14 +2348,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6547,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -2917,17 +2359,15 @@
       "round": 63,
       "timestamp_ms": 1789480266337,
       "findings_total": 144,
-      "findings_classified": 139,
-      "coverage": 0.9653,
+      "findings_classified": 87,
+      "coverage": 0.6042,
       "dev": {
         "credential-redaction": 27,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 23,
-        "scripts-evidence": 34,
-        "automation-excluded": 2
+        "archive-branch": 23
       },
       "dev_weighted": {
         "credential-redaction": 27.0,
@@ -2935,9 +2375,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 23.0,
-        "scripts-evidence": 34.0,
-        "automation-excluded": 2.0
+        "archive-branch": 23.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2945,14 +2383,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6547,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -2961,17 +2394,15 @@
       "round": 64,
       "timestamp_ms": 1789485323562,
       "findings_total": 147,
-      "findings_classified": 142,
-      "coverage": 0.966,
+      "findings_classified": 88,
+      "coverage": 0.5986,
       "dev": {
         "credential-redaction": 27,
         "shell-semantics": 4,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 24,
-        "scripts-evidence": 35,
-        "automation-excluded": 2
+        "archive-branch": 24
       },
       "dev_weighted": {
         "credential-redaction": 27.0,
@@ -2979,9 +2410,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 24.0,
-        "scripts-evidence": 35.0,
-        "automation-excluded": 2.0
+        "archive-branch": 24.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -2989,14 +2418,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6547,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -3005,17 +2429,15 @@
       "round": 65,
       "timestamp_ms": 1789485860248,
       "findings_total": 150,
-      "findings_classified": 145,
-      "coverage": 0.9667,
+      "findings_classified": 91,
+      "coverage": 0.6067,
       "dev": {
         "credential-redaction": 27,
         "shell-semantics": 5,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 25,
-        "scripts-evidence": 35,
-        "automation-excluded": 2
+        "archive-branch": 25
       },
       "dev_weighted": {
         "credential-redaction": 27.0,
@@ -3023,9 +2445,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 25.0,
-        "scripts-evidence": 35.0,
-        "automation-excluded": 2.0
+        "archive-branch": 25.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -3033,14 +2453,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6547,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -3049,17 +2464,15 @@
       "round": 66,
       "timestamp_ms": 1789486190048,
       "findings_total": 152,
-      "findings_classified": 147,
-      "coverage": 0.9671,
+      "findings_classified": 93,
+      "coverage": 0.6118,
       "dev": {
         "credential-redaction": 27,
         "shell-semantics": 5,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 26,
-        "scripts-evidence": 35,
-        "automation-excluded": 2
+        "archive-branch": 26
       },
       "dev_weighted": {
         "credential-redaction": 27.0,
@@ -3067,9 +2480,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 26.0,
-        "scripts-evidence": 35.0,
-        "automation-excluded": 2.0
+        "archive-branch": 26.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -3077,14 +2488,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6547,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -3093,17 +2499,15 @@
       "round": 67,
       "timestamp_ms": 1789486273638,
       "findings_total": 154,
-      "findings_classified": 149,
-      "coverage": 0.9675,
+      "findings_classified": 95,
+      "coverage": 0.6169,
       "dev": {
         "credential-redaction": 27,
         "shell-semantics": 6,
         "env-var-precedence": 2,
         "fork-pr-permissions": 1,
         "auth-lifecycle": 7,
-        "archive-branch": 27,
-        "scripts-evidence": 35,
-        "automation-excluded": 2
+        "archive-branch": 27
       },
       "dev_weighted": {
         "credential-redaction": 27.0,
@@ -3111,9 +2515,7 @@
         "env-var-precedence": 2.0,
         "fork-pr-permissions": 1.0,
         "auth-lifecycle": 7.0,
-        "archive-branch": 27.0,
-        "scripts-evidence": 35.0,
-        "automation-excluded": 2.0
+        "archive-branch": 27.0
       },
       "anchor": {
         "credential-redaction": 1,
@@ -3121,14 +2523,9 @@
         "env-var-precedence": 1,
         "fork-pr-permissions": 0,
         "auth-lifecycle": 1,
-        "archive-branch": 1,
-        "scripts-evidence": null,
-        "automation-excluded": null
+        "archive-branch": 1
       },
-      "anchor_unknown_topics": [
-        "automation-excluded",
-        "scripts-evidence"
-      ],
+      "anchor_unknown_topics": [],
       "validity": 0.6642,
       "dev_only_topics": [],
       "anchor_only_topics": []
@@ -3138,17 +2535,15 @@
     "round": 67,
     "timestamp_ms": null,
     "findings_total": 154,
-    "findings_classified": 149,
-    "coverage": 0.9675,
+    "findings_classified": 95,
+    "coverage": 0.6169,
     "dev": {
       "credential-redaction": 27,
       "shell-semantics": 6,
       "env-var-precedence": 2,
       "fork-pr-permissions": 1,
       "auth-lifecycle": 7,
-      "archive-branch": 27,
-      "scripts-evidence": 35,
-      "automation-excluded": 2
+      "archive-branch": 27
     },
     "dev_weighted": {
       "credential-redaction": 27.0,
@@ -3156,9 +2551,7 @@
       "env-var-precedence": 2.0,
       "fork-pr-permissions": 1.0,
       "auth-lifecycle": 7.0,
-      "archive-branch": 27.0,
-      "scripts-evidence": 35.0,
-      "automation-excluded": 2.0
+      "archive-branch": 27.0
     },
     "anchor": {
       "credential-redaction": 1,
@@ -3166,14 +2559,9 @@
       "env-var-precedence": 1,
       "fork-pr-permissions": 0,
       "auth-lifecycle": 1,
-      "archive-branch": 1,
-      "scripts-evidence": null,
-      "automation-excluded": null
+      "archive-branch": 1
     },
-    "anchor_unknown_topics": [
-      "automation-excluded",
-      "scripts-evidence"
-    ],
+    "anchor_unknown_topics": [],
     "validity": 0.6642,
     "unclassified_findings": [
       {
@@ -3189,12 +2577,228 @@
         "finding": "[P2] Any PR commenter could forge a comment starting with '### Codex independent review' and have it trusted as the genuine review, since the original draft filtered only on the opening text."
       },
       {
+        "round": 11,
+        "finding": "**[P2]** `pull-request-analytics-store.ts`: The new query counts matching titles from every session source, although the response describes GitHub-bot reviews. A user or automation session titled `GitHub: Review PR #18` incorrectly increases both review totals. Add `spawn_source = 'github-bot'` and test that matching titles from other sources are excluded."
+      },
+      {
+        "round": 12,
+        "finding": "**[P2]** `scripts/analyze-traces.py:114`: Searches cover the entire repository, but `--limit` only restricts hydration. Previously cached traces outside `trace_ids` can contribute matches, so `matching_traces` can exceed `traces_scanned` and results depend on cache history. Restrict matches to the selected trace IDs."
+      },
+      {
+        "round": 12,
+        "finding": "**[P2]** `scripts/analyze-traces.py:101`: Each topic search requests only 100 results, then reports `len(matches)` as its count. Topics matching more than 100 traces are silently undercounted, potentially producing incorrect rankings. Paginate results or explicitly report truncation."
+      },
+      {
+        "round": 13,
+        "finding": "**[P2]** In `pull-request-analytics-store.ts`, the review query checks titles but never restricts `spawn_source`. A user or automation session titled `GitHub: Review PR #18` therefore increments the GitHub review metrics without being a bot review. Add `spawn_source = 'github-bot'` and test that matching titles from other sources are excluded."
+      },
+      {
+        "round": 14,
+        "finding": "**[P2]** `scripts/analyze-traces.py`, `analyze()` \u2014 `--limit` controls which traces are listed and hydrated, but topic searches cover the entire directory. Previously cached traces outside that selection can contribute matches, so `matching_traces` can exceed `traces_scanned` and results depend on cache history. Scope searches to the selected trace IDs and handle an empty selection explicitly."
+      },
+      {
+        "round": 14,
+        "finding": "**[P2]** `scripts/analyze-traces.py`, `search_topic()` \u2014 Every topic search is capped at 100 results, and `analyze_by_topic()` reports the returned list length as the total. A topic matching more than 100 traces is silently undercounted, including with the default 200-trace scan. Paginate the matches or explicitly report truncated counts."
+      },
+      {
+        "round": 15,
+        "finding": "**[P2]** `scripts/measure-policy-validity.py:measure_epoch` calculates validity from unweighted recurrence, although the detector uses weighted recurrence and validity repair changes those weights. Consequently, discounting a topic cannot improve measured validity: identical evidence keeps triggering discounts until the minimum weight is reached. Measure the weighted signal used by the detector and evaluate weight revisions against it."
+      },
+      {
+        "round": 15,
+        "finding": "**[P2]** `scripts/measure-policy-validity.py:anchor_counts_at` treats topics missing from an evidence snapshot as having zero matching traces. After a revision adds topics, the workflow reuses the old snapshot, so unsearched topics can be classified as unsupported and have their weights discounted. Bind evidence to the searched taxonomy and treat missing topics as unknown until fresh evidence is collected."
+      },
+      {
+        "round": 16,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`: Weight revisions can worsen validity and cannot trigger rollback. For recurrence `[2,1,2,1]`, anchor counts `[1,3,2,0]`, and weights `[0.5,1,1,1]`, restoring the first weight lowers validity from `0.2582` to `0`. The revision is accepted without checking this, and rollback only compares coverage, which weights cannot change. Evaluate candidate validity and include validity regressions in rollback decisions."
+      },
+      {
+        "round": 17,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`: **Undefined candidate validity passes the acceptance rule.** Reweighting is rejected only when both scores are non-null. For recurrence `[2,1,1,1,1]` and anchor counts `[0,1,2,3,4]`, discounting the first topic changes validity from approximately `-0.7071` to `None`, because weighted recurrence becomes constant. The revision is accepted, subsequent validity triggers stop firing, and the rollback comparison also skips it. Reject candidates that turn a defined validity score into an undefined one."
+      },
+      {
+        "round": 17,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`: **The early return prevents corroborated topics from regaining weight.** Restoration runs only when coverage or validity is below its threshold. A topic recurring in four rounds with weight `0.5` can have perfect rank agreement with newly corroborating evidence, yet remain below the mechanism threshold (`2 < 3`) indefinitely. Evaluate supported weight restorations before returning for healthy scores, retaining the non-regression check."
+      },
+      {
+        "round": 18,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`, does not check the complete candidate for validity regression. `weight_repair()` evaluates changes against a baseline that already includes mined topics. If an evidence snapshot contains a topic removed by a rollback, mining that topic again can lower validity and still produce an accepted revision\u2014even with no weight changes. Compare the final candidate\u2019s validity against the original policy before returning `\"revise\"`; otherwise subsequent runs can repeatedly reintroduce a rejected topic."
+      },
+      {
+        "round": 19,
+        "finding": "**[P2]** `scripts/measure-policy-validity.py`, `collect_trace_evidence`: each search stops at 100 results, but those truncated results become absolute field counts without pagination or a truncation indicator. Frequent topics can collapse into identical counts, distorting Spearman agreement or making validity undefined and disabling its revision trigger. Collect all results or explicitly handle incomplete counts."
+      },
+      {
+        "round": 21,
+        "finding": "**[P2]** `scripts/render-rsi-dashboard.py`: `echo_note` inserts `anchor_note` without HTML escaping, including evidence-file `source` and `agents` strings. When verifier evidence is present\u2014as configured in this workflow\u2014HTML in those fields becomes executable content in the generated dashboard. Escape `anchor_note` here, as the other sections already do."
+      },
+      {
+        "round": 22,
+        "finding": "**[P2]** A failed history write leaves the policy updated without its rollback record. In `scripts/revise-improvement-policy.py:main()`, `save_policy()` runs before `append_history()` validates its destination. Supplying a disallowed `--history` path therefore overwrites the default policy and then raises `PermissionError`. Subsequent rollback checks skip that version because its adoption entry is missing. Validate both destinations before writing and make the paired update recoverable."
+      },
+      {
         "round": 23,
         "finding": "**[P2]** Finding text can break measurement JSON extraction. `measure-policy-validity.py` prints unclassified findings without escaping embedded newlines, while the workflow treats the first line beginning with `---` as the JSON boundary. A finding containing `\\n---\\n` within its first 100 characters causes invalid `measurement.json` and aborts the workflow. Write machine-readable JSON separately from human-readable output."
       },
       {
         "round": 23,
         "finding": "**[P2]** The dashboard charts the baseline policy\u2019s validity. In `render-rsi-dashboard.py::trigger_chart()`, validity markers use `epochs_b` rather than `epochs_a`. After a weight revision changes validity, the chart still displays v1\u2019s scores alongside the current policy\u2019s coverage, misrepresenting the revision\u2019s effect. Plot current-policy validity and label any baseline comparison explicitly."
+      },
+      {
+        "round": 24,
+        "finding": "**[P2]** `scripts/measure-policy-validity.py`, `collect_trace_evidence()` / `anchor_counts_at()`: Evidence is associated with topic names without recording the keywords searched. If a topic retains its name but changes keywords\u2014including when re-mined after rollback\u2014old counts are silently reused for the new definition. Those mismatched counts can drive discounts, revision rejection, or rollback. Store each topic\u2019s search definition and treat mismatches as unknown until refreshed."
+      },
+      {
+        "round": 26,
+        "finding": "**[P2]** `scripts/render-rsi-dashboard.py:loop_diagram` inserts `stats[\"head\"]` into HTML without escaping it. Although the page header escapes `--head`, the SVG\u2019s `foreignObject` renders the same value as active markup. A supplied label containing HTML can execute JavaScript when the dashboard opens. Escape every box\u2019s subtitle at the interpolation point."
+      },
+      {
+        "round": 27,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `mine_topics()`: The fallback topic name is not checked for collisions. If `cache-lock` and `cache-lock-1` already exist, mining `cache-lock` renames it to `cache-lock-1`, and `decide()` overwrites that existing topic. This can remove previous classifications; acceptance does not check for reduced coverage. Generate names until they are unique and reject candidates that reduce coverage."
+      },
+      {
+        "round": 27,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`: Later evidence cannot trigger rollback of a harmful ancestor. Two rounds without an anchor allow v2 to be followed by v3. If refreshed evidence subsequently shows v2 degraded validity relative to v1, v3 is compared only with v2, so the inherited regression can remain indefinitely. Reevaluate unresolved ancestors when evidence changes, or require their validity assessment before allowing another revision."
+      },
+      {
+        "round": 28,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `decide()`: validity-triggered rollbacks report `coverage_after` as the current policy\u2019s coverage without measuring the restored policy. Rolling back a revision that added topics can remove classifications while history and the dashboard report unchanged coverage. Measure the rollback target and record its actual coverage."
+      },
+      {
+        "round": 29,
+        "finding": "**[P2]** `scripts/measure-policy-validity.py:main` allows `--save-evidence` and `--out-json` to resolve to the same file. The measurement then overwrites the freshly collected evidence, and the command reports success. Reusing that file as evidence silently produces an empty anchor. Reject overlapping output paths before collecting or writing anything."
+      },
+      {
+        "round": 29,
+        "finding": "**[P2]** `scripts/improvement_policy.py:validate_policy` accepts empty keyword lists because `all([])` is true. Such a topic classifies no findings, while `topic_pattern([])` produces an empty search expression that can match every trace. Require a nonempty list to prevent contradictory review and field measurements."
+      },
+      {
+        "round": 30,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py` \u2014 Rollbacks stop further ancestry checks. `decide()` checks regressions only for `origin == \"revision\"`, and `unjudged_ancestors()` stops at a rollback. If v3 is rolled back to v2\u2019s configuration as v4, later evidence showing v2 was worse than v1 cannot trigger that rollback\u2014even through subsequent descendants. Record the restored version and follow its ancestry when evaluating regressions."
+      },
+      {
+        "round": 30,
+        "finding": "**[P2]** `scripts/render-rsi-dashboard.py`, `rows_findings` \u2014 The \u201cField traces\u201d column uses raw snapshot lengths, bypassing keyword-definition and truncation checks. After keywords change, it can display evidence collected for a different definition as corroboration; unsearched topics display zero instead of unknown. Use the validated counts from `cur[\"anchor\"]` and render unknown values as `n/a`."
+      },
+      {
+        "round": 31,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `candidate_anchor()`: `merged.update(anchor)` overwrites retained evidence counts with `None` when the current policy\u2019s keyword definition differs from the snapshot. When evaluating an ancestor whose definition matches that snapshot, the count remains lost. This can make ancestor validity undefined and suppress a needed rollback. Resolve counts against each candidate\u2019s definitions before applying current-policy unknowns."
+      },
+      {
+        "round": 31,
+        "finding": "**[P2]** `scripts/measure-policy-validity.py`, `measure()` / `anchor_counts_at()`: An initial round without a parseable timestamp retains `timestamp_ms=None`, which `anchor_counts_at()` interprets as \u201cinclude every trace.\u201d Its historical epoch therefore includes future evidence, contradicting the replay\u2019s temporal boundary. Treat an unknown epoch timestamp as unavailable historical evidence; reserve the unrestricted cutoff for the current measurement."
+      },
+      {
+        "round": 33,
+        "finding": "**[P2]** `scripts/revise-improvement-policy.py`, `main()`: `--out-policy docs/improvement-policy-history.jsonl` passes the write guard. When a revision occurs, the script appends its history entry, then overwrites the entire history with the policy JSON. This destroys rollback snapshots and breaks subsequent history loading. Enforce separate, role-specific destinations before writing."
+      },
+      {
+        "round": 33,
+        "finding": "**[P2]** `scripts/render-rsi-dashboard.py`, `trigger_chart()`: History entries\u2019 `version` values are interpolated directly into SVG markup without validation or escaping. A supplied `--history` file containing a version such as `</text><script>alert(1)</script><text>` produces executable markup in the dashboard. Escape these values at interpolation and validate history metadata."
+      },
+      {
+        "round": 34,
+        "finding": "**[P2]** Evidence refreshes erase the evidence needed to prevent reintroducing a rolled-back topic. In `scripts/measure-policy-validity.py`, `main()` collects only the current policy\u2019s topics and overwrites the snapshot. After a validity rollback removes a mined topic, refreshing evidence drops that topic\u2019s adverse counts. `candidate_anchor()` then treats it as unknown, while the changed `collected_at` bypasses `rejected_configuration()`. The same rejected configuration can consequently be proposed again without any new supporting traces. Preserve and refresh rejected topic definitions, or require fresh evidence for those definitions before allowing their reintroduction."
+      },
+      {
+        "round": 35,
+        "finding": "**[P1]** **PR-controlled tests can tamper with review artifacts.** In `.github/workflows/codex-review.yml`, switching to `workspace-write` makes `/tmp` writable by default ([Codex source](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/protocol.rs)). The workflow stores `/tmp/codex-review-raw.txt` and `/tmp/codex-review-err.txt` there. A malicious test or `conftest.py` can modify those files directly, compromising the evidence subsequently processed as reviewer output without requiring prompt injection. Keep review artifacts and trusted executable helpers outside sandbox-writable directories, and give tests a separate scratch directory."
+      },
+      {
+        "round": 35,
+        "finding": "**[P2]** **Missing trace timestamps become evidence in every historical epoch.** In `scripts/measure-policy-validity.py`, `anchor_counts_at()` uses `(t.get(\"timestamp\") or 0) <= until_ms`. The collector permits missing timestamps, so an undated trace is treated as existing since the Unix epoch. This can make historical validity appear supported by evidence whose availability at that time is unknown. For historical measurements, mark affected counts unknown instead of assigning missing timestamps zero."
+      },
+      {
+        "round": 36,
+        "finding": "**[P2]** **Measurement outputs can overwrite a custom policy history.** In `scripts/measure-policy-validity.py`, `main()` excludes `args.history` from the `inputs` passed to `assert_safe_output()`. With `--repo-dir`, specifying the same noncanonical path for `--history` and either `--out-json` or `--save-evidence` reads the history, then overwrites it with another document. This destroys snapshots needed for rollback. Include the history path in both output checks."
+      },
+      {
+        "round": 37,
+        "finding": "**[P2]** **History values can inject HTML into the dashboard.** In `scripts/render-rsi-dashboard.py`, `rows_versions` inserts `fmt(coverage_before)` and `fmt(coverage_after)` without escaping. `load_history()` performs no type validation, and `fmt()` returns strings unchanged. A history entry with one coverage value set to `null` and the other containing HTML bypasses the regression calculation and renders that HTML directly. Escape both formatted values and validate numeric history fields."
+      },
+      {
+        "round": 37,
+        "finding": "**[P2]** **The write guard permits swapping policy and history destinations.** In `scripts/revise-improvement-policy.py`, both destinations are checked against the same two-file allowlist; the additional check only requires different paths. With a valid, single-line policy JSON, passing that file as `--history` and the history file as `--out-policy` passes these checks when a revision is triggered. The script then appends a history record to the policy and overwrites the history with a policy object, corrupting both. Enforce each destination\u2019s specific role before writing."
+      },
+      {
+        "round": 38,
+        "finding": "**[P2]** History coverage values can inject HTML into the dashboard. [render-rsi-dashboard.py:347](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/render-rsi-dashboard.py:347) interpolates `fmt()` results without escaping, and history loading does not validate their types. Setting `coverage_before` to an HTML event-handler payload and `coverage_after` to `null` produces raw executable markup. Escape formatted values and validate numeric history fields."
+      },
+      {
+        "round": 41,
+        "finding": "**[P2]** [Field-only triggers never start topic mining](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:694). The trigger string starts with a number (`\"5 field failures...\"`), but both mining conditions require `startswith(\"field\")`. With healthy coverage and five recurring field failures, `decide()` returns no change even though `mine_topics()` produces a valid candidate. Use a boolean or structured trigger type."
+      },
+      {
+        "round": 42,
+        "finding": "**[P2]** [measure-policy-validity.py:205](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/measure-policy-validity.py:205) retains the old evidence collector in the documented refresh path. `--repo-dir \u2026 --save-evidence \u2026` searches all matching tool results, including successful file reads, without checking execution failures. Following the workflow\u2019s refresh instructions therefore replaces the failure-based snapshot with potentially echoed review text, affecting validity and weight decisions. Route refreshes through the failure miner and update the documented commands."
+      },
+      {
+        "round": 42,
+        "finding": "**[P2]** [mine-trace-failures.py:186](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:186) mistakes displayed exit-code text for an actual failed execution. A successful Bash result containing an example transcript with `Exit code 1` and `HTTP 401 Unauthorized` is classified as an authentication failure. Reading logs or fixtures can consequently fabricate field evidence and trigger policy changes. Use execution-status metadata or a reliably distinguished tool wrapper instead of searching arbitrary output."
+      },
+      {
+        "round": 45,
+        "finding": "**[P2]** [Field mining includes synthetic error labels](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:576). Prepending `kind` lets unrelated failures appear recurrent. Five unrelated `tool-error` failures produced an accepted topic whose only keyword was `tool-error`; it classified **zero actual failure excerpts**. Mine the excerpt alone and retain the kind as metadata."
+      },
+      {
+        "round": 45,
+        "finding": "**[P2]** [Historical topics hide current field blind spots](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:361). The CLI adds historical definitions before generating `blind_spots`. After a rollback removes a topic, failures matching that retired topic remain excluded from mining, even with fresh evidence. A reproduction reduced five current blind spots to zero merely by including history. Use current definitions for blind-spot classification and historical definitions for evidence collection."
+      },
+      {
+        "round": 46,
+        "finding": "**[P2]** **The write guards allow policy and history destinations to be swapped.** In [revise-improvement-policy.py:921](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:921), both paths use the same allowlist; checking that they differ does not enforce their roles. With a valid single-line policy, swapped arguments exit successfully while corrupting the policy with appended JSON and replacing the history with a policy document. Validate each destination against its specific role before writing."
+      },
+      {
+        "round": 46,
+        "finding": "**[P2]** **The dashboard\u2019s reproduction command fails.** [render-rsi-dashboard.py:509](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/render-rsi-dashboard.py:509) invokes `measure-policy-validity.py` with unsupported `--repo-dir` and `--save-evidence` arguments. It exits with code 2, preventing the documented refresh. Use `mine-trace-failures.py` to collect evidence, then measure with `--trace-evidence` and `--out-json`."
+      },
+      {
+        "round": 47,
+        "finding": "**[P2]** [measure-policy-validity.py:350](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/measure-policy-validity.py:350) confuses zero topic matches with zero observed sessions. `evidence_trace_ids()` only counts sessions matching a topic, so a complete scan containing exclusively unclassified failures loses its entire anchor, including confirmed zero counts and keyword definitions. Preserve scanned-session metadata and distinguish an empty scan from an observed field with no matching failures."
+      },
+      {
+        "round": 47,
+        "finding": "**[P2]** [revise-improvement-policy.py:693](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:693) skips the evaluation waiting period after a rollback to v1. `judged_from()` returns v1\u2019s parent (`None`), bypassing this guard. A reproduction with one clean round under the rollback immediately proposed the previously rejected configuration, despite `MIN_ROUNDS_TO_JUDGE = 2`. Apply the waiting period independently of whether a comparison ancestor exists."
+      },
+      {
+        "round": 48,
+        "finding": "**[P2]** **Evidence-window filtering admits reviews newer than the snapshot.** In [revise-improvement-policy.py:351](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:351), filtering uses round numbers even though different SHAs can share one number. If those reviews straddle the snapshot timestamp, both are admitted. Reproduction changed validity from the measurement\u2019s `1.0` to the decision helper\u2019s `0.6124`. This can distort candidate acceptance and rollback decisions. Filter using `round_key()` consistently."
+      },
+      {
+        "round": 48,
+        "finding": "**[P2]** **The measured recurrence differs from the detector\u2019s actual signal.** The new measurement counts distinct SHAs, while [detect-recurring-pattern.py:100](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/detect-recurring-pattern.py:100) still deduplicates by round number. Three reviews with different SHAs but the same round number produce measurement recurrence `3`, while the detector reports `1` and recommends a target fix. Policy revisions therefore optimize a different signal from the one that opens mechanism-fix issues. Share the same round-identity logic between both tools."
+      },
+      {
+        "round": 55,
+        "finding": "**[P2]** **Truncated failure output produces false zero evidence.** [mine-trace-failures.py:285](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:285) discards text beyond `MAX_TEXT_CHARS`, but the resulting evidence does not mark that search as truncated. A synthetic failure containing a topic keyword beyond the limit produced a confirmed count of zero. This can incorrectly discount topics that actually occurred. Match against the complete output, or mark affected counts unknown."
+      },
+      {
+        "round": 58,
+        "finding": "**[P2]** [Namespace refreshes lack repository scoping](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:194). The hourly workflow lists the entire namespace and filters only by agent. If that namespace contains multiple projects, unrelated failures influence this repository\u2019s validity scores and policy revisions; their excerpts can also enter its proposals. Restrict collection to repository-associated trace IDs or enforce a repository-specific namespace."
+      },
+      {
+        "round": 59,
+        "finding": "**[P2]** **Repository filtering accepts unrelated projects and rejects valid SSH remotes.** In [mine-trace-failures.py:226](scripts/mine-trace-failures.py#L226), matching `github.com/acme/service` accepts `acme/service-other` through substring matching and `elsewhere/service` through the directory fallback. Conversely, `git@github.com:acme/service.git` is rejected when its checkout directory has another name. These cases contaminate or omit evidence used to revise policy. Compare normalized repository identities exactly; use directory matching only for explicitly configured folder matches."
+      },
+      {
+        "round": 60,
+        "finding": "**[P2]** **Later matches erase uncertainty from earlier truncated output.** [mine-trace-failures.py:414](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:414) determines unknown topics using matches across all occurrences. If an occurrence at time 1 was truncated and a repeat first visibly matches at time 100, the topic becomes fully known. I reproduced a historical count of `0` at time 50, although the discarded output could contain an earlier match. Preserve truncation uncertainty per occurrence when calculating historical counts."
+      },
+      {
+        "round": 61,
+        "finding": "**[P1]** The log preview bypasses excerpt suppression. [revise-improvement-policy.yml:115](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/.github/workflows/revise-improvement-policy.yml:115) prints the first 30 stdout lines, but the miner appends full JSON containing commands and excerpts even without `--show-excerpts`. For a short report, those fields reach public workflow logs. A mocked CLI reproduction placed the synthetic passphrase on line 24. Print only the human report before the `---` boundary, or suppress stdout JSON when `--out-json` is supplied."
+      },
+      {
+        "round": 62,
+        "finding": "**[P2]** The rollback rule can undo this taxonomy correction. [docs/improvement-policy.json:4](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/docs/improvement-policy.json:4) records v3 as an ordinary revision, so lower coverage than v2 triggers a rollback proposal after two rounds. With two synthetic v3 findings containing \u201cpre-existing\u201d and \u201cRe-evaluate,\u201d `decide()` proposed restoring v2, including `-e` and `exit code`. Account for intentional removal of false matches in rollback evaluation so those same false positives cannot justify restoring the rejected keywords."
+      },
+      {
+        "round": 64,
+        "finding": "**[P2]** [Topic names can escape the output directory](</home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill-skills.py:153>). Policy validation accepts names such as `../outside`; `assert_safe_output()` does not enforce containment within `--out-dir`. A temporary reproduction overwrote an existing file outside that directory. Validate topic names as filename components and enforce resolved-path containment before writing."
+      },
+      {
+        "round": 64,
+        "finding": "**[P2]** [The registry test breaks after a legitimate policy revision](</home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill_skills_test.py:113>). The new configuration hardcodes policy version `2` and its topic list, while these assertions require both to match the evolving policy. The revision workflow updates the policy and skills but never updates that configuration. Subsequent policy revisions therefore make this test fail. Reference the canonical policy or regenerate the configuration alongside it."
       }
     ],
     "dev_only_topics": [],
