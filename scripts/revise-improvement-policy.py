@@ -259,21 +259,213 @@ def existing_keyword_tokens(keywords: dict[str, list[str]]) -> set[str]:
     return {k.lower() for words in keywords.values() for k in words}
 
 
+# Words a field failure may contribute as policy keywords even when no
+# archived (public) review finding contains them: the vocabulary of failure
+# itself. Anything else a trace says — a passphrase, a hostname, a project
+# name — is never published as a keyword (Codex review of PR #10, round 49).
+SAFE_FIELD_VOCABULARY: frozenset[str] = frozenset(
+    [
+        "action",
+        "address",
+        "approval",
+        "argument",
+        "arguments",
+        "assertion",
+        "assertionerror",
+        "attributeerror",
+        "auth",
+        "authentication",
+        "bind",
+        "blocked",
+        "branch",
+        "build",
+        "busy",
+        "cache",
+        "certificate",
+        "checkout",
+        "classifier",
+        "clone",
+        "cloudflare",
+        "commit",
+        "compile",
+        "compiler",
+        "conflict",
+        "connect",
+        "connection",
+        "constraint",
+        "container",
+        "corrupt",
+        "crash",
+        "crashed",
+        "credential",
+        "credentials",
+        "database",
+        "deadlock",
+        "decode",
+        "denied",
+        "dependencies",
+        "dependency",
+        "detached",
+        "disk",
+        "dns",
+        "docker",
+        "encoding",
+        "error",
+        "errors",
+        "escape",
+        "exception",
+        "expired",
+        "failed",
+        "failing",
+        "failure",
+        "fetch",
+        "flag",
+        "forbidden",
+        "found",
+        "github",
+        "handshake",
+        "image",
+        "import",
+        "importerror",
+        "indexerror",
+        "install",
+        "interactive",
+        "inuse",
+        "invalid",
+        "json",
+        "keyerror",
+        "killed",
+        "limit",
+        "limited",
+        "lint",
+        "lock",
+        "locked",
+        "malformed",
+        "memory",
+        "merge",
+        "migration",
+        "mismatch",
+        "missing",
+        "modal",
+        "module",
+        "mount",
+        "network",
+        "notfound",
+        "oom",
+        "option",
+        "origin",
+        "overflow",
+        "package",
+        "panic",
+        "parse",
+        "parser",
+        "password",
+        "permission",
+        "permissions",
+        "policy",
+        "port",
+        "prompt",
+        "proxy",
+        "pull",
+        "push",
+        "pytest",
+        "query",
+        "quota",
+        "quote",
+        "quoting",
+        "rate",
+        "readonly",
+        "rebase",
+        "recursion",
+        "refused",
+        "registry",
+        "rejected",
+        "remote",
+        "reset",
+        "retries",
+        "retry",
+        "rollback",
+        "ruff",
+        "runner",
+        "sandbox",
+        "schema",
+        "secret",
+        "segfault",
+        "socket",
+        "space",
+        "sqlite",
+        "ssl",
+        "stack",
+        "stale",
+        "stdin",
+        "syntax",
+        "syntaxerror",
+        "terraform",
+        "throttle",
+        "throttled",
+        "timed",
+        "timeout",
+        "tls",
+        "token",
+        "toml",
+        "traceback",
+        "transaction",
+        "tty",
+        "typecheck",
+        "typeerror",
+        "unauthenticated",
+        "unauthorized",
+        "unavailable",
+        "unicode",
+        "unique",
+        "unreachable",
+        "validate",
+        "validation",
+        "valueerror",
+        "vercel",
+        "version",
+        "volume",
+        "worker",
+        "workflow",
+        "yaml",
+    ]
+)
+
+
+def field_vocabulary(entries: list[dict]) -> set[str]:
+    """Words that may be published from field failures: the safe vocabulary
+    plus every token already public in an archived review finding."""
+    public = {
+        tok
+        for e in entries
+        for f in e.get("findings", [])
+        if isinstance(f, str)
+        for tok in tokenize(f)
+    }
+    return set(SAFE_FIELD_VOCABULARY) | public
+
+
 def mine_topics(
     unclassified: list[dict],
     keywords: dict[str, list[str]],
+    vocabulary: set[str] | None = None,
 ) -> list[dict]:
     """Greedy, auditable topic mining over findings the policy could not
     classify: the most frequent significant token names a topic; its
     keywords are that token plus the tokens that co-occur with it most;
-    findings the new topic covers are removed and the process repeats."""
+    findings the new topic covers are removed and the process repeats.
+    Field items (round `field:…`) contribute only tokens in `vocabulary`;
+    with no vocabulary they contribute nothing (round 49)."""
     taken = existing_keyword_tokens(keywords)
+
+    def allowed(item: dict) -> set[str]:
+        toks = tokenize(item["finding"]) - taken
+        if str(item["round"]).startswith("field:"):
+            return toks & (vocabulary or set())
+        return toks
+
     remaining = [
-        {
-            "round": item["round"],
-            "finding": item["finding"],
-            "tokens": tokenize(item["finding"]) - taken,
-        }
+        {"round": item["round"], "finding": item["finding"], "tokens": allowed(item)}
         for item in unclassified
     ]
     mined: list[dict] = []
@@ -784,7 +976,11 @@ def decide(
     mining_input = list(current.get("unclassified_findings", []))
     if field_trigger or coverage_trigger:
         mining_input.extend(blind)
-    mined = mine_topics(mining_input, keywords) if (coverage_trigger or field_trigger) else []
+    mined = (
+        mine_topics(mining_input, keywords, field_vocabulary(entries))
+        if (coverage_trigger or field_trigger)
+        else []
+    )
     for topic in mined:
         new_topics[topic["name"]] = {
             "keywords": topic["keywords"],

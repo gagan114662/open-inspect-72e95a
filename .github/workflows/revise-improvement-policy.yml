@@ -112,7 +112,9 @@ jobs:
               --match "github.com/${GITHUB_REPOSITORY}" "${extra[@]}" \
               --save-evidence docs/rsi/trace-evidence.json \
               --out-json "$RUNNER_TEMP/field-failures.json" > "$RUNNER_TEMP/mine.txt"; then
-            head -n 30 "$RUNNER_TEMP/mine.txt"
+            # Only the human summary (counts and kinds) reaches this public
+            # log; excerpts and commands live in the JSON under RUNNER_TEMP.
+            sed -n '1,/^---/p' "$RUNNER_TEMP/mine.txt" | grep -v '^---' | head -n 30
           else
             echo "::warning::Traces refresh failed; using the committed evidence snapshot instead."
             sed -n '1,40p' "$RUNNER_TEMP/mine.txt" || true

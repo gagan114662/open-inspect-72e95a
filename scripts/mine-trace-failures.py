@@ -632,9 +632,12 @@ def main(argv: list[str]) -> int:
         )
         print(f"evidence written to {args.save_evidence}")
     if args.out_json:
+        # The JSON (commands, excerpts) goes to the file only: stdout is a
+        # workflow log (Codex review of PR #10, round 49).
         Path(args.out_json).write_text(json.dumps(summary, indent=2) + "\n")
-    print("---")
-    print(json.dumps(summary, indent=2))
+    else:
+        print("---")
+        print(json.dumps(summary, indent=2))
     return 0
 
 

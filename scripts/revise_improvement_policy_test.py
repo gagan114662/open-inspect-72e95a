@@ -1414,7 +1414,7 @@ def test_mining_from_field_failures_never_publishes_a_secret_or_the_redaction_ma
     # An empty taxonomy: every failure is a blind spot and all five feed mining.
     spots = revise.field_blind_spots({"blind_spots": summary["blind_spots"]}, {})
     assert len(spots) == 5
-    mined = revise.mine_topics(spots, {})
+    mined = revise.mine_topics(spots, {}, revise.field_vocabulary([]) | {"psycopg2"})
     assert mined, "five failures sharing 'psycopg2' and 'refused' must mine a topic"
     blob = json.dumps(mined) + json.dumps(summary)
     assert "FAKE_DATABASE_PASSWORD" not in blob
@@ -1429,8 +1429,28 @@ def test_field_evidence_in_a_mined_topic_is_keywords_not_excerpts():
         }
         for i in range(5)
     ]
-    mined = revise.mine_topics(spots, {})
+    mined = revise.mine_topics(spots, {}, revise.field_vocabulary([]) | {"psycopg2"})
     assert mined
     for entry in mined[0]["evidence"]:
         assert "finding" not in entry and entry["matched"], entry
     assert "FAKE_SECRET" not in json.dumps(mined)
+
+
+def test_field_derived_keywords_come_only_from_the_safe_vocabulary():
+    # Five failures share the word "violetorchard" (a passphrase). It is in
+    # no archived finding and not a failure word, so it may not become a
+    # keyword; "refused" may (Codex review of PR #10, round 49).
+    spots = [
+        {
+            "round": f"field:{i}",
+            "finding": f"connection refused, passphrase violetorchard rejected ({i})",
+        }
+        for i in range(5)
+    ]
+    mined = revise.mine_topics(spots, {}, revise.field_vocabulary([]))
+    assert mined and "violetorchard" not in json.dumps(mined)
+    assert all(kw in revise.SAFE_FIELD_VOCABULARY for m in mined for kw in m["keywords"])
+    assert revise.mine_topics(spots, {}) == [], "no vocabulary: field items contribute nothing"
+    # A word an archived (public) review finding already contains is allowed.
+    vocab = revise.field_vocabulary([{"findings": ["**[P1]** violetorchard renderer crashed."]}])
+    assert "violetorchard" in vocab

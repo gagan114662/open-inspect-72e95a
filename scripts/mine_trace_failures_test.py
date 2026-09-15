@@ -733,3 +733,31 @@ def test_a_truncated_earlier_occurrence_makes_the_first_match_time_unknown(monke
     assert trace["timestamp"] is None, (
         "the t=1 output was cut; the match may already have been there"
     )
+
+
+def test_stdout_carries_no_excerpts_or_commands_when_out_json_is_given(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": _events()}))
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(policy_mod.builtin_policy()))
+    out = tmp_path / "failures.json"
+    assert (
+        mine.main(
+            [
+                "m",
+                "--repo-dir",
+                "/repo",
+                "--policy",
+                str(policy),
+                "--history",
+                str(tmp_path / "h"),
+                "--out-json",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    stdout = capsys.readouterr().out
+    assert "excerpt" not in stdout and "3 failed" not in stdout and "---" not in stdout
+    assert "excerpt" in out.read_text()
