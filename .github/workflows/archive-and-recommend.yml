@@ -541,6 +541,18 @@ jobs:
           set -euo pipefail
           default_branch=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name)
           branch="tool-proposals"
+          withdraw_stale_pr() {
+            # A standing proposal PR whose topics are no longer eligible is
+            # withdrawn, not left open (Codex review of PR #61, finding 2).
+            local stale_pr
+            stale_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
+              --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+            if [ -n "$stale_pr" ]; then
+              gh pr close "$stale_pr" --delete-branch \
+                --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
+              echo "Closed the stale tool-proposal PR #$stale_pr."
+            fi
+          }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch -q origin "$default_branch"
@@ -581,26 +593,28 @@ jobs:
               lease=""
               git checkout -q -B "$branch" "origin/$default_branch"
             fi
-            python3 "$trusted/scripts/propose-tool.py" \
+            # Every Python invocation here is isolated (-I): the working
+            # tree is the standing branch, and a branch-authored json.py on
+            # sys.path would otherwise run with the write token (Codex
+            # review of PR #61, round 10). The generator and its imports
+            # come from the trusted default-branch worktree.
+            python3 -I "$trusted/scripts/propose-tool.py" \
               "$trusted/docs/self-improvement-archive.jsonl" \
               --policy "$trusted/docs/improvement-policy.json" \
               --manifest "$trusted/tools/manifest.json" \
               --out-dir "$PWD/proposals/tools" > "$RUNNER_TEMP/proposals.json"
             cat "$RUNNER_TEMP/proposals.json"
             git add -A proposals/ 2>/dev/null || true
-            topics=$(python3 -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
+            topics=$(cd "$trusted" && python3 -I -c 'import json,sys; print(", ".join(sorted(json.load(open(sys.argv[1]))["proposals"])))' "$RUNNER_TEMP/proposals.json")
+            # Withdrawal is decided on what the branch HOLDS after drafting,
+            # not on whether this run staged changes: removing the last
+            # eligible draft stages deletions, which must still end in the
+            # PR being closed (Codex review of PR #61, round 10).
+            remaining=$(find proposals/tools -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
             if git diff --cached --quiet; then
-              if [ -z "$topics" ] && git diff --quiet "origin/$default_branch" -- proposals/; then
+              if [ -z "$topics" ] && [ "$remaining" = 0 ]; then
                 echo "No tool proposals apply."
-                # A standing proposal PR whose topics are no longer eligible is
-                # withdrawn, not left open (Codex review of PR #61, finding 2).
-                stale_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
-                  --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
-                if [ -n "$stale_pr" ]; then
-                  gh pr close "$stale_pr" --delete-branch \
-                    --comment "Withdrawn: on the current archive no uncovered finding class crosses the mechanism-fix threshold, so these drafts no longer apply."
-                  echo "Closed the stale tool-proposal PR #$stale_pr."
-                fi
+                withdraw_stale_pr
                 exit 0
               fi
               if [ -n "$lease" ] && [ "$(git rev-parse HEAD)" = "$lease" ]; then
@@ -624,6 +638,13 @@ jobs:
             echo "Lease lost on attempt ${attempt}; refetching and drafting again."
             git checkout -q --detach
           done
+          if [ "${remaining:-0}" = 0 ]; then
+            # The push above recorded the deletions; the PR they belonged to
+            # is withdrawn, not left open with an empty diff.
+            echo "No tool proposals remain on $branch."
+            withdraw_stale_pr
+            exit 0
+          fi
           existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
             --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           if [ -n "$existing_pr" ]; then

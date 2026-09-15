@@ -18,7 +18,7 @@ GH_STUB = """#!/usr/bin/env bash
 # Minimal gh: default branch is main, no open PRs, creation is recorded.
 case "$1 $2" in
   "repo view") echo main ;;
-  "pr list") echo "" ;;
+  "pr list") if [ -n "${GH_OPEN_PR:-}" ]; then echo "$GH_OPEN_PR"; else echo ""; fi ;;
   "pr create")
     if [ -n "${GH_FAIL_CREATE_ONCE:-}" ] && [ -f "$GH_FAIL_CREATE_ONCE" ]; then
       rm -f "$GH_FAIL_CREATE_ONCE"; echo "create failed (simulated)" >&2; exit 1
@@ -265,3 +265,51 @@ def test_the_step_never_uses_a_plain_force_push():
 
 if __name__ == "__main__":
     sys.exit(0)
+
+
+def test_a_branch_authored_module_never_runs_with_the_write_token(tmp_path):
+    """Codex review of PR #61, round 10: `python3 -c 'import json'` ran from
+    the standing branch's tree, so a branch-authored json.py executed with
+    GH_TOKEN. Every Python call is now isolated and runs from the trusted
+    worktree."""
+    origin, seed, env = _first_run(tmp_path)
+    human = _human_clone(tmp_path, origin, env)
+    marker = tmp_path / "planted-ran"
+    (human / "json.py").write_text(
+        f"import pathlib\npathlib.Path({str(marker)!r}).write_text('pwned')\n"
+        "def load(*a, **k):\n    return {'proposals': {}}\n"
+    )
+    _git(human, "add", "-A", env=env)
+    _git(human, "commit", "-q", "-m", "plant a module", env=env)
+    _git(human, "push", "-q", "origin", "tool-proposals", env=env)
+    _advance_main(seed, env)
+    ws2 = tmp_path / "ws2"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws2), env=env)
+    run = _run_step(ws2, env, tmp_path)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert not marker.exists(), "the branch's json.py was imported"
+
+
+def test_removing_the_last_draft_withdraws_the_open_pr(tmp_path):
+    """Codex review of PR #61, round 10: cleanup stages deletions, so the
+    'nothing staged' withdrawal path was skipped; the deletions were pushed
+    and the empty PR reported as tracking the branch."""
+    origin, seed, env = _first_run(tmp_path)
+    # main now registers a tool covering shell-semantics: the draft is stale.
+    _advance_main(
+        seed,
+        env,
+        {
+            "tools/manifest.json": json.dumps(
+                {"tools": [{"name": "x", "script": "scripts/x.py", "covers": ["shell-semantics"]}]}
+            )
+        },
+    )
+    ws2 = tmp_path / "ws2"
+    _git(tmp_path, "clone", "-q", str(origin), str(ws2), env=env)
+    run = _run_step(ws2, env, tmp_path, {"GH_OPEN_PR": "41"})
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "closed 41" in (tmp_path / "gh.log").read_text(), "the emptied PR was not withdrawn"
+    _git(ws2, "fetch", "-q", "origin", env=env)
+    tree = _git(ws2, "ls-tree", "-r", "--name-only", "origin/tool-proposals", env=env)
+    assert "proposals/tools/shell-semantics" not in tree, "the stale draft was removed and pushed"
