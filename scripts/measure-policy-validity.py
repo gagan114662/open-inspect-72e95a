@@ -334,6 +334,17 @@ def measure_epoch(
     }
 
 
+def evidence_digest(evidence: dict | None) -> str | None:
+    """Content identity of an evidence snapshot: what was observed, not when.
+    An hourly refresh that finds nothing new produces a new collected_at but
+    the same digest, so it cannot re-enable a candidate that was rejected on
+    this very evidence (Codex verification pass, finding 1)."""
+    if evidence is None:
+        return None
+    body = {k: v for k, v in evidence.items() if k not in {"collected_at", "repo_dir", "namespace"}}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
 def evidence_trace_ids(evidence: dict | None) -> set[str]:
     """Every session the evidence observed: the scanned-session list when
     the snapshot records one, plus any session a topic matched. A complete
@@ -358,6 +369,7 @@ def measure(entries: list[dict], policy: dict, evidence: dict | None) -> dict:
             "agents": evidence.get("agents", []),
             "event_types": evidence.get("event_types"),
             "collected_at": evidence.get("collected_at"),
+            "evidence_digest": evidence_digest(evidence),
             "traces_considered": len(seen),
         }
         if not seen:

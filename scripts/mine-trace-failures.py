@@ -106,6 +106,14 @@ def parse_cli_json(stdout: str) -> dict | None:
 EXTRA_CLI_ARGS: list[str] = []
 
 
+def safe_stderr(text: str | None) -> str:
+    text = (text or "").strip()
+    for value in EXTRA_CLI_ARGS[1::2]:  # the values after --key etc.
+        if value:
+            text = text.replace(value, "[REDACTED]")
+    return policy_mod.scrub_secrets(text)[:500]
+
+
 def run_traces_json(traces_bin: str, args: list[str], *, retries: int = 1) -> dict:
     last_error = "no output"
     for attempt in range(retries + 1):
@@ -125,8 +133,16 @@ def run_traces_json(traces_bin: str, args: list[str], *, retries: int = 1) -> di
                 stdout = out.read()
         except OSError as exc:
             raise TracesCliError(f"Could not run `{traces_bin}`: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            # Never let the exception's own repr escape: it carries the full
+            # argv, key included (Codex verification pass, finding 2).
+            raise TracesCliError(
+                f"`{traces_bin} {' '.join(args)}` timed out after {exc.timeout:.0f} s"
+            ) from None
         if result.returncode != 0:
-            raise TracesCliError(f"`{traces_bin} {' '.join(args)}` failed: {result.stderr.strip()}")
+            raise TracesCliError(
+                f"`{traces_bin} {' '.join(args)}` failed: {safe_stderr(result.stderr)}"
+            )
         payload = parse_cli_json(stdout)
         if payload is not None:
             if not payload.get("ok"):

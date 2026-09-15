@@ -481,13 +481,20 @@ def rejected_configuration(candidate: dict, history: list[dict], measurement: di
     retried: the rollback's history entry records the rejected hash and
     what it was judged on."""
     wanted = policy_mod.policy_hash(candidate)
-    collected = (measurement.get("anchor") or {}).get("collected_at")
+    anchor = measurement.get("anchor") or {}
     for entry in history:
         if entry.get("origin") != "rollback" or entry.get("replaced_policy_hash") != wanted:
             continue
-        if entry.get("archive_digest") == measurement.get("archive_digest") and (
-            entry.get("evidence_collected_at") == collected
-        ):
+        if entry.get("archive_digest") != measurement.get("archive_digest"):
+            continue
+        # Same evidence means the same observations, not the same clock: an
+        # hourly refresh that re-collects an unchanged field must not lift
+        # the block (Codex verification pass, finding 1). Entries written
+        # before digests existed fall back to the collection time.
+        if "evidence_digest" in entry:
+            if entry.get("evidence_digest") == anchor.get("evidence_digest"):
+                return entry
+        elif entry.get("evidence_collected_at") == anchor.get("collected_at"):
             return entry
     return None
 
@@ -880,6 +887,7 @@ def history_entry(decision: dict, policy: dict, measurement: dict, now: str) -> 
         "replaced_version": policy["version"],
         "archive_digest": measurement.get("archive_digest"),
         "evidence_collected_at": (measurement.get("anchor") or {}).get("collected_at"),
+        "evidence_digest": (measurement.get("anchor") or {}).get("evidence_digest"),
         "policy": new_policy,
     }
 

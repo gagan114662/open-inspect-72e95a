@@ -1331,3 +1331,43 @@ def test_evidence_window_filters_by_round_identity_not_number():
     measurement = {"anchor": {"collected_at": "2026-09-14T16:00:00Z"}}
     covered = revise.entries_covered_by_evidence(entries, measurement)
     assert [e["source_sha"] for e in covered] == ["old"]
+
+
+def test_a_recollected_but_unchanged_field_does_not_lift_the_rejection():
+    # Same archive, same observations, only collected_at moved by an hourly
+    # refresh: the rejected configuration stays rejected (Codex verification
+    # pass, finding 1). Legacy entries without a digest still use the clock.
+    parent = policy_mod.builtin_policy()
+    evidence = {
+        "source": "trace-failures",
+        "collected_at": "2026-09-14T19:00:00Z",
+        "definitions": dict(policy_mod.BUILTIN_TOPIC_KEYWORDS),
+        "topics": {t: [] for t in policy_mod.BUILTIN_TOPIC_KEYWORDS},
+        "sessions": ["s1"],
+        "truncated": [],
+    }
+    measurement = measure.measure(_archive(), parent, evidence)
+    candidate = revise.decide(_archive(), parent, [], measurement, NOW)["policy"]
+    entry = {
+        "version": 3,
+        "origin": "rollback",
+        "replaced_policy_hash": policy_mod.policy_hash(candidate),
+        "archive_digest": measurement["archive_digest"],
+        "evidence_collected_at": "2026-09-14T19:00:00Z",
+        "evidence_digest": measurement["anchor"]["evidence_digest"],
+    }
+    assert revise.rejected_configuration(candidate, [entry], measurement) is entry
+    later = measure.measure(
+        _archive(), parent, {**evidence, "collected_at": "2026-09-14T20:00:00Z"}
+    )
+    assert later["anchor"]["evidence_digest"] == measurement["anchor"]["evidence_digest"]
+    assert revise.rejected_configuration(candidate, [entry], later) is entry
+    changed = measure.measure(
+        _archive(),
+        parent,
+        {**evidence, "collected_at": "2026-09-14T20:00:00Z", "sessions": ["s1", "s2"]},
+    )
+    assert revise.rejected_configuration(candidate, [entry], changed) is None
+    legacy = {k: v for k, v in entry.items() if k != "evidence_digest"}
+    assert revise.rejected_configuration(candidate, [legacy], measurement) is legacy
+    assert revise.rejected_configuration(candidate, [legacy], later) is None

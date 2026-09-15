@@ -8,6 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 _MODULE_PATH = Path(__file__).parent / "mine-trace-failures.py"
 _spec = importlib.util.spec_from_file_location("mine_trace_failures", _MODULE_PATH)
 assert _spec is not None and _spec.loader is not None
@@ -518,7 +520,7 @@ def test_repeated_failures_keep_every_occurrences_diagnostics_for_matching(monke
             "status": "error",
             "timestamp": 2,
             "eventNumber": 4,
-            "output": head + "PermissionError: token expired for the session",
+            "output": head + "later detail: the session expired, log in again",
         },
     ]
     monkeypatch.setattr(mine, "run_traces_json", _fake_runner({"t1": events}))
@@ -526,3 +528,26 @@ def test_repeated_failures_keep_every_occurrences_diagnostics_for_matching(monke
     assert len(failures) == 1 and failures[0]["count"] == 2
     keywords = policy_mod.topic_keywords(policy_mod.builtin_policy())
     assert "auth-lifecycle" in mine.matching_topics(failures[0], keywords)
+
+
+def test_cli_timeouts_and_errors_never_expose_the_api_key(monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(mine, "EXTRA_CLI_ARGS", ["--key", "tr_SENTINEL_KEY"])
+
+    def boom(*_a, **_k):
+        raise subprocess.TimeoutExpired(["traces", "list", "--key", "tr_SENTINEL_KEY"], 300)
+
+    monkeypatch.setattr(mine.subprocess, "run", boom)
+    with pytest.raises(mine.TracesCliError) as exc:
+        mine.run_traces_json("traces", ["list", "@slug", "--all"])
+    assert "tr_SENTINEL_KEY" not in str(exc.value) and "timed out" in str(exc.value)
+
+    class Result:
+        returncode = 1
+        stderr = "auth failed for key tr_SENTINEL_KEY (Authorization: Bearer tr_SENTINEL_KEY)"
+
+    monkeypatch.setattr(mine.subprocess, "run", lambda *_a, **_k: Result())
+    with pytest.raises(mine.TracesCliError) as exc:
+        mine.run_traces_json("traces", ["list", "@slug", "--all"])
+    assert "tr_SENTINEL_KEY" not in str(exc.value)

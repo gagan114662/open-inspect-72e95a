@@ -229,7 +229,14 @@ jobs:
           existing_pr=$(gh pr list --head "$branch" --base "$default_branch" --state open \
             --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           if [ -n "$existing_pr" ]; then
-            gh pr comment "$existing_pr" --body "Superseded by a newer archive round at \`${SOURCE_SHA}\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version})."
+            # One comment per source commit: the hourly run regenerates the
+            # same proposal from the same archive and must not notify again
+            # (Codex verification pass, finding 3).
+            already=$(gh pr view "$existing_pr" --json comments \
+              --jq "[.comments[].body | select(contains(\"${SOURCE_SHA}\"))] | length")
+            if [ "${already:-0}" = "0" ]; then
+              gh pr comment "$existing_pr" --body "Superseded by a newer archive round at \`${SOURCE_SHA}\`: this proposal was regenerated from the current archive (action: **${ACTION}**, policy v${version})."
+            fi
             echo "Updated the open proposal PR #$existing_pr in place."
             exit 0
           fi
