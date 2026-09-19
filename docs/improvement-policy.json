@@ -1,41 +1,67 @@
 {
-  "version": 3,
-  "parent": 2,
-  "origin": "revision",
-  "created_at": "2026-09-15T13:46:14Z",
+  "version": 4,
+  "parent": 3,
+  "origin": "rollback",
+  "created_at": "2026-09-19T14:28:05Z",
   "threshold": 3,
   "topics": {
     "credential-redaction": {
-      "keywords": ["redact", "credential", "secret", "token", "leak", "expos"],
+      "keywords": [
+        "redact",
+        "credential",
+        "secret",
+        "token",
+        "leak",
+        "expos"
+      ],
       "weight": 1.0
     },
     "shell-semantics": {
       "keywords": [
         "errexit",
         "bash -e",
-        "set -e",
+        "exit code",
+        "-e",
         "pipefail",
-        "shell",
-        "argument list",
-        "quoting",
-        "exit status"
+        "shell"
       ],
       "weight": 1.0
     },
     "env-var-precedence": {
-      "keywords": ["precedence", "env var", "environment variable", "unconditionally"],
+      "keywords": [
+        "precedence",
+        "env var",
+        "environment variable",
+        "unconditionally"
+      ],
       "weight": 1.0
     },
     "fork-pr-permissions": {
-      "keywords": ["fork", "github_token", "persist-credentials"],
+      "keywords": [
+        "fork",
+        "github_token",
+        "persist-credentials"
+      ],
       "weight": 1.0
     },
     "auth-lifecycle": {
-      "keywords": ["refresh token", "rotat", "expir", "auth.json", "stale"],
+      "keywords": [
+        "refresh token",
+        "rotat",
+        "expir",
+        "auth.json",
+        "stale"
+      ],
       "weight": 1.0
     },
     "archive-branch": {
-      "keywords": ["archive", "branch", "commit", "create", "creation"],
+      "keywords": [
+        "archive",
+        "branch",
+        "commit",
+        "create",
+        "creation"
+      ],
       "weight": 1.0,
       "mined_from": [
         {
@@ -73,5 +99,6 @@
       ]
     }
   },
-  "rationale": "Human taxonomy correction (issue #16): the keyword '-e' matched inside ordinary words (pre-existing, re-evaluate) and 'exit code' matched nearly every failed command's output, so shell-semantics recurred on findings and failures that had nothing to do with shells."
+  "rationale": "Rollback to v2: v3 scored worse (coverage 0.5179 vs 0.5536).",
+  "restored_version": 2
 }
