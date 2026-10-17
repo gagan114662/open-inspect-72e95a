@@ -1,48 +1,29 @@
 # Skill: shell-semantics
 
-Load this before changing anything that touches: `errexit`, `bash -e`, `set -e`, `pipefail`,
-`shell`, `argument list`, `quoting`, `exit status`.
+Load this before changing anything that touches: `errexit`, `bash -e`, `exit code`, `-e`, `pipefail`, `shell`.
 
 ## How this class of problem shows up
 
-- Round 1: [P2] Prompt passed as a single shell argument; large diffs would hit 'Argument list too
-  long'.
-- Round 3: [P2] GitHub Actions invokes run: steps with `bash -e` by default (errexit);
-  `set -uo pipefail` does not disable inherited -e, so a nonzero codex exec exit aborts the script
-  immediately, before the exit_code=$? capture line ever runs — the round-2 'fail closed' fix does
-  not actually execute as design
-- Round 41: **[P2]**
-  [Successful shell output becomes false failure evidence](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:177).
-  Pattern matching counts successful `cat`/`rg` output containing error examples as actual failures.
-  It also classifies `"10 passed, 0 failed
-- Round 43: **[P2]** Failure labels suppress field blind spots. In
-  [revise-improvement-policy.py:561](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/revise-improvement-policy.py:561),
-  prepending `tool-error` makes otherwise unclassified failures match the shell topic’s `-e`
-  keyword. A reprodu
-- Round 65: **[P2]** A redundant archive branch aborts the remaining rebuilds. When all its rounds
-  already exist on main, but main contains additional rounds, the comparison against the standing
-  archive permits rebuilding. After resetting to main, [the
-  commit](/home/runner/work/open-inspect-72e95a/open-inspect-
-- Round 67: **[P2]** **Generation can overwrite or delete handwritten files.**
-  [distill-skills.py:165](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/distill-skills.py:165)
-  overwrites existing files without checking ownership: a valid topic named `README` replaces
-  `README.md`. Cleanup also de
+- Round 1: [P2] Prompt passed as a single shell argument; large diffs would hit 'Argument list too long'.
+- Round 3: [P2] GitHub Actions invokes run: steps with `bash -e` by default (errexit); `set -uo pipefail` does not disable inherited -e, so a nonzero codex exec exit aborts the script immediately, before the exit_code=$? capture line ever runs — the round-2 'fail closed' fix does not actually execute as design
+- Round 23: **[P2]** Fresh evidence does not trigger policy evaluation. In `.github/workflows/revise-improvement-policy.yml`, only archive changes trigger automatic runs. Committing a refreshed `trace-evidence.json` therefore does nothing; the next archived round makes that snapshot stale, and `weight_repair()`
+- Round 28: **[P2]** `scripts/improvement_policy.py`, `assert_safe_output()`: report outputs can overwrite the committed field anchor. For example, `revise-improvement-policy.py … --out-json docs/rsi/trace-evidence.json` passes validation because that file is neither protected nor an explicit input. The next me
+- Round 29: **[P2]** `scripts/measure-policy-validity.py:main` allows `--save-evidence` and `--out-json` to resolve to the same file. The measurement then overwrites the freshly collected evidence, and the command reports success. Reusing that file as evidence silently produces an empty anchor. Reject overlappi
+- Round 35: **[P1]** **PR-controlled tests can tamper with review artifacts.** In `.github/workflows/codex-review.yml`, switching to `workspace-write` makes `/tmp` writable by default ([Codex source](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/protocol.rs)). The workflow stores `/tmp/codex-r
+- Round 36: **[P2]** **Measurement outputs can overwrite a custom policy history.** In `scripts/measure-policy-validity.py`, `main()` excludes `args.history` from the `inputs` passed to `assert_safe_output()`. With `--repo-dir`, specifying the same noncanonical path for `--history` and either `--out-json` or `-
+- Round 41: **[P2]** [Successful shell output becomes false failure evidence](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:177). Pattern matching counts successful `cat`/`rg` output containing error examples as actual failures. It also classifies `"10 passed, 0 failed
 
 ## Recurrence
 
-Recurred in 6 round(s): 1, 3, 41, 43, 65, 67. Mechanism-fix threshold: 3.
+Recurred in 21 round(s): 1, 3, 23, 28, 29, 35, 36, 41, 42, 43, 45, 46, 61, 62, 65, 74, 89, 90, 92, 93, 99. Mechanism-fix threshold: 3.
 
 ## How it was fixed
 
-- No round recorded a mechanism-level fix note for this topic yet. When you fix one, say how in the
-  round's `mechanism_change_note` and this section fills in.
+- No round recorded a mechanism-level fix note for this topic yet. When you fix one, say how in the round's `mechanism_change_note` and this section fills in.
 
 ## Before you push
 
-- Search your diff and its tests for the keywords above; each hit is a place a reviewer has flagged
-  before.
-- If the fix is a mechanism (a guard, a check, a workflow rule), add the regression test that fails
-  without it.
+- Search your diff and its tests for the keywords above; each hit is a place a reviewer has flagged before.
+- If the fix is a mechanism (a guard, a check, a workflow rule), add the regression test that fails without it.
 
-_Generated by `scripts/distill-skills.py` from `docs/self-improvement-archive.jsonl`; do not edit by
-hand._
+_Generated by `scripts/distill-skills.py` from `docs/self-improvement-archive.jsonl`; do not edit by hand._
