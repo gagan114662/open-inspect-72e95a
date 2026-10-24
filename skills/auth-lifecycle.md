@@ -1,54 +1,27 @@
 # Skill: auth-lifecycle
 
-Load this before changing anything that touches: `refresh token`, `rotat`, `expir`, `auth.json`,
-`stale`.
+Load this before changing anything that touches: `refresh token`, `rotat`, `expir`, `auth.json`, `stale`.
 
 ## How this class of problem shows up
 
-- Round 12: **[P2]** `scripts/analyze-traces.py:90–95`: Hydration failures are documented as
-  nonfatal, but `subprocess.run` raises `TimeoutExpired` after 30 seconds. Neither `hydrate_trace`
-  nor `main` catches it, so one slow trace aborts the entire analysis. Catch hydration timeouts and
-  continue with a diagnost
-- Round 16: **[P2]** `scripts/revise-improvement-policy.py`, `main()`: Measurements are bound to the
-  policy but not the archive. After the archive changes, an old measurement still passes validation.
-  The rollback path then compares stale child coverage against freshly calculated parent coverage,
-  potentially rol
-- Round 18: **[P2]** `.github/workflows/revise-improvement-policy.yml` commits a stale measurement
-  whenever it revises or rolls back the policy. Measurement runs before the policy changes, and
-  dashboard rendering does not update `measurement.json`. The resulting PR therefore contains a
-  measurement whose hash fa
-- Round 22: **[P2]** Reported validity uses a different evidence window from candidate acceptance.
-  In `scripts/measure-policy-validity.py:measure()`, snapshot alignment updates `dev_only_topics`
-  and `anchor_only_topics`, but leaves `current["validity"]` calculated from the entire archive. The
-  revision logic eva
-- Round 23: **[P2]** Fresh evidence does not trigger policy evaluation. In
-  `.github/workflows/revise-improvement-policy.yml`, only archive changes trigger automatic runs.
-  Committing a refreshed `trace-evidence.json` therefore does nothing; the next archived round makes
-  that snapshot stale, and `weight_repair()`
-- Round 41: **[P2]**
-  [Deduplication discards commands needed for classification](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:225).
-  Failures are merged by `(tool, excerpt)`, although topic matching also uses the command. Two
-  commands returning identical `Permission de
-- Round 51: **[P2]** Repeated failures backdate newly observed evidence. In
-  [mine-trace-failures.py:281](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:281),
-  later diagnostics are appended to `_text`, but the record retains the first occurrence’s
-  timestamp. `build_evide
+- Round 12: **[P2]** `scripts/analyze-traces.py:90–95`: Hydration failures are documented as nonfatal, but `subprocess.run` raises `TimeoutExpired` after 30 seconds. Neither `hydrate_trace` nor `main` catches it, so one slow trace aborts the entire analysis. Catch hydration timeouts and continue with a diagnost
+- Round 16: **[P2]** `scripts/revise-improvement-policy.py`, `main()`: Measurements are bound to the policy but not the archive. After the archive changes, an old measurement still passes validation. The rollback path then compares stale child coverage against freshly calculated parent coverage, potentially rol
+- Round 18: **[P2]** `.github/workflows/revise-improvement-policy.yml` commits a stale measurement whenever it revises or rolls back the policy. Measurement runs before the policy changes, and dashboard rendering does not update `measurement.json`. The resulting PR therefore contains a measurement whose hash fa
+- Round 22: **[P2]** Reported validity uses a different evidence window from candidate acceptance. In `scripts/measure-policy-validity.py:measure()`, snapshot alignment updates `dev_only_topics` and `anchor_only_topics`, but leaves `current["validity"]` calculated from the entire archive. The revision logic eva
+- Round 41: **[P2]** [Deduplication discards commands needed for classification](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:225). Failures are merged by `(tool, excerpt)`, although topic matching also uses the command. Two commands returning identical `Permission de
+- Round 51: **[P2]** Repeated failures backdate newly observed evidence. In [mine-trace-failures.py:281](/home/runner/work/open-inspect-72e95a/open-inspect-72e95a/scripts/mine-trace-failures.py:281), later diagnostics are appended to `_text`, but the record retains the first occurrence’s timestamp. `build_evide
 
 ## Recurrence
 
-Recurred in 7 round(s): 12, 16, 18, 22, 23, 41, 51. Mechanism-fix threshold: 3.
+Recurred in 6 round(s): 12, 16, 18, 22, 41, 51. Mechanism-fix threshold: 3.
 
 ## How it was fixed
 
-- No round recorded a mechanism-level fix note for this topic yet. When you fix one, say how in the
-  round's `mechanism_change_note` and this section fills in.
+- No round recorded a mechanism-level fix note for this topic yet. When you fix one, say how in the round's `mechanism_change_note` and this section fills in.
 
 ## Before you push
 
-- Search your diff and its tests for the keywords above; each hit is a place a reviewer has flagged
-  before.
-- If the fix is a mechanism (a guard, a check, a workflow rule), add the regression test that fails
-  without it.
+- Search your diff and its tests for the keywords above; each hit is a place a reviewer has flagged before.
+- If the fix is a mechanism (a guard, a check, a workflow rule), add the regression test that fails without it.
 
-_Generated by `scripts/distill-skills.py` from `docs/self-improvement-archive.jsonl`; do not edit by
-hand._
+_Generated by `scripts/distill-skills.py` from `docs/self-improvement-archive.jsonl`; do not edit by hand._
